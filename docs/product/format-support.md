@@ -2,13 +2,13 @@
 
 This page is the user-facing support truth. “Planned” means architecture only, not an upload promise.
 
-| Format                 | Status                          | Direct browser editing | AI observation/edit/review           | Editable download |
-| ---------------------- | ------------------------------- | ---------------------- | ------------------------------------ | ----------------- |
-| PowerPoint `.pptx`     | Beta under release verification | Impress through WOPI   | Implemented for supported operations | Implemented       |
-| Word `.docx`           | Planned                         | Not exposed            | Not implemented                      | Not exposed       |
-| Spellbook `.spellbook` | Planned                         | Not implemented        | Not implemented                      | Not exposed       |
+| Format                 | Status                        | Direct browser editing | AI observation/edit/review           | Editable download |
+| ---------------------- | ----------------------------- | ---------------------- | ------------------------------------ | ----------------- |
+| PowerPoint `.pptx`     | Prerelease under verification | Impress through WOPI   | Implemented for supported operations | Implemented       |
+| Word `.docx`           | Planned                       | Not exposed            | Not implemented                      | Not exposed       |
+| Spellbook `.spellbook` | Planned                       | Not implemented        | Not implemented                      | Not exposed       |
 
-## PPTX beta scope
+## PPTX prerelease scope
 
 The engine currently inspects text boxes, shapes, pictures, connectors, groups and graphic frames; records geometry, z-order, text, fonts and support warnings; and supports the operations declared in `contracts/native-edit-capabilities.json` and `contracts/edit-target-capabilities.json`.
 
@@ -21,4 +21,4 @@ The file is rejected or marked with warnings when the engine cannot safely promi
 - **PowerPoint-faithful** requires comparison against a PowerPoint reference corpus on supported operating systems. LibreOffice-to-LibreOffice similarity does not prove it.
 - No aggregate pixel score may hide text reflow, missing content, changed pagination/slide count or a broken editable object. Those are hard failures.
 
-The beta label can be removed only with published corpus coverage, pass/fail thresholds and a list of known unsupported constructs.
+The prerelease can be promoted to beta only with published corpus coverage, pass/fail thresholds and a list of known unsupported constructs, plus the operational evidence required by the release gates.
