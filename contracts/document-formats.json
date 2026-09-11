@@ -1,0 +1,63 @@
+{
+  "contractVersion": "1.0",
+  "formats": [
+    {
+      "id": "pptx",
+      "label": "PowerPoint presentation",
+      "availability": "beta",
+      "extensions": [".pptx"],
+      "mimeTypes": [
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ],
+      "maxBytes": 52428800,
+      "editor": {
+        "kind": "wopi",
+        "wopiApp": "impress",
+        "wopiAction": "edit"
+      },
+      "semantics": {
+        "unit": "slide",
+        "rootCollection": "slides",
+        "outputKind": "editable_pptx"
+      }
+    },
+    {
+      "id": "docx",
+      "label": "Word document",
+      "availability": "planned",
+      "extensions": [".docx"],
+      "mimeTypes": [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ],
+      "maxBytes": 52428800,
+      "editor": {
+        "kind": "wopi",
+        "wopiApp": "writer",
+        "wopiAction": "edit"
+      },
+      "semantics": {
+        "unit": "section",
+        "rootCollection": "document",
+        "outputKind": "editable_docx"
+      }
+    },
+    {
+      "id": "spellbook",
+      "label": "Spellbook page-layout document",
+      "availability": "planned",
+      "extensions": [".spellbook"],
+      "mimeTypes": ["application/vnd.spellbook.document+zip"],
+      "maxBytes": 104857600,
+      "editor": {
+        "kind": "native",
+        "wopiApp": null,
+        "wopiAction": null
+      },
+      "semantics": {
+        "unit": "page",
+        "rootCollection": "pages",
+        "outputKind": "editable_spellbook"
+      }
+    }
+  ]
+}

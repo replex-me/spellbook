@@ -1,0 +1,44 @@
+{
+  "name": "spellbook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted AI workspace for editing existing documents in their native format.",
+  "license": "MPL-2.0",
+  "packageManager": "pnpm@10.26.0",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "corpus:discover": "node scripts/create-corpus-manifest.mjs",
+    "corpus:fetch-public": "node scripts/fetch-public-corpus.mjs",
+    "corpus:roundtrip-public": "node scripts/evaluate-public-roundtrip.mjs",
+    "corpus:evaluate": "node scripts/evaluate-render-corpus.mjs",
+    "corpus:compare": "node scripts/compare-render-reports.mjs",
+    "corpus:analyze-differences": "python3 scripts/analyze-render-differences.py",
+    "corpus:compare-structures": "python3 scripts/compare-render-structures.py",
+    "corpus:review-structures": "python3 scripts/build-structure-regression-montages.py",
+    "corpus:references:powerpoint": "node scripts/export-powerpoint-references.mjs",
+    "corpus:recompare": "node scripts/recompare-render-report.mjs",
+    "dev": "pnpm --filter @spellbook/web dev",
+    "format:check": "prettier --check .",
+    "test": "pnpm test:boundary && pnpm test:docs && pnpm test:contracts && pnpm test:harness && pnpm test:office && pnpm -r --if-present test && dotnet test services/document-worker/Spellbook.Document.Worker.slnx --configuration Release",
+    "test:boundary": "node scripts/check-public-boundary.mjs",
+    "test:docs": "node scripts/check-docs.mjs",
+    "test:contracts": "node scripts/validate-contracts.mjs",
+    "test:harness": "node --test scripts/*.test.mjs",
+    "test:office": "node --test services/office-editor/*.test.mjs && node scripts/test-office-gateway.mjs",
+    "test:e2e": "pnpm --filter @spellbook/web test:e2e",
+    "test:selfhost": "pnpm --filter @spellbook/web test:selfhost",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "verify": "pnpm test && pnpm typecheck && pnpm build",
+    "selfhost:doctor": "node scripts/selfhost-doctor.mjs",
+    "selfhost:setup": "node scripts/selfhost-setup.mjs",
+    "selfhost:up": "docker compose up --build",
+    "selfhost:down": "docker compose down"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "prettier": "3.6.2"
+  }
+}

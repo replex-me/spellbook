@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "reviewedAt": "2026-09-11",
+  "activeProvider": "codex",
+  "productContract": {
+    "requiredCapabilities": [
+      "subscription_auth",
+      "account_status",
+      "model_selection",
+      "vision_input",
+      "streaming_events",
+      "conversation_resume",
+      "turn_interrupt",
+      "turn_steering",
+      "structured_spellbook_tools",
+      "permission_mediation",
+      "visual_self_review"
+    ],
+    "allowedModelTools": [
+      "native_observe",
+      "native_edit",
+      "native_review",
+      "image_generation"
+    ],
+    "presentationOperationsContract": "native-edit-capabilities.json",
+    "genericCapabilitiesDisabledByDefault": [
+      "shell",
+      "filesystem",
+      "source_code_patch",
+      "browser_automation",
+      "computer_use",
+      "web_search",
+      "external_mcp",
+      "external_apps",
+      "plugins",
+      "skills",
+      "hooks",
+      "memory",
+      "multi_agent",
+      "background_agents",
+      "cloud_tasks",
+      "remote_control",
+      "worktrees",
+      "code_review"
+    ]
+  },
+  "providers": {
+    "codex": {
+      "displayName": "ChatGPT 구독 · Codex",
+      "runtime": "Codex App Server",
+      "version": "0.154.0",
+      "integrationStatus": "implemented",
+      "subscriptionConnection": "direct_app_server_device_code",
+      "credentialBoundary": "A per-user CODEX_HOME is held only by the isolated AI worker; raw App Server and credentials are never exposed to the browser.",
+      "capabilities": {
+        "subscription_auth": "implemented",
+        "account_status": "implemented",
+        "rate_limits": "implemented",
+        "model_selection": "implemented",
+        "reasoning_effort": "implemented",
+        "vision_input": "implemented",
+        "streaming_events": "implemented",
+        "conversation_resume": "implemented",
+        "conversation_fork": "available_not_needed",
+        "turn_interrupt": "implemented",
+        "turn_steering": "implemented",
+        "structured_spellbook_tools": "implemented_experimental_protocol",
+        "permission_mediation": "implemented_by_spellbook",
+        "visual_self_review": "implemented_by_spellbook",
+        "image_generation": "implemented_and_runtime_verified"
+      },
+      "nativeSurfaceGroups": {
+        "accountAndProvider": [
+          "account/login/start",
+          "account/login/cancel",
+          "account/logout",
+          "account/read",
+          "account/rateLimits/read",
+          "account/usage/read",
+          "model/list",
+          "modelProvider/capabilities/read"
+        ],
+        "conversationAndTurns": [
+          "thread/start",
+          "thread/resume",
+          "thread/fork",
+          "thread/read",
+          "thread/list",
+          "thread/archive",
+          "thread/unarchive",
+          "thread/delete",
+          "thread/compact/start",
+          "thread/revert",
+          "thread/rollback",
+          "thread/goal/set",
+          "thread/goal/get",
+          "thread/goal/clear",
+          "turn/start",
+          "turn/steer",
+          "turn/interrupt",
+          "review/start"
+        ],
+        "productTooling": [
+          "dynamicTools",
+          "item/tool/call",
+          "item/tool/requestUserInput",
+          "permissionProfile/list"
+        ],
+        "genericAgentRuntime": [
+          "command/exec",
+          "process/*",
+          "fs/*",
+          "mcpServer/*",
+          "app/*",
+          "plugin/*",
+          "marketplace/*",
+          "skills/*",
+          "hooks/list",
+          "project/*",
+          "environment/*",
+          "remoteControl/*",
+          "thread/realtime/*",
+          "collaborationMode/list"
+        ]
+      },
+      "isolatedCapabilities": [
+        "All generic code-agent tools remain disabled; the runtime receives only Spellbook observation, edit, review, and explicit image-generation capabilities."
+      ]
+    },
+    "claude_code": {
+      "displayName": "Claude 구독 · Claude Code",
+      "runtime": "Unmodified Claude Code binary",
+      "version": null,
+      "integrationStatus": "research_only_not_implemented",
+      "subscriptionConnection": "not_implemented_user_direct_runtime_required",
+      "credentialBoundary": "Spellbook must not offer Claude.ai login itself or collect, store, or intermediate Claude.ai credentials. The end user must authenticate through Anthropic's own flow inside an unmodified Claude Code runtime.",
+      "capabilities": {
+        "subscription_auth": "connectable_only_in_user_direct_runtime",
+        "account_status": "available_in_native_cli",
+        "rate_limits": "provider_managed_not_normalized",
+        "model_selection": "available_in_native_cli",
+        "reasoning_effort": "available_in_native_cli",
+        "vision_input": "available_in_native_cli",
+        "streaming_events": "available_via_stream_json",
+        "conversation_resume": "available_in_native_cli",
+        "conversation_fork": "available_in_native_cli",
+        "turn_interrupt": "connectable_by_process_control",
+        "turn_steering": "connectable_via_stream_json_input",
+        "structured_spellbook_tools": "connectable_via_mcp",
+        "permission_mediation": "connectable_via_permission_prompt_tool",
+        "visual_self_review": "connectable_by_spellbook_mcp_loop",
+        "image_generation": "no_verified_native_equivalent"
+      },
+      "nativeSurfaceGroups": {
+        "accountAndProvider": [
+          "auth login --claudeai",
+          "auth status",
+          "auth logout",
+          "model",
+          "effort",
+          "fallback-model"
+        ],
+        "conversationAndIO": [
+          "interactive",
+          "print",
+          "input-format=stream-json",
+          "output-format=stream-json",
+          "include-partial-messages",
+          "json-schema",
+          "continue",
+          "resume",
+          "fork-session",
+          "session-id",
+          "no-session-persistence",
+          "prompt-suggestions"
+        ],
+        "toolsAndPermissions": [
+          "tools",
+          "allowedTools",
+          "disallowedTools",
+          "permission-mode",
+          "permission-prompts",
+          "permission-prompt-tool",
+          "restricted",
+          "MCP"
+        ],
+        "genericAgentRuntime": [
+          "plugins",
+          "skills",
+          "hooks",
+          "custom agents",
+          "background agents",
+          "worktrees",
+          "remote control",
+          "cloud sessions",
+          "Chrome",
+          "IDE",
+          "ultrareview",
+          "doctor"
+        ]
+      },
+      "requiredAdapter": {
+        "choice": "signed_local_connector_first",
+        "alternative": "per-user hosted unmodified Claude Code session with Anthropic-owned authentication ceremony",
+        "notAllowed": [
+          "Spellbook-owned Claude.ai OAuth button",
+          "copying Claude subscription tokens to Spellbook servers",
+          "using Claude Agent SDK with end-user Claude.ai subscription credentials"
+        ]
+      },
+      "isolatedCapabilities": [
+        "Even after connection, generic code, shell, file, browser, plugin, and subagent tools stay outside the Spellbook document session."
+      ]
+    }
+  }
+}

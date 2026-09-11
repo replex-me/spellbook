@@ -1,0 +1,550 @@
+{
+  "contractVersion": "1.0",
+  "corpusId": "public-pptx-feature-corpus-20260830",
+  "repositories": [
+    {
+      "id": "libreoffice",
+      "repositoryUrl": "https://github.com/LibreOffice/core",
+      "revision": "95e83feb2e85ba82baaf74177cd116e8c0a14fd8",
+      "license": {
+        "spdx": "MPL-2.0",
+        "url": "https://github.com/LibreOffice/core/blob/95e83feb2e85ba82baaf74177cd116e8c0a14fd8/COPYING.MPL",
+        "scope": "Repository-level license only; selected binary fixture provenance was not independently audited. Fixtures are fetched for regression testing and are not committed."
+      }
+    },
+    {
+      "id": "openxml-sdk",
+      "repositoryUrl": "https://github.com/dotnet/Open-XML-SDK",
+      "revision": "431ab05cf160248cc3885a4a766026d4f8243792",
+      "license": {
+        "spdx": "MIT",
+        "url": "https://github.com/dotnet/Open-XML-SDK/blob/431ab05cf160248cc3885a4a766026d4f8243792/LICENSE",
+        "scope": "Repository-level license only; selected binary fixture provenance was not independently audited. Fixtures are fetched for regression testing and are not committed."
+      }
+    },
+    {
+      "id": "apache-poi",
+      "repositoryUrl": "https://github.com/apache/poi",
+      "revision": "87cdef57b0f714369c391e625180a59507a24576",
+      "license": {
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/apache/poi/blob/87cdef57b0f714369c391e625180a59507a24576/legal/LICENSE",
+        "scope": "Repository-level license only; selected binary fixture provenance was not independently audited. Fixtures are fetched for regression testing and are not committed."
+      }
+    }
+  ],
+  "decks": [
+    {
+      "id": "lo-3columns",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/3columns.pptx",
+      "bytes": 39915,
+      "sha256": "e639064968d29c4cf5cc3ad4dae28e825ec9d2567ae78aac895c870e91170d71",
+      "expectedFeatures": ["text-columns"]
+    },
+    {
+      "id": "lo-numbered-list",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/NumberedList-12ab-ab-34.pptx",
+      "bytes": 32261,
+      "sha256": "7f8fcdd72c59b4dbcb7ba76e544dbba8cd663636ad04735f189dd7c159956e20",
+      "expectedFeatures": ["bullets"]
+    },
+    {
+      "id": "lo-shape-lines",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/ShapeLineProperties.pptx",
+      "bytes": 25433,
+      "sha256": "4b4151aa7b28f3831d8955c41c8e4b093c75d6bfcacebdb815883f896664431b",
+      "expectedFeatures": ["basic-shape"]
+    },
+    {
+      "id": "lo-shape-picture",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/ShapePlusImage.pptx",
+      "bytes": 36088,
+      "sha256": "5b4016ca717d6ca552e6bdf06f0b756f72c98c2ee3798a04d4de07baf9116d51",
+      "expectedFeatures": ["basic-shape", "picture"]
+    },
+    {
+      "id": "lo-activex",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/activex_checkbox.pptx",
+      "bytes": 39828,
+      "sha256": "9d366c0627b0c0af5c643a7c3b1d02983c9752d28f6d26b86a2a7568e08b0888",
+      "expectedFeatures": ["activex"]
+    },
+    {
+      "id": "lo-animation-audio",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/animation-sound-embedded.pptx",
+      "bytes": 4692,
+      "sha256": "0c722d58248f1925bd2553a85e70c36ce17f2537604955cc67a2e30b21bdd342",
+      "expectedFeatures": ["animation", "embedded-media"]
+    },
+    {
+      "id": "lo-connector-animation",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/connector-shape-animations.pptx",
+      "bytes": 22329,
+      "sha256": "40d07c0c9433c65c640bc6d4d5f25228735dc15d1bb719530cad0662a926a618",
+      "expectedFeatures": ["connector", "animation"]
+    },
+    {
+      "id": "lo-connectors",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/connectors.pptx",
+      "bytes": 24318,
+      "sha256": "113236364c265d5d60097391154f5fc1e6b692bfef7db0111971fa2ad5841611",
+      "expectedFeatures": ["connector"]
+    },
+    {
+      "id": "lo-placeholders",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/content-placeholder-cases.pptx",
+      "bytes": 30041,
+      "sha256": "6f827a990ec668a5517227b98905d0ca7d194b9ae9e312bf77694edd3cb434a3",
+      "expectedFeatures": ["placeholder"]
+    },
+    {
+      "id": "lo-picture-crop",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/crop-position.pptx",
+      "bytes": 28479,
+      "sha256": "56025c102ed893688356f82207e14549a98e5bb1d394955a59bb805f0df22dd7",
+      "expectedFeatures": ["picture-crop"]
+    },
+    {
+      "id": "lo-custom-geometry",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/custgeom-overlapping-contours.pptx",
+      "bytes": 29241,
+      "sha256": "f1adec8dccd7cecaf290164e4fa122ab8bc5665975e5776afd5209829cc5e00a",
+      "expectedFeatures": ["custom-geometry"]
+    },
+    {
+      "id": "lo-custom-xml",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/customxml.pptx",
+      "bytes": 44229,
+      "sha256": "cb8118434f9b91438dd83fc2abaaa1ae0f7cf8a0ed67ebeac91869351e41ff04",
+      "expectedFeatures": ["custom-xml"]
+    },
+    {
+      "id": "lo-effect-order",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/effectOrder.pptx",
+      "bytes": 30482,
+      "sha256": "06c20aa7b3de1946972dc678a75db02e460d89071f49d186f6f2781f09b57285",
+      "expectedFeatures": ["effects"]
+    },
+    {
+      "id": "lo-fill-colors",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/fill-color-list.pptx",
+      "bytes": 42946,
+      "sha256": "ec13cd6c4e797af58a20010530a9d4847c63d4a7d1faf48f34c9055ef9c73aea",
+      "expectedFeatures": ["solid-fill"]
+    },
+    {
+      "id": "lo-group-rotation",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/group-rot.pptx",
+      "bytes": 39796,
+      "sha256": "dfda3cecf7a04edbf695ed4e23707087db1aa08c8b1b68d3ab9f572210bc744e",
+      "expectedFeatures": ["group", "rotation"]
+    },
+    {
+      "id": "lo-hyperlink",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/hyperlinktest.pptx",
+      "bytes": 33633,
+      "sha256": "ff82b2d4a1b3245179bb95b14ee4e90de6a2cf7b14bbd4ee365c691cb80de0a0",
+      "expectedFeatures": ["hyperlink"]
+    },
+    {
+      "id": "lo-master-layouts",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/master-and-eleven-layouts.pptx",
+      "bytes": 35927,
+      "sha256": "900ca1955f5c78762f8599740378dfe1cbeced59747a6f59f200d08bf43b0d3a",
+      "expectedFeatures": ["slide-master-layout"]
+    },
+    {
+      "id": "lo-media-placeholder",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/media-placeholder.pptx",
+      "bytes": 32180,
+      "sha256": "0ac5faac16f8bcfb2399aeb0ecc33e964b12e74b41611084dffc4518a08a1462",
+      "expectedFeatures": ["placeholder"]
+    },
+    {
+      "id": "lo-mirrored-picture",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/mirrored-graphic.pptx",
+      "bytes": 173805,
+      "sha256": "18db09e598486c5e83c6dc74342e0bc9aef3253c8fec126c04ee06f50fd4a8cf",
+      "expectedFeatures": ["picture"]
+    },
+    {
+      "id": "lo-ole-emf",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/ole-emf_min.pptx",
+      "bytes": 36796,
+      "sha256": "99d27ff56b7c2f2568bac1fb4fb4d5ece7c6a97aeb7e949db4e0a9c541f027d0",
+      "expectedFeatures": ["ole-object", "vector-image"]
+    },
+    {
+      "id": "ox-notes",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]notes-Notes-showMasterPhAnim.pptx",
+      "bytes": 38460,
+      "sha256": "26d44a4d8c113bf9f03b47977f8ac237e4a3651c4c3de900d8311d6f142d39e0",
+      "expectedFeatures": ["strict-ooxml", "notes"]
+    },
+    {
+      "id": "lo-rtl",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/rightToLeftParagraph.pptx",
+      "bytes": 31841,
+      "sha256": "2533a51c70ca3e3a0e86032f13ff818be900bc8a559d6571d48d63cc570adf0a",
+      "expectedFeatures": ["text-rtl"]
+    },
+    {
+      "id": "lo-smartart-org",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/smartart-org-chart.pptx",
+      "bytes": 57764,
+      "sha256": "7a457c32c73efed6244cf79e184994a2f2a0cb65901f6ce4f3dfcd22dbcf4ac1",
+      "expectedFeatures": ["smartart"]
+    },
+    {
+      "id": "lo-smartart-picture",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/smartart-picture-strip.pptx",
+      "bytes": 52395,
+      "sha256": "6424c0c3dd8a19884365cf9d7c8bf2e24963fc9233afb4846345ea52cb9978d0",
+      "expectedFeatures": ["smartart"]
+    },
+    {
+      "id": "lo-table-list",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/predefined-table-style.pptx",
+      "bytes": 36430,
+      "sha256": "f3711fb2c44295c7d93ae92e5a5458af14a49e049ace24cc6fc64a3e3c0018bc",
+      "expectedFeatures": ["table"]
+    },
+    {
+      "id": "lo-table-borders",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/tableBorderLineStyle.pptx",
+      "bytes": 51776,
+      "sha256": "137e3b9c380f965bb2650d6760f7c4d7c32f2b64ec3bc64c8150e9281363386f",
+      "expectedFeatures": ["table"]
+    },
+    {
+      "id": "lo-wordart-3d",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/tdf140865Wordart3D.pptx",
+      "bytes": 17158,
+      "sha256": "c883abf998a2f1faef97fc5fd01531d42530249f1728c51c0aeb6958ab3e512a",
+      "expectedFeatures": ["word-art", "three-dimensional"]
+    },
+    {
+      "id": "lo-transition-media",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/tdf148478_transitionMusic.pptx",
+      "bytes": 309482,
+      "sha256": "5809f88f8e4500f42582dd8a61ac9fb3dadb61b5cfc13ae854dd3eb69a6ee878",
+      "expectedFeatures": ["transition"]
+    },
+    {
+      "id": "lo-vertical-text",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/tdf169825_vertical_layouts.pptx",
+      "bytes": 31377,
+      "sha256": "24778b205c66b89df0404f2587064e188017588710cac78f022418ef5969ba1a",
+      "expectedFeatures": ["text-vertical"]
+    },
+    {
+      "id": "lo-theme",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/ooxtheme.pptx",
+      "bytes": 44886,
+      "sha256": "c1694ff0017be3ec44322e1cfb0b04724dfec8028147c55685e8c8ae99977d50",
+      "expectedFeatures": ["theme"]
+    },
+    {
+      "id": "lo-sections",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/slide-sections.pptx",
+      "bytes": 138108,
+      "sha256": "2e2d1a6cfa6c282a2c81f92c74c704716357155741c9ed0abd9815aeac684369",
+      "expectedFeatures": ["sections"]
+    },
+    {
+      "id": "lo-transparent-fill",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/tdf149588_transparentSolidFill.pptx",
+      "bytes": 65346,
+      "sha256": "d5a9b9da840042d8fa3dcdaf18ecbe8fe3f348bff67438c7c6ca3d07e43fea35",
+      "expectedFeatures": ["transparency"]
+    },
+    {
+      "id": "lo-soft-edges",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/shape-soft-edges.pptx",
+      "bytes": 50092,
+      "sha256": "c3bc3f9adb6f22d85d6dac389e5225b07b74c43db6daf222b31e37cb459f8297",
+      "expectedFeatures": ["effects"]
+    },
+    {
+      "id": "lo-autofit",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/testShapeAutofit.pptx",
+      "bytes": 35044,
+      "sha256": "5a61e674e03540acfa95c663b497c263c3419de30c1d9b411f11017ebaa2301b",
+      "expectedFeatures": ["text-autofit"]
+    },
+    {
+      "id": "lo-embedded-font",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/BoldonseFontEmbedded.pptx",
+      "bytes": 67477,
+      "sha256": "9801672f6c932e218e044df19608d1f31629fee5c87af0bc7c04bfc9f84dbb69",
+      "expectedFeatures": ["embedded-font"]
+    },
+    {
+      "id": "lo-text-fitting",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/TextFittingComparisonWithMSO_1.pptx",
+      "bytes": 511026,
+      "sha256": "c0e3f5c79cc055bc7e8c01bbb120b06c4cb9756dd4b59f41d11ce883e7c0594d",
+      "expectedFeatures": ["text-autofit"]
+    },
+    {
+      "id": "lo-strict-ooxml",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/strict_ooxml.pptx",
+      "bytes": 29966,
+      "sha256": "72fe4f91e03e3901421b22ab1785a49bd772ea89d67149c04b80657cb68770ce",
+      "expectedFeatures": ["strict-ooxml"]
+    },
+    {
+      "id": "lo-equation",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/tdf129372.pptx",
+      "bytes": 33865,
+      "sha256": "b9bc871d807225cb92cbc2dfbead959e86920d3e0b2dc53ad6d59fb0110e45b7",
+      "expectedFeatures": ["equation"]
+    },
+    {
+      "id": "ox-autoshapes",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_2D (Default Styles).pptx",
+      "bytes": 49810,
+      "sha256": "64b207b66b7b09bdbcf494ac7b1d93b2961b39b2ab4691b0d40872d849d20c49",
+      "expectedFeatures": ["basic-shape"]
+    },
+    {
+      "id": "ox-reflection",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_2D_Reflection (full).pptx",
+      "bytes": 66336,
+      "sha256": "380b376aff430ece4892b853b246f28863bb100a47174e520fa5e4a187ff5b44",
+      "expectedFeatures": ["effects"]
+    },
+    {
+      "id": "ox-shadow",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_2D_Shadow (Offset, Diagonal).pptx",
+      "bytes": 66359,
+      "sha256": "b0610671d733b7b74ff83bf115e60e3e28e346e66c2da03052ea3994b2dd407f",
+      "expectedFeatures": ["effects"]
+    },
+    {
+      "id": "ox-soft-edges",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_2D_Soft Edges (5 Point).pptx",
+      "bytes": 49867,
+      "sha256": "c84eed0fc611e3e65f2a67ef6c44f6061b5e56e56023fc2ccc55b3e78fcb306c",
+      "expectedFeatures": ["effects"]
+    },
+    {
+      "id": "ox-shape-3d",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_3D_Bevel (Circle).pptx",
+      "bytes": 55004,
+      "sha256": "e51fb1f09b3e9492b5b06a9bd31d0db16c0bf8b4455e7c5df65a97174715caa7",
+      "expectedFeatures": ["three-dimensional"]
+    },
+    {
+      "id": "ox-chart-2d",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_2D.pptx",
+      "bytes": 62118,
+      "sha256": "dad57bde3989dbc48e5c52988773ccf74d1cf56af875e5366e4c92992ce258f3",
+      "expectedFeatures": ["chart"]
+    },
+    {
+      "id": "ox-chart-3d",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D (Column).pptx",
+      "bytes": 73518,
+      "sha256": "2b3d57ce8fe0409a214c98c6158dfa647c231e0dd7cb9c9cea80b4100b15fbeb",
+      "expectedFeatures": ["chart"]
+    },
+    {
+      "id": "ox-animated-gif",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Image_AnimatedGIF.pptx",
+      "bytes": 53552,
+      "sha256": "3b335fd5e115533525eda72d9e1fb8933c9587f527d85725dfa7cc9bcbe73067",
+      "expectedFeatures": ["animated-gif"]
+    },
+    {
+      "id": "ox-picture-3d",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Image_Small+3D Rotation.pptx",
+      "bytes": 56216,
+      "sha256": "73b93656401b6781d84e58b88072179de94150947b46a3b05c8e50eaa6152bdb",
+      "expectedFeatures": ["picture", "three-dimensional"]
+    },
+    {
+      "id": "ox-ink",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Ink2.pptx",
+      "bytes": 62981,
+      "sha256": "b506c11a3aaa21f5dfb11350fc0ab259c343aba0974819c8974e73935a4b6460",
+      "expectedFeatures": ["ink"]
+    },
+    {
+      "id": "ox-smartart-3d",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SmartArt_OrgChart1_3D.pptx",
+      "bytes": 81220,
+      "sha256": "ba05e16222bd9295aac653ca738963fcc9f885153e416c1f2ba652eeb5f109d0",
+      "expectedFeatures": ["smartart", "three-dimensional"]
+    },
+    {
+      "id": "ox-table-large",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Table_Large.pptx",
+      "bytes": 76194,
+      "sha256": "07aa3b2665961a001e4a05e0de6348babd67080de38387e780768ac5fbb8eb06",
+      "expectedFeatures": ["table"]
+    },
+    {
+      "id": "ox-text-effects",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withEffects_100chars.pptx",
+      "bytes": 55101,
+      "sha256": "594dec2537b688a070e3c0289eb89031f519f1f986b41a64000ddba111119b3c",
+      "expectedFeatures": ["text", "effects"]
+    },
+    {
+      "id": "ox-text-extrusion",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withExtrusion_100chars.pptx",
+      "bytes": 49653,
+      "sha256": "c42253256adc69706bd13a7efe5de9c33457c8c3931cbba1238b67e8eb3f9787",
+      "expectedFeatures": ["text", "three-dimensional"]
+    },
+    {
+      "id": "ox-text-shadow",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withShadow_100chars.pptx",
+      "bytes": 54806,
+      "sha256": "a9eb79a1d018d4e81ba4e3d1965bab7bd87ba7792fe80a53e0103fe96ba6f423",
+      "expectedFeatures": ["text", "effects"]
+    },
+    {
+      "id": "ox-sound",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SoundTest.pptx",
+      "bytes": 57863,
+      "sha256": "ed683a69046922d46695db8d1fb81d36caedfad9c92db2b21f390b75b03ad61f",
+      "expectedFeatures": ["embedded-media"]
+    },
+    {
+      "id": "ox-linked-picture",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/linkedpicture.pptx",
+      "bytes": 31525,
+      "sha256": "ca4607658668001afc795507efb6df4b9425eade6521b1f999629e6923d35920",
+      "expectedFeatures": ["external-relationship"]
+    },
+    {
+      "id": "ox-strict-rtl",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_bodyPr_rtlCol.pptx",
+      "bytes": 43607,
+      "sha256": "daa4b05676a2f3832053afaa7f3ef74dc8478bdd9cd9d06cc4063c2a44ba6bcb",
+      "expectedFeatures": ["strict-ooxml"]
+    },
+    {
+      "id": "ox-strict-cjk-numbering",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_buautonum_type_ea1jpnkorperiod.pptx",
+      "bytes": 35288,
+      "sha256": "02a8be40fe0b25fe4104f0dac15e39ea3f557db50ef93062d3a333358659bd51",
+      "expectedFeatures": ["strict-ooxml", "bullets"]
+    },
+    {
+      "id": "ox-strict-alt-language",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/altLang_mainEndParaRpr_AlternateLanguage.pptx",
+      "bytes": 40465,
+      "sha256": "445661b2cbab7b2572e0584ea258c0032c41cddc1b3b793c7df5c105d3629957",
+      "expectedFeatures": ["strict-ooxml", "alternate-language"]
+    },
+    {
+      "id": "ox-slide-size-wide",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/sldsz-Slide Size-type-screen16x9.pptx",
+      "bytes": 34331,
+      "sha256": "e5d50eb72deb0d1282227b2300aeec3072d1957779b93f9b931583262e7c2614",
+      "expectedFeatures": ["strict-ooxml", "slide-size"]
+    },
+    {
+      "id": "ox-typical",
+      "repository": "openxml-sdk",
+      "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/bvt/O12Typical.pptx",
+      "bytes": 944497,
+      "sha256": "9e577e380f7d19f4834639f35eaa0ea40ca3f287b99ea4fff0b697abeb66f034",
+      "expectedFeatures": ["text"]
+    },
+    {
+      "id": "poi-gradient",
+      "repository": "apache-poi",
+      "path": "test-data/slideshow/minimal-gradient-fill-issue.pptx",
+      "bytes": 36775,
+      "sha256": "366cebcd2b63501069daa129cda91232781e4e3f492b6afa050cd11db8ac7e93",
+      "expectedFeatures": ["gradient-fill"]
+    },
+    {
+      "id": "poi-picture-transparency",
+      "repository": "apache-poi",
+      "path": "test-data/slideshow/picture-transparency.pptx",
+      "bytes": 11793,
+      "sha256": "0ce76411a6e2fe3a5b8acf42722b973131a91b93cb5c3118a5a9c481b063e386",
+      "expectedFeatures": ["picture", "transparency"]
+    },
+    {
+      "id": "lo-svg",
+      "repository": "libreoffice",
+      "path": "sd/qa/unit/data/pptx/tdf163852.pptx",
+      "bytes": 9579,
+      "sha256": "2525665a1e430a9ee543faf456424bd7b994cce0a2d76470a5a07453e3e2ab39",
+      "expectedFeatures": ["vector-image"]
+    },
+    {
+      "id": "poi-comments",
+      "repository": "apache-poi",
+      "path": "test-data/slideshow/45545_Comment.pptx",
+      "bytes": 308394,
+      "sha256": "0295a51f63150e3ee680154d07dab88062ba2306030b790561f85436f3ded7c8",
+      "expectedFeatures": ["comments"]
+    }
+  ]
+}

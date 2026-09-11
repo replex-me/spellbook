@@ -1,0 +1,42 @@
+{
+  "contractVersion": "1.0",
+  "corpusId": "public-example",
+  "renderer": {
+    "name": "LibreOffice",
+    "image": "spellbook-document-worker:local",
+    "version": "record-the-container-release"
+  },
+  "referenceRenderer": {
+    "name": "Microsoft PowerPoint",
+    "version": "record-the-exact-build",
+    "os": "Windows",
+    "exportProcedure": "record-size-scale-background-and-export-steps"
+  },
+  "reviewRendererVersion": "record-the-container-release",
+  "categoryMinimums": {
+    "basic-corporate": 6,
+    "korean-text": 5,
+    "group-rotation-image": 4,
+    "table-chart-smartart": 4,
+    "master-layout": 3,
+    "complex-external": 3
+  },
+  "decks": [
+    {
+      "id": "deck-001",
+      "source": "public/downloads/lo-placeholders.pptx",
+      "references": ".tmp-eval/references/lo-placeholders",
+      "supportClass": "A",
+      "usageRights": "upstream-open-source-fixture-see-eval-public-sources-json",
+      "sensitivity": "public",
+      "categories": ["basic-corporate", "korean-text"],
+      "humanReview": {
+        "1": {
+          "severity": "P2",
+          "reviewer": "replace-with-reviewer",
+          "note": "minor antialiasing difference only"
+        }
+      }
+    }
+  ]
+}

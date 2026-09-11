@@ -1,0 +1,282 @@
+{
+  "contractVersion": "1.0",
+  "scope": "Static web rendering, element inspection, minimal OOXML edit, and untouched-part preservation for .pptx only",
+  "features": [
+    {
+      "id": "strict-ooxml",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Strict ISO OOXML packages must open and render; edits remain minimal."
+    },
+    {
+      "id": "slide-size",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Common and custom slide sizes must retain aspect ratio and coordinates."
+    },
+    {
+      "id": "slide-master-layout",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 3,
+      "productBoundary": "Masters and layouts affect static rendering but are not directly edited."
+    },
+    {
+      "id": "theme",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 3,
+      "productBoundary": "Theme colors and fonts must resolve for rendering and remain intact."
+    },
+    {
+      "id": "placeholder",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Placeholder inheritance is rendered and preserved, not directly edited in MVP."
+    },
+    {
+      "id": "text",
+      "verification": "render-and-edit",
+      "minimumFixtures": 5,
+      "productBoundary": "Plain text in non-placeholder shapes is the primary editable content."
+    },
+    {
+      "id": "text-columns",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Multi-column text is rendered but not structurally rewritten."
+    },
+    {
+      "id": "text-rtl",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Right-to-left paragraph layout is static-render and preservation scope."
+    },
+    {
+      "id": "text-vertical",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Vertical text is rendered and preserved."
+    },
+    {
+      "id": "text-autofit",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "PowerPoint-compatible AutoFit is a renderer fidelity requirement."
+    },
+    {
+      "id": "bullets",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Bullets and numbering render and survive unrelated edits."
+    },
+    {
+      "id": "alternate-language",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Language metadata and alternate-language text properties remain intact."
+    },
+    {
+      "id": "embedded-font",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Embeddable fonts are isolated per document for rendering and preserved in the canonical file."
+    },
+    {
+      "id": "basic-shape",
+      "verification": "render-and-edit",
+      "minimumFixtures": 5,
+      "productBoundary": "Ungrouped non-placeholder shapes support text, position, size, fill, and alignment edits."
+    },
+    {
+      "id": "connector",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Connectors are selectable/read-only and preserved."
+    },
+    {
+      "id": "custom-geometry",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Custom geometry is rendered and preserved, not rewritten."
+    },
+    {
+      "id": "group",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Groups and nested members are read-only in MVP."
+    },
+    {
+      "id": "rotation",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Rotated geometry and text render and remain intact."
+    },
+    {
+      "id": "solid-fill",
+      "verification": "render-and-edit",
+      "minimumFixtures": 3,
+      "productBoundary": "Solid shape fill is editable for supported shapes."
+    },
+    {
+      "id": "gradient-fill",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Gradient fills render and survive unrelated edits."
+    },
+    {
+      "id": "pattern-or-bitmap-fill",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Pattern and bitmap fills are render/preserve scope."
+    },
+    {
+      "id": "transparency",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Alpha and transparency effects are render/preserve scope."
+    },
+    {
+      "id": "effects",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Shadow, reflection, glow, and soft-edge effects are not directly edited."
+    },
+    {
+      "id": "three-dimensional",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "3D shape and text effects are static-render and preservation scope."
+    },
+    {
+      "id": "picture",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 3,
+      "productBoundary": "Pictures are selectable/read-only and preserved."
+    },
+    {
+      "id": "picture-crop",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Crop geometry must render without changing source media."
+    },
+    {
+      "id": "vector-image",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "SVG, EMF, and WMF are static-render/preserve scope where LibreOffice supports them."
+    },
+    {
+      "id": "animated-gif",
+      "verification": "render-first-frame-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "The editor shows a static preview; animation data is preserved."
+    },
+    {
+      "id": "table",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Tables are selectable/read-only and preserved."
+    },
+    {
+      "id": "chart",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "Charts and embedded workbooks are selectable/read-only and preserved."
+    },
+    {
+      "id": "smartart",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 2,
+      "productBoundary": "SmartArt is selectable/read-only; visual fidelity is a known high-risk area."
+    },
+    {
+      "id": "word-art",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "WordArt geometry and effects are not rewritten."
+    },
+    {
+      "id": "ink",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Ink is static-render/read-only."
+    },
+    {
+      "id": "embedded-media",
+      "verification": "preserve-only",
+      "minimumFixtures": 1,
+      "productBoundary": "Audio and video playback is outside MVP; package parts must survive unrelated edits."
+    },
+    {
+      "id": "ole-object",
+      "verification": "render-fallback-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "OLE is not activated in the browser; fallback image renders when present and bytes are preserved."
+    },
+    {
+      "id": "equation",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Equations are static-render/read-only."
+    },
+    {
+      "id": "hyperlink",
+      "verification": "render-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "Hyperlink relationships remain in the canonical PPTX."
+    },
+    {
+      "id": "external-relationship",
+      "verification": "render-sanitized-and-preserve",
+      "minimumFixtures": 1,
+      "productBoundary": "External targets are neutralized only in disposable render copies and preserved canonically."
+    },
+    {
+      "id": "notes",
+      "verification": "preserve-only",
+      "minimumFixtures": 1,
+      "productBoundary": "Speaker notes are not shown or edited in MVP."
+    },
+    {
+      "id": "comments",
+      "verification": "preserve-only",
+      "minimumFixtures": 1,
+      "productBoundary": "Comments are not shown or edited in MVP."
+    },
+    {
+      "id": "transition",
+      "verification": "preserve-only",
+      "minimumFixtures": 1,
+      "productBoundary": "Transitions are not played in the static web editor."
+    },
+    {
+      "id": "animation",
+      "verification": "preserve-only",
+      "minimumFixtures": 1,
+      "productBoundary": "Animations are not played in the static web editor."
+    },
+    {
+      "id": "activex",
+      "verification": "preserve-only",
+      "minimumFixtures": 1,
+      "productBoundary": "ActiveX never executes in the service; package preservation only."
+    },
+    {
+      "id": "custom-xml",
+      "verification": "preserve-only",
+      "minimumFixtures": 1,
+      "productBoundary": "Custom XML is opaque and must survive unrelated edits."
+    },
+    {
+      "id": "sections",
+      "verification": "preserve-only",
+      "minimumFixtures": 1,
+      "productBoundary": "Section organization is retained but not exposed in MVP."
+    },
+    {
+      "id": "macro",
+      "verification": "excluded",
+      "minimumFixtures": 0,
+      "productBoundary": ".pptm and VBA execution are outside the .pptx MVP boundary."
+    }
+  ]
+}

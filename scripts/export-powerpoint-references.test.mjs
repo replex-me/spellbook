@@ -1,0 +1,53 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import {
+  buildReferenceRenderer,
+  parseRasterSlideName,
+  retainNativeReferencePdf,
+} from "./export-powerpoint-references.mjs";
+
+test("new reference exports retain the native PDF for font and text geometry diagnostics", async () => {
+  const directory = await fs.mkdtemp(
+    path.join(os.tmpdir(), "spellbook-pdf-test-"),
+  );
+  try {
+    const source = path.join(directory, "source.pdf");
+    const bytes = Buffer.from("%PDF-1.7\nfixture\n");
+    await fs.writeFile(source, bytes);
+    await retainNativeReferencePdf(source, directory);
+    assert.deepEqual(
+      await fs.readFile(path.join(directory, "reference.pdf")),
+      bytes,
+    );
+    assert.deepEqual(await fs.readFile(source), bytes);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("normalizes zero-padded pdftoppm slide names", () => {
+  assert.equal(parseRasterSlideName("slide-001.png"), 1);
+  assert.equal(parseRasterSlideName("slide-503.PNG"), 503);
+  assert.equal(parseRasterSlideName("reference.pdf"), null);
+});
+
+test("records the exact PowerPoint and rasterization environment", () => {
+  assert.deepEqual(
+    buildReferenceRenderer({
+      powerPointVersion: "16.109.127.0",
+      macOsVersion: "27.0",
+      dpi: 144,
+    }),
+    {
+      name: "Microsoft PowerPoint",
+      version: "16.109.127.0",
+      os: "macOS 27.0",
+      exportProcedure:
+        "PowerPoint AppleScript save as PDF, then Poppler pdftoppm 144 DPI PNG; one image per slide",
+    },
+  );
+});

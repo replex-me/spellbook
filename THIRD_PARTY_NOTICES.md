@@ -1,0 +1,13 @@
+# Third-party notices
+
+Spellbook integrates with, but does not relicense, third-party software.
+
+| Component               | Use                                                        | License / distribution note                                                                                                                                                                                                |
+| ----------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LibreOffice             | PPTX import, layout and rendering; selected source patches | MPL-2.0 and applicable upstream notices. Patched source files retain their upstream headers.                                                                                                                               |
+| Collabora Online / CODE | Browser-native office editor and WOPI client               | Primarily MPL-2.0, with separately licensed parts. The Compose profile builds locally against the pinned upstream CODE image and does not replace its branding assets. This repository does not publish that binary image. |
+| DocumentFormat.OpenXml  | Structure-preserving OOXML edits                           | MIT                                                                                                                                                                                                                        |
+| Pretendard              | Optional runtime font                                      | SIL Open Font License 1.1                                                                                                                                                                                                  |
+| Noto Sans KR            | Optional runtime font                                      | SIL Open Font License 1.1                                                                                                                                                                                                  |
+
+Dependency lockfiles contain the complete JavaScript and .NET dependency versions. Container builds fetch third-party artifacts from their official or upstream release locations and verify pinned versions or hashes where supported.

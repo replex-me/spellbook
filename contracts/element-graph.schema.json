@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spellbook.replex.me/contracts/element-graph.schema.json",
+  "title": "ElementGraph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "documentSha256",
+    "slideWidthEmu",
+    "slideHeightEmu",
+    "slides"
+  ],
+  "properties": {
+    "contractVersion": { "type": "string", "const": "1.0" },
+    "documentSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "slideWidthEmu": { "type": "integer", "minimum": 1 },
+    "slideHeightEmu": { "type": "integer", "minimum": 1 },
+    "fontInventoryAvailable": { "type": "boolean" },
+    "declaredFonts": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "missingFonts": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "fontSubstitutions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fontSubstitution" },
+      "uniqueItems": true
+    },
+    "rendererName": { "type": "string", "minLength": 1 },
+    "rendererVersion": { "type": "string", "minLength": 1 },
+    "slides": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/slide" }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "fontSubstitution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["original", "substituted"],
+      "properties": {
+        "original": { "type": "string", "minLength": 1 },
+        "substituted": { "type": "string", "minLength": 1 }
+      }
+    },
+    "slide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slideIndex", "partUri", "elements", "supportGrade"],
+      "properties": {
+        "slideIndex": { "type": "integer", "minimum": 0 },
+        "partUri": { "type": "string" },
+        "previewObject": { "type": ["string", "null"] },
+        "supportGrade": { "enum": ["A", "B", "C", "D"] },
+        "elements": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "element": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "elementId",
+        "shapeId",
+        "kind",
+        "name",
+        "x",
+        "y",
+        "width",
+        "height",
+        "rotation",
+        "zIndex",
+        "editable",
+        "sourceHash"
+      ],
+      "properties": {
+        "elementId": { "type": "string", "minLength": 1 },
+        "shapeId": { "type": "integer", "minimum": 1 },
+        "kind": {
+          "enum": [
+            "shape",
+            "picture",
+            "graphicFrame",
+            "group",
+            "connector",
+            "unknown"
+          ]
+        },
+        "name": { "type": "string" },
+        "text": { "type": ["string", "null"] },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "width": { "type": "integer", "minimum": 0 },
+        "height": { "type": "integer", "minimum": 0 },
+        "rotation": { "type": "number" },
+        "flipHorizontal": { "type": "boolean" },
+        "flipVertical": { "type": "boolean" },
+        "zIndex": { "type": "integer", "minimum": 0 },
+        "editable": { "type": "boolean" },
+        "unsupportedReason": { "type": ["string", "null"] },
+        "sourceHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "tableCells": {
+          "type": ["array", "null"],
+          "items": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

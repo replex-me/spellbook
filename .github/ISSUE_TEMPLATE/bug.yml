@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible Spellbook problem without private documents.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach confidential documents or credentials. Use a minimal redistributable fixture.
+  - type: input
+    id: version
+    attributes:
+      label: Spellbook version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: Document format
+      options:
+        [PPTX, DOCX (planned), Spellbook native (planned), Not format-specific]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the command, document characteristics and exact observed behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe evidence
+      description: Logs with secrets removed, screenshots and a public fixture link.

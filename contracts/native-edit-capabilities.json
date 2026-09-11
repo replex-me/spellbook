@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "coordinateUnit": "1/100mm",
+  "nativeUndoRequired": true,
+  "verifiedWith": {
+    "date": "2026-09-11",
+    "probe": "services/office-session-spike/probe-uno.mjs"
+  },
+  "operationGroups": {
+    "slide": ["insert_slide", "duplicate_slide", "delete_slide"],
+    "create": ["add_text_box", "add_shape", "add_table"],
+    "multiElement": ["align", "distribute", "group"],
+    "element": [
+      "replace_text",
+      "move",
+      "resize",
+      "font_size",
+      "bold",
+      "italic",
+      "underline",
+      "font_family",
+      "font_color",
+      "fill_color",
+      "line_color",
+      "line_width",
+      "rotate",
+      "z_order",
+      "paragraph_alignment",
+      "flip",
+      "ungroup",
+      "duplicate_element",
+      "delete_element"
+    ]
+  },
+  "knownUnsafeOperations": [
+    {
+      "op": "set_background",
+      "reason": "LibreOffice applies the page color but does not add a native undo action."
+    },
+    {
+      "op": "set_table_cell",
+      "reason": "UNO XText mutation changes a table cell but does not add a native undo action."
+    }
+  ],
+  "toolInputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "op": {
+        "type": "string",
+        "enum": [
+          "replace_text",
+          "move",
+          "resize",
+          "font_size",
+          "bold",
+          "italic",
+          "underline",
+          "font_family",
+          "font_color",
+          "fill_color",
+          "line_color",
+          "line_width",
+          "rotate",
+          "z_order",
+          "paragraph_alignment",
+          "flip",
+          "ungroup",
+          "duplicate_element",
+          "delete_element",
+          "align",
+          "distribute",
+          "group",
+          "add_text_box",
+          "add_shape",
+          "add_table",
+          "insert_slide",
+          "duplicate_slide",
+          "delete_slide"
+        ]
+      },
+      "elementId": { "type": ["string", "null"] },
+      "elementIds": {
+        "type": ["array", "null"],
+        "items": { "type": "string" }
+      },
+      "slideIndex": { "type": ["number", "null"] },
+      "text": { "type": ["string", "null"] },
+      "x": { "type": ["number", "null"] },
+      "y": { "type": ["number", "null"] },
+      "width": { "type": ["number", "null"] },
+      "height": { "type": ["number", "null"] },
+      "size": { "type": ["number", "null"] },
+      "degrees": { "type": ["number", "null"] },
+      "bold": { "type": ["boolean", "null"] },
+      "italic": { "type": ["boolean", "null"] },
+      "underline": { "type": ["boolean", "null"] },
+      "family": { "type": ["string", "null"] },
+      "color": { "type": ["number", "null"] },
+      "alignment": {
+        "type": ["string", "null"],
+        "enum": [
+          "left",
+          "center",
+          "right",
+          "justify",
+          "top",
+          "middle",
+          "bottom",
+          null
+        ]
+      },
+      "axis": {
+        "type": ["string", "null"],
+        "enum": ["horizontal", "vertical", null]
+      },
+      "position": {
+        "type": ["string", "null"],
+        "enum": ["front", "forward", "backward", "back", null]
+      },
+      "geometry": {
+        "type": ["string", "null"],
+        "enum": ["rectangle", "ellipse", "line", null]
+      },
+      "cells": {
+        "type": ["array", "null"],
+        "items": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "required": [
+      "op",
+      "elementId",
+      "elementIds",
+      "slideIndex",
+      "text",
+      "x",
+      "y",
+      "width",
+      "height",
+      "size",
+      "degrees",
+      "bold",
+      "italic",
+      "underline",
+      "family",
+      "color",
+      "alignment",
+      "axis",
+      "position",
+      "geometry",
+      "cells"
+    ]
+  }
+}

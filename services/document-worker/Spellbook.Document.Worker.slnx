@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/Spellbook.Document.Core/Spellbook.Document.Core.csproj" />
+  <Project Path="src/Spellbook.Document.Worker/Spellbook.Document.Worker.csproj" />
+  <Project Path="tools/Spellbook.Document.Tool/Spellbook.Document.Tool.csproj" />
+  <Project Path="tests/Spellbook.Document.Tests/Spellbook.Document.Tests.csproj" />
+</Solution>
