@@ -1,5 +1,7 @@
 # Spellbook
 
+[English](README.md) | [한국어](docs/README.ko.md)
+
 Spellbook opens an existing document in a real browser editor, lets a person and an AI work on the same editable file, and checks the result against both the document structure and the rendered screen before it is accepted.
 
 The current usable vertical is **PowerPoint (`.pptx`)**. DOCX and Spellbook's native page-layout format are planned adapters; they are not advertised as working features yet.
