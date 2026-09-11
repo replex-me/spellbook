@@ -22,6 +22,8 @@ This is evidence from one development machine, not a general performance claim o
 8. With no Codex account connected, the canvas remained directly editable and the chat panel showed the connection action instead of presenting a usable composer.
 9. Repeated delivery of one save-validation job was collapsed to one in-process execution. The previously observed duplicate LibreOffice launch no longer occurred, and the live save round trip completed in 2.1 seconds on the final run.
 10. The document-worker image completed a full `linux/amd64` build, including the pinned LibreOffice package and native `linux-x64` .NET publish. It was not executed under a native amd64 host in this verification.
+11. Commit `3503f53` was cloned into a new empty directory. A frozen dependency install and the complete `pnpm verify` suite passed without relying on the development checkout's generated files or caches.
+12. Public GitHub Actions run `34597476608` passed the boundary check, documentation and contract checks, REUSE licensing, Python/Node/Go/.NET tests, type checks and production builds on Ubuntu after undeclared `PyMuPDF` use was added to the pinned Python requirements.
 
 The repeatable command is `SPELLBOOK_SELFHOST_DOCUMENT_ID=<uuid> pnpm test:selfhost`. Evidence files are deliberately local and ignored from Git.
 
@@ -41,3 +43,4 @@ An early live save exposed two independent defects: duplicate delivery could sta
 - a live Codex login, permission, edit, re-observation and self-review turn;
 - WOPI proof-key validation, backup/restore, restart recovery and load saturation;
 - complex PPTX fidelity and round-trip preservation across the public corpus.
+- a tagged source release and SBOM.
