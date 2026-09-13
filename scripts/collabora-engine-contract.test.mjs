@@ -92,3 +92,20 @@ test("runtime mutation contracts are generated from the public capability model"
   for (const operation of Object.keys(operations))
     assert.match(generated, new RegExp(`"${operation}"`, "u"));
 });
+
+test("the checked-in native conformance fixture is reproducible", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "spellbook-fixture-"));
+  try {
+    const generated = path.join(root, "general-native-surface.pptx");
+    execFileSync("python3", [
+      "scripts/generate-native-conformance-fixture.py",
+      generated,
+    ]);
+    assert.deepEqual(
+      readFileSync(generated),
+      readFileSync("eval/public/fixtures/general-native-surface.pptx"),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
