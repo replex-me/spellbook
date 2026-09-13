@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "status": "viability_probe_only",
+  "product": "ZetaOffice",
+  "source": {
+    "repository": "https://git.libreoffice.org/core",
+    "ref": "distro/allotropia/zeta-24-2",
+    "buildCommit": "efaf0670b4d055f838a2849becb10f08aa06a257"
+  },
+  "javascriptBridge": {
+    "repository": "https://github.com/allotropia/zetajs.git",
+    "commit": "b3dec98af5dc4c059a260afd6db0bf0fe38c6384",
+    "version": "1.2.0"
+  },
+  "runtimeBaseUrl": "https://cdn.zetaoffice.net/zetaoffice_latest/",
+  "runtimeAssets": [
+    {
+      "path": "soffice.js",
+      "storedPath": "soffice.js",
+      "requestEncoding": "identity",
+      "contentType": "text/javascript; charset=utf-8",
+      "bytes": 858124,
+      "sha256": "5143e5354f470b87f86ba272bcfef857bd13e6f07b59666e48a7ccb89643cd77"
+    },
+    {
+      "path": "soffice.data.js.metadata",
+      "storedPath": "soffice.data.js.metadata",
+      "requestEncoding": "identity",
+      "contentType": "application/json",
+      "bytes": 215180,
+      "sha256": "5d9d909d0b9b38443c0f19704032d0fc12d654f6c9c24c2c3b237739c4848ae3"
+    },
+    {
+      "path": "soffice.wasm",
+      "storedPath": "soffice.wasm.br",
+      "requestEncoding": "br",
+      "contentType": "application/wasm",
+      "contentEncoding": "br",
+      "bytes": 36279250,
+      "sha256": "a11808aaba3c9a4412a865bde645247fd9d0b262b5baa0680a9fced29a8656e4"
+    },
+    {
+      "path": "soffice.data",
+      "storedPath": "soffice.data.br",
+      "requestEncoding": "br",
+      "contentType": "application/octet-stream",
+      "contentEncoding": "br",
+      "bytes": 15891013,
+      "sha256": "9d3c1cf3c904ce570905052ba6844f3383fde93ad1267b65a3ae4b236db2fd05"
+    }
+  ],
+  "requiredDocumentHeaders": {
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Embedder-Policy": "require-corp"
+  },
+  "requiredAssetHeaders": {
+    "Access-Control-Allow-Origin": "*",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+    "Cache-Control": "public, max-age=31536000, immutable"
+  }
+}
