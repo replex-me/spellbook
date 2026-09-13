@@ -26,10 +26,12 @@ interface NativeEditContract {
   };
 }
 
-const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const contractsDirectory =
   process.env.SPELLBOOK_CONTRACTS_DIR ??
-  path.resolve(moduleDirectory, "../../../contracts");
+  path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../contracts",
+  );
 
 export const nativeEditContract = JSON.parse(
   readFileSync(

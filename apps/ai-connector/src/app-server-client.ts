@@ -133,13 +133,7 @@ export class AppServerClient {
       }
     }
 
-    const configured = process.env.CODEX_BIN?.trim();
-    const packageRoot = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "..",
-    );
-    const binary =
-      configured || path.join(packageRoot, "node_modules", ".bin", "codex");
+    const binary = resolveCodexBinary();
     const allowedEnvironment: NodeJS.ProcessEnv = {
       PATH: process.env.PATH,
       HOME: options.processHome ?? codexHome,
@@ -596,6 +590,17 @@ export class AppServerClient {
       this.events.emit("notification", message);
     }
   }
+}
+
+export function resolveCodexBinary(
+  configured = process.env.CODEX_BIN?.trim(),
+): string {
+  if (configured) return configured;
+  const packageRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+  );
+  return path.join(packageRoot, "node_modules", ".bin", "codex");
 }
 
 function decodeGeneratedImage(item: Record<string, unknown>): GeneratedImage {

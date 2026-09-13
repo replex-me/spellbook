@@ -10,10 +10,12 @@ import { SessionManager } from "./session-manager.js";
 import { AgentRunner } from "./agent-runner.js";
 import { LocalStorage, type ObjectStore } from "./local-storage.js";
 
-const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const contractsDirectory =
   process.env.SPELLBOOK_CONTRACTS_DIR ??
-  path.resolve(moduleDirectory, "../../../contracts");
+  path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../contracts",
+  );
 const Ajv2020Constructor = Ajv2020 as unknown as typeof import("ajv").default;
 
 export class EditRunner {

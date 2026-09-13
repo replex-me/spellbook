@@ -8,6 +8,7 @@ The repository is governed by a small set of documents with distinct jobs:
 - [Multi-format roadmap](product/multiformat-roadmap.md): how PPTX becomes one adapter without flattening DOCX or page-layout semantics.
 - [Self-hosting](delivery/self-hosting.md): installation, secrets, storage and operational requirements.
 - [Release gates](delivery/release-gates.md): evidence required before a public release can be called usable.
+- [Local AI connector verification](delivery/connector-runtime-verification-2026-09-13.md): source and packaged macOS connector evidence and remaining distribution gates.
 - [Local runtime evidence](delivery/runtime-verification-2026-09-11.md): the exact end-to-end path verified before the first public push.
 - [Research record](research/open-core-selfhost-research-2026-09-11.md): external evidence and the decisions derived from it.
 

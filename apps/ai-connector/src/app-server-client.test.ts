@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn() }));
 vi.mock("node:child_process", () => ({ spawn: mocks.spawn }));
-import { AppServerClient } from "./app-server-client.js";
+import { AppServerClient, resolveCodexBinary } from "./app-server-client.js";
 
 const homes: string[] = [];
 afterEach(async () => {
@@ -126,7 +126,7 @@ it("can reuse a standard Codex home without modifying its configuration", async 
     path.join(os.tmpdir(), "spellbook-shared-codex-test-"),
   );
   homes.push(home);
-  const existingConfig = "model = \"user-choice\"\n";
+  const existingConfig = 'model = "user-choice"\n';
   await fs.writeFile(path.join(home, "config.toml"), existingConfig);
   const child = Object.assign(new EventEmitter(), {
     stdin: new PassThrough(),
@@ -161,6 +161,16 @@ it("can reuse a standard Codex home without modifying its configuration", async 
     }),
   );
   client.close();
+});
+
+it("lets a packaged connector pin its bundled Codex executable", () => {
+  expect(
+    resolveCodexBinary(
+      "/Applications/Spellbook AI Connector.app/Contents/Resources/codex/bin/codex",
+    ),
+  ).toBe(
+    "/Applications/Spellbook AI Connector.app/Contents/Resources/codex/bin/codex",
+  );
 });
 
 describe("structured turn isolation", () => {

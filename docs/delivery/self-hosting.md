@@ -29,6 +29,14 @@ pnpm connector:start
 
 The connector listens only on `127.0.0.1:43127` and starts without product-specific configuration. Each HTTPS Spellbook site must open a local approval page that names its exact origin before it receives a short-lived, origin-bound session. Set `SPELLBOOK_CONNECTOR_ALLOWED_ORIGINS` only when an operator wants to restrict the connector to a fixed comma-separated allowlist. By default it uses the same local Codex login cache as the CLI and IDE extension, so an already signed-in user does not authenticate again. Set `SPELLBOOK_CODEX_AUTH_MODE=isolated` to use a separate Spellbook-only login instead. The approval session is stored in browser session storage and expires; Codex credentials stay on the user's computer and are never copied into Spellbook storage. Do not expose the connector port through a reverse proxy or bind it to a LAN interface.
 
+On macOS, contributors can assemble the same connector as a standalone app:
+
+```bash
+pnpm connector:package:macos
+```
+
+The build bundles the connector, the pinned official Node runtime and the matching Codex executable; verifies the Node download checksum; injects the connector with Node's single-executable format; signs the app; and runs loopback health, origin-bound pairing and approval-page smoke checks. The ignored result is written under `artifacts/connector/`. Without `SPELLBOOK_MACOS_SIGN_IDENTITY`, the app receives an ad-hoc signature for local verification only. A downloadable public macOS build must use a Developer ID Application identity and pass Apple notarization; the current source build is not a substitute for that release gate.
+
 ## Data and backup
 
 `database-data` holds metadata and version lineage. `document-data` holds uploaded documents, derived renders and job receipts. `ai-auth-data` is mounted only into the AI connector and holds its provider runtime home. A usable document backup requires a consistent copy of the database and document volumes; back up the AI volume separately if reconnecting the provider is not acceptable.
