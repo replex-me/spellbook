@@ -202,6 +202,10 @@ export async function createProbe({
             accessToken: token,
             expiresAt,
             apiBase: "/native",
+            // The product workspace requires an explicit connector mode. The
+            // isolated conformance host exercises the built-in loopback AI
+            // stub, so it uses the same internal mode as a hosted session.
+            aiConnector: { mode: "internal" },
           }).replaceAll("<", "\\u003c");
           return reply(
             200,
