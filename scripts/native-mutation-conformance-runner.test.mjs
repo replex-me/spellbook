@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import test from "node:test";
 import {
@@ -17,6 +18,28 @@ const capabilities = JSON.parse(
 const conformance = JSON.parse(
   fs.readFileSync("contracts/native-mutation-conformance.json", "utf8"),
 );
+const publicSources = JSON.parse(
+  fs.readFileSync("eval/public/sources.json", "utf8"),
+);
+
+function assertPinnedPublicSource(scenario) {
+  if (fs.existsSync(scenario.source)) {
+    assert.equal(
+      createHash("sha256")
+        .update(fs.readFileSync(scenario.source))
+        .digest("hex"),
+      scenario.sourceSha256,
+    );
+    return;
+  }
+  const match = /^eval\/public\/downloads\/([^/]+)\.pptx$/u.exec(
+    scenario.source,
+  );
+  assert.ok(match, `${scenario.source} is neither checked in nor fetchable`);
+  const deck = publicSources.decks.find(({ id }) => id === match[1]);
+  assert.ok(deck, `${scenario.source} is missing from the public catalog`);
+  assert.equal(deck.sha256, scenario.sourceSha256);
+}
 
 test("execution plan assigns a real PPTX and bounded operation routes to every scenario", () => {
   const plan = buildConformancePlan(capabilities, conformance);
@@ -25,7 +48,7 @@ test("execution plan assigns a real PPTX and bounded operation routes to every s
   assert.equal(scenarios.length, 9);
   assert.equal(scenarios[0].name, "table-structure");
   assert.equal(scenarios.at(-1).name, "general-native-surface");
-  assert.ok(scenarios.every((scenario) => fs.existsSync(scenario.source)));
+  scenarios.forEach(assertPinnedPublicSource);
   assert.ok(
     scenarios.every((scenario) => /^[0-9a-f]{64}$/.test(scenario.sourceSha256)),
   );
