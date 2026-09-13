@@ -79,7 +79,7 @@ export class SessionManager {
     const location = codexSessionLocation(email);
     const home = location.home;
     await fs.mkdir(home, { recursive: true, mode: 0o700 });
-    await fs.chmod(home, 0o700);
+    if (location.isolated) await fs.chmod(home, 0o700);
     return {
       client: await AppServerClient.start(home, {
         createRestrictedConfig: location.isolated,
