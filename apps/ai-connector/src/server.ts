@@ -208,9 +208,9 @@ async function executeNativeJob(
     const client = await sessions.client(job.email);
     const result = await runNativeTurn(client, {
       requestText: job.requestText,
+      conversationHistory: job.conversationHistory,
       modelSettings: job.modelSettings,
       permission,
-      conversationKey: `native:${job.sessionId}`,
       host,
       signal: controller.signal,
       onText: (delta) => {

@@ -12,6 +12,11 @@ import { callAiAccount, enqueueWorkerJob } from "./workers";
 import { saveImageAsset } from "./image-assets";
 import { storageNamespace } from "./storage";
 import { internalAppBaseUrl, publicAppBaseUrl } from "./runtime-urls";
+import {
+  boundedNativeConversationHistory,
+  NATIVE_HISTORY_TURN_LIMIT,
+  type NativeConversationTurn,
+} from "./native-conversation";
 import { signNativeConnectorToken } from "./native-connector-token";
 import { aiConnectorConfig } from "./ai-connector-config";
 
@@ -89,7 +94,7 @@ export async function submitNativeTurn(
     ...(modelSettings ? { modelSettings } : {}),
   };
   const publicBase = execution === "local" ? publicAppBaseUrl() : null;
-  const payload = {
+  const baseJobPayload = {
     ...basePayload,
     callbackUrl:
       execution === "local"
@@ -100,6 +105,9 @@ export async function submitNativeTurn(
         ? `${publicBase}/api/native/jobs/${jobId}/tools`
         : `${internalAppBaseUrl()}/api/internal/native/tools`,
   };
+  let payload: typeof baseJobPayload & {
+    conversationHistory?: NativeConversationTurn[];
+  } = baseJobPayload;
   await db().begin(async (sql) => {
     await sql`select id from spellbook_native_sessions where id=${native.id} for update`;
     const [active] = await sql`
@@ -107,6 +115,18 @@ export async function submitNativeTurn(
         and status in ('queued','running') for update
     `;
     if (active) throw new HttpError(409, "native_turn_already_running");
+    const history = boundedNativeConversationHistory(
+      await sql`
+        select request_text, assistant_text, status
+        from spellbook_native_turns
+        where session_id=${native.id}
+          and status in ('completed','failed','cancelled')
+        order by created_at desc limit ${NATIVE_HISTORY_TURN_LIMIT}
+      `,
+    );
+    payload = history.length
+      ? { ...baseJobPayload, conversationHistory: history }
+      : baseJobPayload;
     await sql`
       insert into spellbook_jobs (id,job_type,document_id,version_id,status,payload)
       values (${jobId},'native_turn',${documentId},${native.working_version_id},'queued',${sql.json(payload as any)})

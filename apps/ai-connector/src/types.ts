@@ -61,6 +61,11 @@ export interface NativeJob {
   sessionId: string;
   turnId: string;
   requestText: string;
+  conversationHistory?: Array<{
+    request: string;
+    response: string | null;
+    status: "completed" | "failed" | "cancelled";
+  }>;
   permissionMode: "read_only" | "selection" | "slides" | "document";
   modelSettings?: ModelSettings;
 }

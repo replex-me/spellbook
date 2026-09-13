@@ -215,9 +215,40 @@ function validateLocalNativeJob(
     sessionId: input.sessionId,
     turnId: input.turnId,
     requestText: input.requestText,
+    ...localConversationHistory(input.conversationHistory),
     permissionMode: input.permissionMode,
     ...(input.modelSettings ? { modelSettings: input.modelSettings } : {}),
   };
+}
+
+function localConversationHistory(
+  input: unknown,
+): Pick<NativeJob, "conversationHistory"> {
+  if (input === undefined) return {};
+  if (!Array.isArray(input) || input.length > 12)
+    throw new Error("invalid_local_native_history");
+  let characters = 0;
+  const conversationHistory = input.map((value) => {
+    const turn = value as Record<string, unknown> | null;
+    if (
+      !turn ||
+      typeof turn.request !== "string" ||
+      turn.request.length < 1 ||
+      turn.request.length > 2_000 ||
+      (turn.response !== null && typeof turn.response !== "string") ||
+      (typeof turn.response === "string" && turn.response.length > 8_000) ||
+      !["completed", "failed", "cancelled"].includes(String(turn.status))
+    )
+      throw new Error("invalid_local_native_history");
+    characters += turn.request.length + (turn.response?.length ?? 0);
+    if (characters > 24_000) throw new Error("invalid_local_native_history");
+    return {
+      request: turn.request,
+      response: turn.response as string | null,
+      status: turn.status as "completed" | "failed" | "cancelled",
+    };
+  });
+  return { conversationHistory };
 }
 
 function exactProductJobUrl(

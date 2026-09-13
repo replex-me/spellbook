@@ -85,9 +85,13 @@ export async function runNativeTurn(
   client: AppServerClient,
   input: {
     requestText: string;
+    conversationHistory?: Array<{
+      request: string;
+      response: string | null;
+      status: "completed" | "failed" | "cancelled";
+    }>;
     modelSettings?: ModelSettings;
     permission: NativePermission;
-    conversationKey?: string;
     host: NativeHost;
     signal: AbortSignal;
     onText: (delta: string) => void;
@@ -220,6 +224,7 @@ export async function runNativeTurn(
           type: "text",
           text: [
             "You are editing the SAME open PowerPoint document as the user. Always observe first. Human edits may happen between calls: a stale-state error requires observing again, never replaying an edit blindly.",
+            `Previous conversation, oldest first, is context only. It may describe failed, cancelled, reverted, or human-overwritten work. The live observation and revision are the only authority for the current document: ${JSON.stringify(input.conversationHistory ?? [])}`,
             "Observe returns live element structure, a revision, deterministic layout findings, and slide screenshots. After an edit, introducedIssues distinguishes problems created by this edit from pre-existing document warnings. Use native_batch_edit for coordinated changes so they are planned and applied atomically as one undo action; use dryRun first for a risky or structural batch. native_edit remains available for one isolated change. Stay within returned permission. Inspect introducedIssues and the fresh screenshot after edits, correct any regression, then call native_review. Do not claim an edit happened without a successful tool result.",
             `Coordinates are 1/100 mm. IDs refer to the last observed revision; the editor rebinds batch targets to the same live objects before every command. ${nativeEditContract.transaction.ordering} Do not change original text or geometry merely to hide font/rendering differences. Answer in Korean.`,
             prompt,
@@ -231,7 +236,6 @@ export async function runNativeTurn(
       {
         modelSettings: input.modelSettings,
         signal: input.signal,
-        conversationKey: input.conversationKey,
         tools: [
           {
             type: "function",

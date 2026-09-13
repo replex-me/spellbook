@@ -89,6 +89,27 @@ async function fixture() {
   return { documentId, versionId, nativeSessionId };
 }
 
+async function addPastNativeTurn(
+  context: Awaited<ReturnType<typeof fixture>>,
+  input: {
+    request: string;
+    response: string | null;
+    status: "completed" | "failed" | "cancelled";
+    createdAt: Date;
+  },
+) {
+  const turnId = randomUUID();
+  const jobId = randomUUID();
+  await db().begin(async (sql) => {
+    await sql`insert into spellbook_jobs
+      (id,job_type,document_id,version_id,status,payload,created_at)
+      values (${jobId},'native_turn',${context.documentId},${context.versionId},'succeeded',${sql.json({ historical: true })},${input.createdAt})`;
+    await sql`insert into spellbook_native_turns
+      (id,session_id,document_id,account_id,job_id,request_text,permission_mode,status,assistant_text,created_at)
+      values (${turnId},${context.nativeSessionId},${context.documentId},${accountId},${jobId},${input.request},'document',${input.status},${input.response},${input.createdAt})`;
+  });
+}
+
 const observation = {
   unit: "1/100mm",
   activeSlide: 0,
@@ -435,6 +456,40 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
         delete process.env.SPELLBOOK_AI_CONNECTOR_MODE;
       else process.env.SPELLBOOK_AI_CONNECTOR_MODE = previousMode;
     }
+  });
+
+  it("dispatches bounded durable history in chronological order", async () => {
+    workers.enqueueWorkerJob.mockClear();
+    const f = await fixture();
+    await addPastNativeTurn(f, {
+      request: "첫 요청",
+      response: "첫 응답",
+      status: "completed",
+      createdAt: new Date(Date.now() - 2_000),
+    });
+    await addPastNativeTurn(f, {
+      request: "두 번째 요청",
+      response: null,
+      status: "failed",
+      createdAt: new Date(Date.now() - 1_000),
+    });
+
+    await submitNativeTurn(session, f.documentId, {
+      text: "다시 확인해줘",
+      permission: "read_only",
+    });
+
+    expect(workers.enqueueWorkerJob).toHaveBeenCalledWith(
+      expect.any(String),
+      "ai",
+      "/internal/jobs/native",
+      expect.objectContaining({
+        conversationHistory: [
+          { request: "첫 요청", response: "첫 응답", status: "completed" },
+          { request: "두 번째 요청", response: null, status: "failed" },
+        ],
+      }),
+    );
   });
 
   it("admits a generated image only through a leased edit turn and binds it to the open document", async () => {

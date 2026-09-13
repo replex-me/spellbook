@@ -379,7 +379,6 @@ export class AgentRunner {
           modelSettings: job.modelSettings,
           tools,
           signal: lifetime.signal,
-          conversationKey: job.baseGraphObject.split("/versions/")[0],
           onTurn: (send) => {
             steer = send;
             void receive().catch(() => undefined);

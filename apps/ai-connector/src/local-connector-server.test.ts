@@ -212,6 +212,13 @@ describe("local connector HTTP boundary", () => {
       sessionId: randomUUID(),
       turnId: randomUUID(),
       requestText: "선택한 제목을 고쳐줘",
+      conversationHistory: [
+        {
+          request: "제목을 봐줘",
+          response: "현재 제목을 확인했습니다.",
+          status: "completed",
+        },
+      ],
       permissionMode: "selection",
       capability: "c".repeat(64),
     };
@@ -230,6 +237,13 @@ describe("local connector HTTP boundary", () => {
         jobId,
         email: "local@spellbook",
         toolUrl: `${productOrigin}/api/native/jobs/${jobId}/tools`,
+        conversationHistory: [
+          {
+            request: "제목을 봐줘",
+            response: "현재 제목을 확인했습니다.",
+            status: "completed",
+          },
+        ],
       }),
       job.capability,
     );

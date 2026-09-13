@@ -174,6 +174,7 @@ describe("agent-driven PPT tool loop", () => {
   });
   it("answers from current images without editing", async () => {
     const f = fixture(async (options) => {
+      expect(options.conversationKey).toBeUndefined();
       const observed = await options.onTool(
         "spellbook_observe",
         {},

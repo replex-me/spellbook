@@ -62,6 +62,42 @@ function fixture(
   };
 }
 describe("shared open document agent", () => {
+  it("uses explicit durable history without a connector-local conversation thread", async () => {
+    let prompt = "";
+    const client = {
+      runStructuredTurn: async (
+        messages: Array<{ type: string; text: string }>,
+        _schema: unknown,
+        _timeout: unknown,
+        options: AgentTurnOptions,
+      ) => {
+        prompt = messages[0]?.text ?? "";
+        expect(options.conversationKey).toBeUndefined();
+        return "현재 상태를 다시 확인하겠습니다.";
+      },
+    } as unknown as AppServerClient;
+    await runNativeTurn(client, {
+      requestText: "아까 요청을 다시 해줘",
+      conversationHistory: [
+        {
+          request: "제목을 바꿔줘",
+          response: "수정했습니다.",
+          status: "completed",
+        },
+      ],
+      host: { call: vi.fn() },
+      signal: new AbortController().signal,
+      permission,
+      onText: vi.fn(),
+      onTool: vi.fn(),
+    });
+    expect(prompt).toContain('"request":"제목을 바꿔줘"');
+    expect(prompt).toContain(
+      "live observation and revision are the only authority",
+    );
+    expect(prompt).toContain("User request: 아까 요청을 다시 해줘");
+  });
+
   it("publishes every verified native operation from the shared contract", async () => {
     const f = fixture(async (o) => {
       const schema = o.tools.find((tool) => tool.name === "native_edit")
