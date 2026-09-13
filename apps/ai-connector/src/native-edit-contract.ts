@@ -6,6 +6,15 @@ interface NativeEditContract {
   version: string;
   coordinateUnit: string;
   nativeUndoRequired: boolean;
+  transaction: {
+    maxCommands: number;
+    supportsDryRun: boolean;
+    atomicByDefault: boolean;
+    targetResolution: string;
+    maxStructureChangingCommandsOnStockEngine: number;
+    identityReplacingOperations: string[];
+    ordering: string;
+  };
   operationGroups: {
     slide: string[];
     create: string[];
@@ -51,3 +60,21 @@ export const nativeMultiElementOperations = new Set(
 export const nativeElementOperations = new Set(
   nativeEditContract.operationGroups.element,
 );
+export const nativeIdentityReplacingOperations = new Set(
+  nativeEditContract.transaction.identityReplacingOperations,
+);
+
+export const nativeBatchEditSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    commands: {
+      type: "array",
+      minItems: 1,
+      maxItems: nativeEditContract.transaction.maxCommands,
+      items: nativeEditContract.toolInputSchema,
+    },
+    dryRun: { type: "boolean" },
+  },
+  required: ["commands", "dryRun"],
+} as const;

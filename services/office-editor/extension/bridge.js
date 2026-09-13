@@ -2,12 +2,20 @@
  * output cannot turn into scripts. The host checks the editor origin.
  */
 window.presentNative = {
-  observe: () =>
-    cool.callRemote(presentDocumentOperation, { operation: "observe" }),
+  observe: (detailSlideIndex = null) =>
+    cool.callRemote(presentDocumentOperation, {
+      operation: "observe",
+      detailSlideIndex,
+    }),
   edit: (request) =>
     cool.callRemote(presentDocumentOperation, {
       ...request,
       operation: "edit",
+    }),
+  editBatch: (request) =>
+    cool.callRemote(presentDocumentOperation, {
+      ...request,
+      operation: "edit_batch",
     }),
 };
 let connection;
@@ -23,17 +31,31 @@ const imageSignatureIsValid = (bytes, mediaType) => {
 };
 const elementCount = (state) =>
   state.slides.reduce((total, slide) => total + slide.elements.length, 0);
-const waitForInsertedImage = async (beforeCount) => {
+const waitForInsertedImage = async (before, slideIndex) => {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 250));
-    const state = await window.presentNative.observe();
-    if (elementCount(state) > beforeCount) return state;
+    const state = await window.presentNative.observe(slideIndex);
+    const targetCount = state.slides[slideIndex]?.elements.length;
+    const beforeTargetCount = before.slides[slideIndex]?.elements.length;
+    const otherSlidesUnchanged = before.slides.every(
+      (slide) =>
+        slide.slideIndex === slideIndex ||
+        state.slides[slide.slideIndex]?.elements.length ===
+          slide.elements.length,
+    );
+    if (
+      targetCount === beforeTargetCount + 1 &&
+      elementCount(state) === elementCount(before) + 1 &&
+      otherSlidesUnchanged
+    )
+      return state;
   }
   throw new Error("generated_image_was_not_inserted");
 };
 const insertImage = async (request) => {
-  const { imageBytes, mediaType } = request;
+  const { imageBytes, mediaType, slideIndex, expectedRevision, permission } =
+    request;
   if (
     !(imageBytes instanceof ArrayBuffer) ||
     !imageBytes.byteLength ||
@@ -42,6 +64,25 @@ const insertImage = async (request) => {
   )
     throw new Error("invalid_generated_image");
   const before = await window.presentNative.observe();
+  if (
+    typeof expectedRevision !== "string" ||
+    before.revision !== expectedRevision
+  )
+    throw new Error("document_changed_observe_again");
+  if (
+    !Number.isInteger(slideIndex) ||
+    slideIndex < 0 ||
+    slideIndex >= before.slides.length ||
+    before.activeSlide !== slideIndex
+  )
+    throw new Error("generated_image_slide_changed");
+  if (
+    !permission ||
+    !["slides", "document"].includes(permission.mode) ||
+    (permission.mode === "slides" &&
+      !permission.slideIndexes?.includes(slideIndex))
+  )
+    throw new Error("outside_edit_permission");
   const extension = mediaType === "image/png" ? "png" : "jpg";
   const file = new File([imageBytes], `AI-generated.${extension}`, {
     type: mediaType,
@@ -49,7 +90,7 @@ const insertImage = async (request) => {
   const editorMap = window.parent.app?.map;
   if (!editorMap) throw new Error("native_editor_map_unavailable");
   editorMap.fire("insertgraphic", { file });
-  return waitForInsertedImage(elementCount(before));
+  return waitForInsertedImage(before, slideIndex);
 };
 window.addEventListener("message", (event) => {
   if (
@@ -66,7 +107,9 @@ window.addEventListener("message", (event) => {
     const message = event.data;
     if (
       !message?.id ||
-      !["observe", "edit", "insert_image"].includes(message.request?.operation)
+      !["observe", "edit", "edit_batch", "insert_image"].includes(
+        message.request?.operation,
+      )
     )
       return;
     if (!completed.has(message.id)) {

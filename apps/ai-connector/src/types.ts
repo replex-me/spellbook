@@ -19,6 +19,12 @@ export interface DeviceLoginResult {
   userCode: string;
 }
 
+export interface BrowserLoginResult {
+  type: "chatgpt";
+  loginId: string;
+  authUrl: string;
+}
+
 export interface AiJob {
   modelSettings?: ModelSettings;
   jobId: string;
@@ -57,6 +63,10 @@ export interface NativeJob {
   requestText: string;
   permissionMode: "read_only" | "selection" | "slides" | "document";
   modelSettings?: ModelSettings;
+}
+
+export interface LocalNativeJob extends Omit<NativeJob, "email"> {
+  capability: string;
 }
 
 export interface AiWorkerCallback {

@@ -38,7 +38,9 @@ Self-hosting starts with one local owner account whose password is stored only a
 
 ## AI credential boundary
 
-The self-hosted Compose profile runs the connector inside the user's deployment and keeps each runtime home in the local data volume. A public hosted service must not receive raw consumer-subscription credentials merely because this local mode can. Its safe direction is a signed user-device connector: provider authentication occurs in the provider's unmodified tool, while Spellbook exchanges scoped document operations and events.
+The self-hosted Compose profile can run the connector inside the user's deployment and keeps each runtime home in the local data volume. The user-device mode binds a second connector only to loopback, requires explicit approval for an exact Spellbook web origin, and starts the provider's unmodified browser login. Each edit receives a short-lived capability bound to one cloud job, native session and account. The connector accepts only that approved origin's exact tool and callback paths and never receives the hosted service's internal token. Consumer-subscription credentials remain in the local Codex runtime home.
+
+The transport, origin ceremony, scoped job capability, local model catalog, generated-image path and callback boundary are implemented and covered by HTTP and database integration tests. A real subscription login and live edit still remain a release verification gate; implemented transport is not evidence that every provider account policy or model works.
 
 Codex is the only implemented provider adapter in this repository. Claude Code and other runtimes remain design candidates until a connector, authentication ceremony, tests and provider-policy review ship.
 

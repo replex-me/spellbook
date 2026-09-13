@@ -20,6 +20,8 @@
     "corpus:review-structures": "python3 scripts/build-structure-regression-montages.py",
     "corpus:references:powerpoint": "node scripts/export-powerpoint-references.mjs",
     "corpus:recompare": "node scripts/recompare-render-report.mjs",
+    "connector:build": "pnpm --filter @spellbook/ai-connector build",
+    "connector:start": "pnpm connector:build && node --env-file=.env scripts/start-local-connector.mjs",
     "dev": "pnpm --filter @spellbook/web dev",
     "format:check": "prettier --check .",
     "test": "pnpm test:boundary && pnpm test:docs && pnpm test:contracts && pnpm test:harness && pnpm test:office && pnpm -r --if-present test && dotnet test services/document-worker/Spellbook.Document.Worker.slnx --configuration Release",

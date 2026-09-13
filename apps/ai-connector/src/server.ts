@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 
 import { EditRunner } from "./edit-runner.js";
@@ -7,13 +7,40 @@ import { JobResultStore } from "./job-result-store.js";
 import type { AiJob, AiWorkerCallback, NativeJob } from "./types.js";
 import { runNativeTurn } from "./native-agent.js";
 import { NativeRemoteHost } from "./native-remote-host.js";
+import { createLocalConnectorHandler } from "./local-connector-server.js";
+import { LocalPairingAuthority } from "./local-pairing.js";
 
 const sessions = new SessionManager();
 const runner = new EditRunner(sessions);
 const results = new JobResultStore();
-const port = Number(process.env.PORT ?? 8080);
+const localMode = process.env.SPELLBOOK_CONNECTOR_MODE === "local";
+const port = parsePort(process.env.PORT, localMode ? 43_127 : 8080);
+const host = localMode ? "127.0.0.1" : "0.0.0.0";
 
-const server = http.createServer(async (request, response) => {
+const server = localMode
+  ? http.createServer(
+      createLocalConnectorHandler({
+        authority: new LocalPairingAuthority(
+          randomBytes(32),
+          requiredList("SPELLBOOK_CONNECTOR_ALLOWED_ORIGINS"),
+        ),
+        accounts: sessions,
+        connectorOrigin: `http://127.0.0.1:${port}`,
+        identity: requiredEnvironment("SPELLBOOK_LOCAL_EMAIL"),
+        runNativeJob: (job, capability) =>
+          runAcceptedJob(
+            job,
+            () => executeNativeJob(job, capability),
+            capability,
+          ),
+      }),
+    )
+  : http.createServer(handleInternalRequest);
+
+async function handleInternalRequest(
+  request: http.IncomingMessage,
+  response: http.ServerResponse,
+): Promise<void> {
   try {
     const url = new URL(
       request.url ?? "/",
@@ -69,19 +96,46 @@ const server = http.createServer(async (request, response) => {
       error: message,
     });
   }
+}
+
+server.listen(port, host, () => {
+  process.stdout.write(
+    `Spellbook AI connector listening on ${host}:${port} (${localMode ? "local" : "internal"}).\n`,
+  );
 });
 
-server.listen(port, "0.0.0.0", () => {
-  process.stdout.write(`Spellbook AI connector listening on ${port}.\n`);
-});
+function requiredEnvironment(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name.toLowerCase()}_required`);
+  return value;
+}
+
+function requiredList(name: string): string[] {
+  const values = requiredEnvironment(name)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!values.length) throw new Error(`${name.toLowerCase()}_required`);
+  return values;
+}
+
+function parsePort(value: string | undefined, fallback: number): number {
+  const port = value === undefined ? fallback : Number(value);
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535)
+    throw new Error("invalid_connector_port");
+  return port;
+}
 
 function runAcceptedJob(
   job: AiJob | NativeJob,
   work: () => Promise<AiWorkerCallback>,
+  callbackBearerToken?: string,
 ): void {
   void results
     .execute(job, work)
-    .then((callback) => sendCallback(job.callbackUrl, callback))
+    .then((callback) =>
+      sendCallback(job.callbackUrl, callback, callbackBearerToken),
+    )
     .catch((error) => {
       console.error(
         JSON.stringify({
@@ -119,13 +173,20 @@ async function executeJob(job: AiJob): Promise<AiWorkerCallback> {
   }
 }
 
-async function executeNativeJob(job: NativeJob): Promise<AiWorkerCallback> {
+async function executeNativeJob(
+  job: NativeJob,
+  bearerToken?: string,
+): Promise<AiWorkerCallback> {
   const executionToken = randomUUID();
-  const host = new NativeRemoteHost(job.toolUrl, {
-    jobId: job.jobId,
-    sessionId: job.sessionId,
-    executionToken,
-  });
+  const host = new NativeRemoteHost(
+    job.toolUrl,
+    {
+      jobId: job.jobId,
+      sessionId: job.sessionId,
+      executionToken,
+    },
+    bearerToken,
+  );
   const controller = new AbortController();
   let events: Promise<void> = Promise.resolve();
   try {
@@ -233,16 +294,23 @@ function validateJob(job: AiJob): void {
 async function sendCallback(
   url: string,
   callback: AiWorkerCallback,
+  bearerToken?: string,
 ): Promise<void> {
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(process.env.SPELLBOOK_INTERNAL_TOKEN
-        ? { "x-spellbook-internal-token": process.env.SPELLBOOK_INTERNAL_TOKEN }
-        : {}),
+      ...(bearerToken
+        ? { authorization: `Bearer ${bearerToken}` }
+        : process.env.SPELLBOOK_INTERNAL_TOKEN
+          ? {
+              "x-spellbook-internal-token":
+                process.env.SPELLBOOK_INTERNAL_TOKEN,
+            }
+          : {}),
     },
     body: JSON.stringify(callback),
+    redirect: "error",
   });
   if (!response.ok) {
     throw new Error(`AI callback failed with ${response.status}.`);

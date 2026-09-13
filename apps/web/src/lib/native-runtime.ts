@@ -11,7 +11,9 @@ import {
 import { callAiAccount, enqueueWorkerJob } from "./workers";
 import { saveImageAsset } from "./image-assets";
 import { storageNamespace } from "./storage";
-import { internalAppBaseUrl } from "./runtime-urls";
+import { internalAppBaseUrl, publicAppBaseUrl } from "./runtime-urls";
+import { signNativeConnectorToken } from "./native-connector-token";
+import { aiConnectorConfig } from "./ai-connector-config";
 
 type PermissionMode = "read_only" | "selection" | "slides" | "document";
 
@@ -46,7 +48,12 @@ export async function nativeModels(session: Session, documentId?: string) {
 export async function submitNativeTurn(
   session: Session,
   documentId: string,
-  input: { text?: unknown; permission?: unknown; modelSettings?: unknown },
+  input: {
+    text?: unknown;
+    permission?: unknown;
+    modelSettings?: unknown;
+    execution?: unknown;
+  },
 ) {
   const native = await ownedSession(session, documentId);
   const text = typeof input.text === "string" ? input.text.trim() : "";
@@ -56,19 +63,20 @@ export async function submitNativeTurn(
   if (!["read_only", "selection", "slides", "document"].includes(permission))
     throw new HttpError(400, "invalid_native_permission");
   const modelSettings = parseModelSettings(input.modelSettings);
+  const execution = aiConnectorConfig().mode;
+  if (input.execution !== undefined && input.execution !== execution)
+    throw new HttpError(400, "invalid_native_execution");
   if (!native.graph_object)
     throw new HttpError(409, "native_document_context_not_ready");
-  if (modelSettings) {
+  if (modelSettings && execution === "internal") {
     const catalog = await nativeModels(session, documentId);
     if (!supportsSettings(catalog.models, modelSettings))
       throw new HttpError(400, "selected_model_unavailable");
   }
   const jobId = randomUUID();
   const turnId = randomUUID();
-  const payload = {
+  const basePayload = {
     jobId,
-    callbackUrl: `${internalAppBaseUrl()}/api/internal/jobs/callback`,
-    toolUrl: `${internalAppBaseUrl()}/api/internal/native/tools`,
     sessionId: native.id,
     turnId,
     email: session.email,
@@ -77,7 +85,20 @@ export async function submitNativeTurn(
     mode: "native",
     requestText: text,
     permissionMode: permission,
+    execution,
     ...(modelSettings ? { modelSettings } : {}),
+  };
+  const publicBase = execution === "local" ? publicAppBaseUrl() : null;
+  const payload = {
+    ...basePayload,
+    callbackUrl:
+      execution === "local"
+        ? `${publicBase}/api/native/jobs/${jobId}/callback`
+        : `${internalAppBaseUrl()}/api/internal/jobs/callback`,
+    toolUrl:
+      execution === "local"
+        ? `${publicBase}/api/native/jobs/${jobId}/tools`
+        : `${internalAppBaseUrl()}/api/internal/native/tools`,
   };
   await db().begin(async (sql) => {
     await sql`select id from spellbook_native_sessions where id=${native.id} for update`;
@@ -100,6 +121,16 @@ export async function submitNativeTurn(
       values (${native.id},${turnId},'start',${sql.json({ text })})
     `;
   });
+  if (execution === "local")
+    return {
+      accepted: true,
+      turnId,
+      localJob: localConnectorJob(
+        payload,
+        session.accountId,
+        native.expires_at,
+      ),
+    };
   try {
     await enqueueWorkerJob(jobId, "ai", "/internal/jobs/native", payload);
     await db()`update spellbook_jobs set dispatched_at=now() where id=${jobId}`;
@@ -122,7 +153,9 @@ export async function pollNativeSession(
     throw new HttpError(400, "invalid_event_cursor");
   const pending = await db()`select id,job_type,payload from spellbook_jobs
     where document_id=${documentId} and status='queued' and dispatched_at is null
-      and job_type in ('native_turn','scan_render') order by created_at limit 2`;
+      and job_type in ('native_turn','scan_render')
+      and (job_type <> 'native_turn' or payload->>'execution' is distinct from 'local')
+    order by created_at limit 2`;
   for (const job of pending) {
     const target = job.job_type === "native_turn" ? "ai" : "document";
     const path =
@@ -157,8 +190,23 @@ export async function pollNativeSession(
     from spellbook_native_events where session_id=${native.id} and id>${after}
     order by spellbook_native_events.id limit 200
   `;
+  const [localPending] = await db()`
+    select payload from spellbook_jobs
+    where document_id=${documentId} and job_type='native_turn'
+      and status='queued' and dispatched_at is null
+      and payload->>'execution'='local'
+      and payload->>'sessionId'=${native.id}
+    order by created_at limit 1
+  `;
   return {
     task,
+    localJob: localPending
+      ? localConnectorJob(
+          localPending.payload,
+          native.account_id,
+          native.expires_at,
+        )
+      : null,
     events: events.map((event) => ({
       id: Number(event.id),
       type: event.type,
@@ -248,7 +296,7 @@ export async function executeNativeTool(input: Record<string, unknown>) {
     throw new HttpError(400, "invalid_native_tool_identity");
   if (input.operation === "start") {
     const [claimed] =
-      await db()`update spellbook_jobs set status='running', execution_token=${executionToken}, heartbeat_at=now(), updated_at=now()
+      await db()`update spellbook_jobs set status='running', execution_token=${executionToken}, heartbeat_at=now(), dispatched_at=coalesce(dispatched_at,now()), updated_at=now()
       where id=${jobId} and job_type='native_turn' and status in ('queued','running')
         and (execution_token is null or execution_token=${executionToken} or heartbeat_at < now() - interval '60 seconds')
         and payload->>'sessionId'=${sessionId} returning id`;
@@ -322,6 +370,48 @@ export async function executeNativeTool(input: Record<string, unknown>) {
     return { accepted: true };
   }
   throw new HttpError(400, "invalid_native_tool_operation");
+}
+
+function localConnectorJob(
+  payload: Record<string, unknown>,
+  accountId: string,
+  sessionExpiresAt: Date | string,
+): Record<string, unknown> & {
+  jobId: string;
+  sessionId: string;
+  toolUrl: string;
+  callbackUrl: string;
+  capability: string;
+} {
+  const jobId = String(payload.jobId ?? "");
+  const sessionId = String(payload.sessionId ?? "");
+  const toolUrl = String(payload.toolUrl ?? "");
+  const callbackUrl = String(payload.callbackUrl ?? "");
+  const sessionExpiry = new Date(sessionExpiresAt).getTime();
+  const expiresAt = Math.min(Date.now() + 30 * 60 * 1000, sessionExpiry);
+  if (
+    !/^[0-9a-f-]{36}$/i.test(jobId) ||
+    !/^[0-9a-f-]{36}$/i.test(sessionId) ||
+    !toolUrl ||
+    !callbackUrl ||
+    !Number.isSafeInteger(expiresAt) ||
+    expiresAt <= Date.now()
+  )
+    throw new HttpError(409, "native_connector_job_inactive");
+  return {
+    ...payload,
+    jobId,
+    sessionId,
+    toolUrl,
+    callbackUrl,
+    capability: signNativeConnectorToken({
+      version: 1,
+      jobId,
+      sessionId,
+      accountId,
+      expiresAt,
+    }),
+  };
 }
 
 export async function completeNativeTurn(

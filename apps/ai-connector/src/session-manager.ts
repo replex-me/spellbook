@@ -36,6 +36,10 @@ export class SessionManager {
     return (await this.get(rawEmail)).client.startDeviceLogin();
   }
 
+  async startBrowserLogin(rawEmail: string): Promise<unknown> {
+    return (await this.get(rawEmail)).client.startBrowserLogin();
+  }
+
   async logout(rawEmail: string): Promise<void> {
     const session = await this.get(rawEmail);
     await session.client.logout();

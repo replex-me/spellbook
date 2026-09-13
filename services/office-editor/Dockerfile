@@ -1,3 +1,4 @@
+ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL=stock
 FROM collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282 AS collabora
 
 FROM golang:1.24-alpine AS gateway-builder
@@ -7,6 +8,7 @@ RUN CGO_ENABLED=0 go test ./... && \
     CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/spellbook-office-gateway .
 
 FROM node:24-alpine AS browser-assets
+ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL
 RUN apk add --no-cache gzip
 COPY --from=collabora /usr/share/coolwsd /upstream
 COPY services/office-editor/patch-localization.mjs /tmp/patch-localization.mjs
@@ -15,6 +17,13 @@ COPY services/office-editor/localization-ko-overrides.json /tmp/localization-ko-
 COPY services/office-editor/extensions-index.json /upstream/browser/dist/extensions/index.json
 COPY services/office-editor/extension /upstream/browser/dist/extensions/org.spellbook.editor
 COPY services/office-editor/host-bridge.js /upstream/browser/dist/spellbook-host.js
+RUN if [ "${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}" != stock ]; then \
+      printf '%s\n' "${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}" | grep -Eq '^undo-v[1-9][0-9]*$'; \
+    fi \
+    && sed -i "s/__SPELLBOOK_ENGINE_PATCH_LEVEL__/${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}/g" \
+      /upstream/browser/dist/extensions/org.spellbook.editor/operations.js \
+    && ! grep -q '__SPELLBOOK_ENGINE_PATCH_LEVEL__' \
+      /upstream/browser/dist/extensions/org.spellbook.editor/operations.js
 RUN node /tmp/patch-localization.mjs \
       /upstream/browser/dist/l10n/ui-ko.json \
       /tmp/localization-ko-overrides.json && \
@@ -49,6 +58,7 @@ RUN node /tmp/patch-localization.mjs \
     cp /upstream/browser/dist/admin/adminClusterOverviewAbout.html /minimal/browser/dist/admin/adminClusterOverviewAbout.html
 
 FROM collabora AS runtime
+ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL
 USER root
 COPY --from=browser-assets --chown=1001:1001 /upstream/browser/dist /usr/share/coolwsd/browser/dist
 COPY --from=browser-assets --chown=1001:1001 /minimal /opt/spellbook/coolwsd
@@ -56,3 +66,4 @@ COPY --from=gateway-builder --chown=1001:1001 /out/spellbook-office-gateway /usr
 USER 1001
 EXPOSE 9980
 ENTRYPOINT ["/usr/local/bin/spellbook-office-gateway"]
+LABEL org.spellbook.collabora-patch-level=${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}

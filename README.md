@@ -23,6 +23,8 @@ docker compose up --build
 
 Open <http://localhost:3000> and sign in with the email and generated password printed by the setup command. Connect a supported local AI subscription from the workspace when you want AI editing; direct editing remains available without an AI connection.
 
+The Compose profile uses its private connector by default. The optional user-device flow used by hosted deployments is available with `SPELLBOOK_AI_CONNECTOR_MODE=local` and `pnpm connector:start`; see [self-hosting](docs/delivery/self-hosting.md) for the exact boundary and current verification status.
+
 The first build downloads pinned LibreOffice and Collabora images and can take several minutes. Subsequent starts reuse the images and persistent volumes. Run `pnpm selfhost:doctor` to validate configuration and service health.
 
 ## Product contract

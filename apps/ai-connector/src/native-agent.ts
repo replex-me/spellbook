@@ -5,15 +5,18 @@ import type {
 } from "./app-server-client.js";
 import type { ModelSettings } from "../../../contracts/ai-models.js";
 import {
+  nativeBatchEditSchema,
   nativeCreateOperations,
   nativeEditContract,
   nativeElementOperations,
+  nativeIdentityReplacingOperations,
   nativeMultiElementOperations,
   nativeSlideOperations,
 } from "./native-edit-contract.js";
 
 export interface NativeObservation {
   unit: string;
+  revision?: string;
   slides: Array<{
     slideIndex: number;
     elements: Array<{ elementId: string; [key: string]: unknown }>;
@@ -21,7 +24,36 @@ export interface NativeObservation {
   }>;
   activeSlide: number;
   selectedElementIds: string[];
+  textDetails?: {
+    slideIndex: number;
+    elements: Array<{
+      elementId: string;
+      paragraphs: Array<{
+        paragraphId: string;
+        paragraphIndex: number;
+        startOffset: number;
+        endOffset: number;
+        text: string;
+        portions: Array<{
+          rangeId: string;
+          portionIndex: number;
+          startOffset: number;
+          endOffset: number;
+          text: string;
+          [key: string]: unknown;
+        }>;
+        [key: string]: unknown;
+      }>;
+    }>;
+  };
   images: Array<{ slideIndex: number; pngBytes: number[] }>;
+  layoutAudit?: {
+    issueCount: number;
+    issues: Array<Record<string, unknown>>;
+    introducedIssueCount?: number;
+    introducedIssues?: Array<Record<string, unknown>>;
+  };
+  transaction?: Record<string, unknown>;
 }
 export interface NativePermission {
   mode: "read_only" | "selection" | "slides" | "document";
@@ -37,6 +69,14 @@ export interface NativeHost {
     image: GeneratedImage,
     signal: AbortSignal,
   ): Promise<{ assetId: string }>;
+}
+
+interface NativeEditCommand {
+  elementId?: string | null;
+  elementIds?: string[] | null;
+  slideIndex?: number | null;
+  op?: string;
+  [key: string]: unknown;
 }
 
 // The same subscription client used by the current product; only the document
@@ -58,10 +98,12 @@ export async function runNativeTurn(
   let changed = false,
     reviewed = false;
   let toolTail: Promise<unknown> = Promise.resolve();
-  const empty = {
+  const observeSchema = {
     type: "object",
-    properties: {},
-    required: [],
+    properties: {
+      detailSlideIndex: { type: ["number", "null"] },
+    },
+    required: ["detailSlideIndex"],
     additionalProperties: false,
   };
   const content = (state: NativeObservation): ToolResult => ({
@@ -81,6 +123,91 @@ export async function runNativeTurn(
       })),
     ],
   });
+  const authorize = (
+    command: NativeEditCommand,
+    state: NativeObservation,
+  ): number => {
+    const operation = command.op ?? "";
+    if (
+      !nativeSlideOperations.has(operation) &&
+      !nativeCreateOperations.has(operation) &&
+      !nativeMultiElementOperations.has(operation) &&
+      !nativeElementOperations.has(operation)
+    )
+      throw new Error("Unsupported native edit operation.");
+    const slideOperation = nativeSlideOperations.has(operation);
+    const createOperation = nativeCreateOperations.has(operation);
+    const multiElementOperation = nativeMultiElementOperations.has(operation);
+    let slideIndex: number;
+    if (slideOperation || createOperation) {
+      if (
+        !Number.isInteger(command.slideIndex) ||
+        !state.slides.some((slide) => slide.slideIndex === command.slideIndex)
+      )
+        throw new Error("Slide target not present in observation.");
+      slideIndex = command.slideIndex as number;
+      if (
+        input.permission.mode === "selection" ||
+        (["insert_slide", "move_slide"].includes(operation) &&
+          input.permission.mode !== "document") ||
+        (input.permission.mode === "slides" &&
+          !input.permission.slideIndexes.includes(slideIndex))
+      )
+        throw new Error("허용된 슬라이드 범위 밖입니다.");
+      return slideIndex;
+    }
+    if (multiElementOperation) {
+      if (!Array.isArray(command.elementIds) || command.elementIds.length < 2)
+        throw new Error("Element targets not present in observation.");
+      const targets = command.elementIds.map((elementId) => {
+        const slide = state.slides.find((candidate) =>
+          candidate.elements.some((element) => element.elementId === elementId),
+        );
+        return slide ? { elementId, slideIndex: slide.slideIndex } : null;
+      });
+      if (
+        targets.some((target) => !target) ||
+        new Set(targets.map((target) => target?.slideIndex)).size !== 1
+      )
+        throw new Error("Element targets not present in one slide.");
+      slideIndex = targets[0]!.slideIndex;
+      if (
+        input.permission.mode === "selection" &&
+        command.elementIds.some(
+          (elementId) => !input.permission.elementIds.includes(elementId),
+        )
+      )
+        throw new Error("선택 범위 밖입니다.");
+    } else {
+      if (
+        !command.elementId ||
+        !state.slides.some((slide) =>
+          slide.elements.some(
+            (element) => element.elementId === command.elementId,
+          ),
+        )
+      )
+        throw new Error("Target not present in observation.");
+      const targetSlide = state.slides.find((slide) =>
+        slide.elements.some(
+          (element) => element.elementId === command.elementId,
+        ),
+      );
+      if (!targetSlide) throw new Error("Target not present in observation.");
+      slideIndex = targetSlide.slideIndex;
+      if (
+        input.permission.mode === "selection" &&
+        !input.permission.elementIds.includes(command.elementId)
+      )
+        throw new Error("선택 범위 밖입니다.");
+    }
+    if (
+      input.permission.mode === "slides" &&
+      !input.permission.slideIndexes.includes(slideIndex)
+    )
+      throw new Error("허용된 슬라이드 밖입니다.");
+    return slideIndex;
+  };
   let generatedImageInserted = false;
   const turn = (
     prompt: string,
@@ -93,8 +220,8 @@ export async function runNativeTurn(
           type: "text",
           text: [
             "You are editing the SAME open PowerPoint document as the user. Always observe first. Human edits may happen between calls: a stale-state error requires observing again, never replaying an edit blindly.",
-            "Observe returns live element structure and slide screenshots. Use native_edit only for explicit edit requests and only within returned permission. It applies through the editor native undo stack, visible to the user. Inspect the fresh screenshot after edits and call native_review. Do not claim an edit happened without a successful tool result. Unsupported operations must be stated honestly.",
-            "Coordinates are 1/100 mm. IDs refer to the last observed snapshot. Do not change original text or geometry merely to hide font/rendering differences. Answer in Korean.",
+            "Observe returns live element structure, a revision, deterministic layout findings, and slide screenshots. After an edit, introducedIssues distinguishes problems created by this edit from pre-existing document warnings. Use native_batch_edit for coordinated changes so they are planned and applied atomically as one undo action; use dryRun first for a risky or structural batch. native_edit remains available for one isolated change. Stay within returned permission. Inspect introducedIssues and the fresh screenshot after edits, correct any regression, then call native_review. Do not claim an edit happened without a successful tool result.",
+            `Coordinates are 1/100 mm. IDs refer to the last observed revision; the editor rebinds batch targets to the same live objects before every command. ${nativeEditContract.transaction.ordering} Do not change original text or geometry merely to hide font/rendering differences. Answer in Korean.`,
             prompt,
           ].join("\n"),
         },
@@ -110,15 +237,21 @@ export async function runNativeTurn(
             type: "function",
             name: "native_observe",
             description:
-              "Read the open document and its current slide image, including unsaved human edits.",
-            inputSchema: empty,
+              "Read the open document, including unsaved human edits. Pass null for the active slide or a slide index to receive that slide's screenshot and paragraph/run details without changing the user's active slide.",
+            inputSchema: observeSchema,
           },
           {
             type: "function",
             name: "native_edit",
             description:
-              "Change an observed object or slide in the SAME open editor with native undo. Supports text and paragraph formatting, geometry, line/fill, rotation/flip/stacking, align/distribute/group, object duplication/deletion, new text boxes/basic shapes/tables, and slide insertion/duplication/deletion. New tables accept their initial cell matrix. Existing table-cell text and slide background are intentionally excluded because this editor engine does not record those API changes in native undo. Observe after stale state. Do not send executable code.",
+              "Change one observed object or slide in the SAME open editor with native undo. Supports text and paragraph formatting, geometry, line/fill, rotation/flip/stacking, align/distribute/group, object duplication/deletion, new text boxes/basic shapes/tables, fixed-size numeric values plus category and series labels for observed internal-data charts, chart-family changes among column/line/area/pie/scatter/radar, and slide insertion/duplication/deletion/reorder/speaker notes. For set_chart_data, send any changed fields among data, rowDescriptions (category labels), and columnDescriptions (series labels); keep their observed dimensions. For set_chart_type, use the observed chart element and one named chartType; this identity-replacing operation must be isolated in its own edit. New tables accept their initial cell matrix. Existing table-cell text, chart style, linked or embedded-workbook chart data, slide layout/background, slide rename, exact non-active slide visibility, and candidate object-property operations remain excluded until their engine and round-trip gates pass. Observe after stale state. Do not send executable code.",
             inputSchema: nativeEditContract.toolInputSchema,
+          },
+          {
+            type: "function",
+            name: "native_batch_edit",
+            description: `Plan or atomically apply 1-50 validated native edits to the SAME observed presentation. All targets come from one revision and are rebound to their live objects before each command. ${nativeEditContract.transaction.ordering} dryRun validates targets, options, and permission without changing the document. A non-dry-run batch becomes one native Undo action and rolls back completely if any command fails. Do not send executable code.`,
+            inputSchema: nativeBatchEditSchema,
           },
           {
             type: "function",
@@ -163,6 +296,12 @@ export async function runNativeTurn(
                   throw new Error(
                     "한 요청에서는 생성 이미지 한 장만 삽입할 수 있습니다.",
                   );
+                const slideIndex = observed.activeSlide;
+                if (
+                  input.permission.mode === "slides" &&
+                  !input.permission.slideIndexes.includes(slideIndex)
+                )
+                  throw new Error("허용된 슬라이드 밖입니다.");
                 input.onTool("이미지 생성 결과 저장");
                 const asset = await input.host.createImage(image, input.signal);
                 const beforeCount = observed.slides.reduce(
@@ -170,8 +309,18 @@ export async function runNativeTurn(
                   0,
                 );
                 input.onTool("생성 이미지 삽입");
+                const expectedRevision = observed.revision;
+                const expectedSlides = JSON.stringify(observed.slides);
+                observed = undefined;
                 observed = await input.host.call(
-                  { operation: "insert_image", assetId: asset.assetId },
+                  {
+                    operation: "insert_image",
+                    assetId: asset.assetId,
+                    slideIndex,
+                    expectedRevision,
+                    expectedSlides,
+                    permission: input.permission,
+                  },
                   input.signal,
                 );
                 const afterCount = observed.slides.reduce(
@@ -191,9 +340,16 @@ export async function runNativeTurn(
         onTool: (name, args, _id, signal) => {
           const work = toolTail.then(async (): Promise<ToolResult> => {
             if (name === "native_observe") {
+              const detailSlideIndex = (args as { detailSlideIndex?: unknown })
+                .detailSlideIndex;
+              if (
+                detailSlideIndex !== null &&
+                !Number.isInteger(detailSlideIndex)
+              )
+                throw new Error("Invalid detail slide.");
               input.onTool("현재 슬라이드 확인");
               observed = await input.host.call(
-                { operation: "observe" },
+                { operation: "observe", detailSlideIndex },
                 signal,
               );
               return content(observed);
@@ -202,125 +358,18 @@ export async function runNativeTurn(
               if (!observed) throw new Error("Observe before editing.");
               if (input.permission.mode === "read_only")
                 throw new Error("읽기 전용 권한입니다.");
-              const command = args as {
-                elementId?: string | null;
-                elementIds?: string[] | null;
-                slideIndex?: number | null;
-                op?: string;
-              };
-              const operation = command.op ?? "";
-              if (
-                !nativeSlideOperations.has(operation) &&
-                !nativeCreateOperations.has(operation) &&
-                !nativeMultiElementOperations.has(operation) &&
-                !nativeElementOperations.has(operation)
-              )
-                throw new Error("Unsupported native edit operation.");
-              const slideOperation = nativeSlideOperations.has(operation);
-              const createOperation = nativeCreateOperations.has(operation);
-              const multiElementOperation =
-                nativeMultiElementOperations.has(operation);
-              let slideIndex: number;
-              if (slideOperation) {
-                if (
-                  !Number.isInteger(command.slideIndex) ||
-                  !observed.slides.some(
-                    (slide) => slide.slideIndex === command.slideIndex,
-                  )
-                )
-                  throw new Error("Slide target not present in observation.");
-                slideIndex = command.slideIndex as number;
-                if (
-                  input.permission.mode === "selection" ||
-                  (command.op === "insert_slide" &&
-                    input.permission.mode !== "document") ||
-                  (input.permission.mode === "slides" &&
-                    !input.permission.slideIndexes.includes(slideIndex))
-                )
-                  throw new Error("허용된 슬라이드 범위 밖입니다.");
-              } else if (createOperation) {
-                if (
-                  !Number.isInteger(command.slideIndex) ||
-                  !observed.slides.some(
-                    (slide) => slide.slideIndex === command.slideIndex,
-                  )
-                )
-                  throw new Error("Slide target not present in observation.");
-                slideIndex = command.slideIndex as number;
-                if (
-                  input.permission.mode === "selection" ||
-                  (input.permission.mode === "slides" &&
-                    !input.permission.slideIndexes.includes(slideIndex))
-                )
-                  throw new Error("허용된 슬라이드 범위 밖입니다.");
-              } else if (multiElementOperation) {
-                if (
-                  !Array.isArray(command.elementIds) ||
-                  command.elementIds.length < 2
-                )
-                  throw new Error(
-                    "Element targets not present in observation.",
-                  );
-                const targets = command.elementIds.map((elementId) => {
-                  const slide = observed?.slides.find((candidate) =>
-                    candidate.elements.some(
-                      (element) => element.elementId === elementId,
-                    ),
-                  );
-                  return slide
-                    ? { elementId, slideIndex: slide.slideIndex }
-                    : null;
-                });
-                if (
-                  targets.some((target) => !target) ||
-                  new Set(targets.map((target) => target?.slideIndex)).size !==
-                    1
-                )
-                  throw new Error("Element targets not present in one slide.");
-                slideIndex = targets[0]!.slideIndex;
-                if (
-                  input.permission.mode === "selection" &&
-                  command.elementIds.some(
-                    (elementId) =>
-                      !input.permission.elementIds.includes(elementId),
-                  )
-                )
-                  throw new Error("선택 범위 밖입니다.");
-                if (
-                  input.permission.mode === "slides" &&
-                  !input.permission.slideIndexes.includes(slideIndex)
-                )
-                  throw new Error("허용된 슬라이드 밖입니다.");
-              } else {
-                if (
-                  !command.elementId ||
-                  !observed.slides.some((slide) =>
-                    slide.elements.some(
-                      (element) => element.elementId === command.elementId,
-                    ),
-                  )
-                )
-                  throw new Error("Target not present in observation.");
-                slideIndex = Number(command.elementId.split("/")[0]);
-                if (
-                  input.permission.mode === "selection" &&
-                  !input.permission.elementIds.includes(command.elementId)
-                )
-                  throw new Error("선택 범위 밖입니다.");
-                if (
-                  input.permission.mode === "slides" &&
-                  !input.permission.slideIndexes.includes(slideIndex)
-                )
-                  throw new Error("허용된 슬라이드 밖입니다.");
-              }
+              const command = args as NativeEditCommand;
+              authorize(command, observed);
               input.onTool("슬라이드 수정");
               const expectedSlides = JSON.stringify(observed.slides);
+              const expectedRevision = observed.revision;
               // A failed/expired response may conceal a concurrent or already-applied
               // edit. Require another observation instead of replaying stale targets.
               observed = undefined;
               observed = await input.host.call(
                 {
                   operation: "edit",
+                  expectedRevision,
                   expectedSlides,
                   command,
                   permission: input.permission,
@@ -329,6 +378,55 @@ export async function runNativeTurn(
               );
               changed = true;
               reviewed = false;
+              return content(observed);
+            }
+            if (name === "native_batch_edit") {
+              if (!observed) throw new Error("Observe before editing.");
+              if (input.permission.mode === "read_only")
+                throw new Error("읽기 전용 권한입니다.");
+              const batch = args as {
+                commands?: NativeEditCommand[];
+                dryRun?: boolean;
+              };
+              if (
+                !Array.isArray(batch.commands) ||
+                batch.commands.length < 1 ||
+                batch.commands.length >
+                  nativeEditContract.transaction.maxCommands ||
+                typeof batch.dryRun !== "boolean"
+              )
+                throw new Error("Invalid native edit transaction.");
+              if (
+                batch.commands.length > 1 &&
+                batch.commands.some((command) =>
+                  nativeIdentityReplacingOperations.has(command.op ?? ""),
+                )
+              )
+                throw new Error(
+                  "An identity-replacing edit must be a one-command transaction.",
+                );
+              for (const command of batch.commands)
+                authorize(command, observed);
+              input.onTool(
+                batch.dryRun ? "수정 계획 검사" : "여러 요소 한 번에 수정",
+              );
+              const previous = observed;
+              observed = undefined;
+              observed = await input.host.call(
+                {
+                  operation: "edit_batch",
+                  expectedRevision: previous.revision,
+                  expectedSlides: JSON.stringify(previous.slides),
+                  commands: batch.commands,
+                  dryRun: batch.dryRun,
+                  permission: input.permission,
+                },
+                signal,
+              );
+              if (!batch.dryRun) {
+                changed = true;
+                reviewed = false;
+              }
               return content(observed);
             }
             if (name === "native_review") {

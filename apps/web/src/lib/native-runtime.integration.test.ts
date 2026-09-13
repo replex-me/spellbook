@@ -38,6 +38,9 @@ import {
 import { signWopiToken } from "./wopi-token";
 import { createNativeLaunch, wopiLock, wopiPutFile } from "./native-session";
 import { requireNativeRequestSession } from "./native-request-auth";
+import { authorizeNativeConnectorJob } from "./native-connector-auth";
+import { POST as postNativeConnectorTool } from "../app/api/native/jobs/[jobId]/tools/route";
+import { POST as postNativeConnectorCallback } from "../app/api/native/jobs/[jobId]/callback/route";
 
 const enabled = process.env.SPELLBOOK_NATIVE_INTEGRATION === "1";
 const schema = `spellbook_native_${randomUUID().replaceAll("-", "")}`;
@@ -288,6 +291,150 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
     expect(final.events.filter((event) => event.type === "done")).toHaveLength(
       1,
     );
+  });
+
+  it("hands a local subscription turn to the connector with only a job-scoped capability", async () => {
+    const previousMode = process.env.SPELLBOOK_AI_CONNECTOR_MODE;
+    process.env.SPELLBOOK_AI_CONNECTOR_MODE = "local";
+    workers.enqueueWorkerJob.mockClear();
+    try {
+      const f = await fixture();
+      const submitted = await submitNativeTurn(session, f.documentId, {
+        text: "선택한 제목을 고쳐줘",
+        permission: "selection",
+        execution: "local",
+      });
+      expect(workers.enqueueWorkerJob).not.toHaveBeenCalled();
+      expect(submitted.localJob).toMatchObject({
+        mode: "native",
+        sessionId: f.nativeSessionId,
+        requestText: "선택한 제목을 고쳐줘",
+        execution: "local",
+      });
+      expect(submitted.localJob?.capability).not.toBe(
+        process.env.SPELLBOOK_INTERNAL_TOKEN,
+      );
+      expect(submitted.localJob?.toolUrl).toBe(
+        `https://spellbook.integration.invalid/api/native/jobs/${submitted.localJob?.jobId}/tools`,
+      );
+
+      const polled = await pollNativeSession(session, f.documentId, 0);
+      expect(workers.enqueueWorkerJob).not.toHaveBeenCalled();
+      expect(polled.localJob).toMatchObject({
+        jobId: submitted.localJob?.jobId,
+        sessionId: f.nativeSessionId,
+      });
+
+      const jobId = String(submitted.localJob?.jobId);
+      const authorized = await authorizeNativeConnectorJob(
+        new Request(
+          `https://spellbook.integration.invalid/api/native/jobs/${jobId}/tools`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${submitted.localJob?.capability}`,
+            },
+          },
+        ),
+        jobId,
+      );
+      expect(authorized.id).toBe(jobId);
+      await expect(
+        authorizeNativeConnectorJob(
+          new Request(
+            `https://spellbook.integration.invalid/api/native/jobs/${jobId}/tools`,
+            {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${submitted.localJob?.capability}x`,
+              },
+            },
+          ),
+          jobId,
+        ),
+      ).rejects.toMatchObject({
+        status: 401,
+        message: "invalid_native_connector_capability",
+      });
+
+      const executionToken = "local-connector-execution";
+      const toolResponse = await postNativeConnectorTool(
+        new Request(
+          `https://spellbook.integration.invalid/api/native/jobs/${jobId}/tools`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${submitted.localJob?.capability}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              jobId,
+              sessionId: f.nativeSessionId,
+              executionToken,
+              operation: "start",
+            }),
+          },
+        ),
+        { params: Promise.resolve({ jobId }) },
+      );
+      expect(toolResponse.status).toBe(200);
+
+      const callbackResponse = await postNativeConnectorCallback(
+        new Request(
+          `https://spellbook.integration.invalid/api/native/jobs/${jobId}/callback`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${submitted.localJob?.capability}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              jobId,
+              status: "succeeded",
+              mode: "native",
+              result: {
+                text: "로컬 구독으로 수정했습니다.",
+                changed: true,
+                reviewed: true,
+                status: "completed",
+                executionToken,
+              },
+            }),
+          },
+        ),
+        { params: Promise.resolve({ jobId }) },
+      );
+      expect(callbackResponse.status).toBe(200);
+      const final = await pollNativeSession(session, f.documentId, 0);
+      expect(final.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "done",
+            text: "로컬 구독으로 수정했습니다.",
+          }),
+        ]),
+      );
+      await expect(
+        authorizeNativeConnectorJob(
+          new Request(
+            `https://spellbook.integration.invalid/api/native/jobs/${jobId}/tools`,
+            {
+              headers: {
+                authorization: `Bearer ${submitted.localJob?.capability}`,
+              },
+            },
+          ),
+          jobId,
+        ),
+      ).rejects.toMatchObject({
+        status: 409,
+        message: "native_connector_job_inactive",
+      });
+    } finally {
+      if (previousMode === undefined)
+        delete process.env.SPELLBOOK_AI_CONNECTOR_MODE;
+      else process.env.SPELLBOOK_AI_CONNECTOR_MODE = previousMode;
+    }
   });
 
   it("admits a generated image only through a leased edit turn and binds it to the open document", async () => {

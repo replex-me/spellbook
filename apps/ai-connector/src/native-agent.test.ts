@@ -8,6 +8,7 @@ import {
 
 const state: NativeObservation = {
   unit: "1/100mm",
+  revision: "v2-test",
   activeSlide: 0,
   selectedElementIds: ["0/0"],
   slides: [
@@ -65,9 +66,13 @@ describe("shared open document agent", () => {
     const f = fixture(async (o) => {
       const schema = o.tools.find((tool) => tool.name === "native_edit")
         ?.inputSchema as {
-        properties: { op: { enum: string[] } };
+        properties: {
+          op: { enum: string[] };
+          row: { type: string[] };
+          column: { type: string[] };
+        };
       };
-      expect(schema.properties.op.enum).toHaveLength(28);
+      expect(schema.properties.op.enum).toHaveLength(37);
       expect(schema.properties.op.enum).toEqual(
         expect.arrayContaining([
           "add_text_box",
@@ -80,12 +85,189 @@ describe("shared open document agent", () => {
           "rotate",
           "flip",
           "z_order",
+          "set_speaker_notes",
+          "set_chart_data",
+          "set_chart_type",
         ]),
       );
       expect(schema.properties.op.enum).not.toContain("set_background");
       expect(schema.properties.op.enum).not.toContain("set_table_cell");
+      expect(schema.properties.op.enum).not.toContain("set_slide_layout");
+      expect(schema.properties.row.type).toContain("number");
+      expect(schema.properties.column.type).toContain("number");
+      expect(
+        o.tools.find((tool) => tool.name === "native_edit")?.description,
+      ).toContain("rowDescriptions (category labels)");
+      expect(
+        o.tools.find((tool) => tool.name === "native_edit")?.description,
+      ).toContain("column/line/area/pie/scatter/radar");
     });
     await f.run();
+  });
+
+  it("observes paragraph ranges on a requested slide without changing the active slide", async () => {
+    const f = fixture(async (o) => {
+      const schema = o.tools.find((tool) => tool.name === "native_observe")
+        ?.inputSchema as {
+        required: string[];
+        properties: { detailSlideIndex: { type: string[] } };
+      };
+      expect(schema.required).toEqual(["detailSlideIndex"]);
+      expect(schema.properties.detailSlideIndex.type).toEqual([
+        "number",
+        "null",
+      ]);
+      expect(
+        (
+          await o.onTool(
+            "native_observe",
+            { detailSlideIndex: 4 },
+            "1",
+            f.signal,
+          )
+        ).success,
+      ).toBe(true);
+    });
+    await f.run();
+    expect(f.call).toHaveBeenCalledWith(
+      { operation: "observe", detailSlideIndex: 4 },
+      f.signal,
+    );
+  });
+
+  it("publishes atomic batch editing and forwards dry-run without marking the turn changed", async () => {
+    const f = fixture(async (o) => {
+      expect(o.tools.map((tool) => tool.name)).toContain("native_batch_edit");
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        f.signal,
+      );
+      expect(
+        (
+          await o.onTool(
+            "native_batch_edit",
+            {
+              commands: [
+                { op: "move", elementId: "0/0", x: 100, y: 200 },
+                { op: "resize", elementId: "0/0", width: 300, height: 400 },
+              ],
+              dryRun: true,
+            },
+            "2",
+            f.signal,
+          )
+        ).success,
+      ).toBe(true);
+    });
+    expect(await f.run()).toMatchObject({
+      changed: false,
+      status: "completed",
+    });
+    expect(f.call.mock.calls[1]?.[0]).toMatchObject({
+      operation: "edit_batch",
+      expectedRevision: "v2-test",
+      dryRun: true,
+      commands: [
+        { op: "move", elementId: "0/0", x: 100, y: 200 },
+        { op: "resize", elementId: "0/0", width: 300, height: 400 },
+      ],
+    });
+  });
+
+  it("marks an applied batch changed and rejects the whole batch before dispatch when one target is outside permission", async () => {
+    const applied = fixture(async (o) => {
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        applied.signal,
+      );
+      expect(
+        (
+          await o.onTool(
+            "native_batch_edit",
+            {
+              commands: [
+                { op: "move", elementId: "0/0", x: 100, y: 200 },
+                { op: "resize", elementId: "0/0", width: 300, height: 400 },
+              ],
+              dryRun: false,
+            },
+            "2",
+            applied.signal,
+          )
+        ).success,
+      ).toBe(true);
+    });
+    expect(await applied.run()).toMatchObject({
+      changed: true,
+      status: "needs_review",
+    });
+
+    const restricted = fixture(
+      async (o) => {
+        await o.onTool(
+          "native_observe",
+          { detailSlideIndex: null },
+          "1",
+          restricted.signal,
+        );
+        expect(
+          (
+            await o.onTool(
+              "native_batch_edit",
+              {
+                commands: [
+                  { op: "move", elementId: "0/0", x: 100, y: 200 },
+                  { op: "move", elementId: "0/1", x: 300, y: 400 },
+                ],
+                dryRun: false,
+              },
+              "2",
+              restricted.signal,
+            )
+          ).success,
+        ).toBe(false);
+      },
+      { mode: "selection", elementIds: ["0/0"], slideIndexes: [] },
+    );
+    await restricted.run();
+    expect(restricted.call).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an identity-replacing chart edit before a later batch command can target the deleted native object", async () => {
+    const f = fixture(async (o) => {
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        f.signal,
+      );
+      expect(
+        (
+          await o.onTool(
+            "native_batch_edit",
+            {
+              commands: [
+                {
+                  op: "set_chart_data",
+                  elementId: "0/0",
+                  data: [[5.3]],
+                },
+                { op: "move", elementId: "0/0", x: 100, y: 200 },
+              ],
+              dryRun: false,
+            },
+            "2",
+            f.signal,
+          )
+        ).success,
+      ).toBe(false);
+    });
+    await f.run();
+    expect(f.call).toHaveBeenCalledTimes(1);
   });
 
   it("requires observation and rejects executable or unknown tools", async () => {
@@ -108,7 +290,12 @@ describe("shared open document agent", () => {
     { mode: "slides", elementIds: [], slideIndexes: [1] },
   ])("enforces $mode before dispatch", async (scope) => {
     const f = fixture(async (o) => {
-      await o.onTool("native_observe", {}, "1", f.signal);
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        f.signal,
+      );
       expect(
         (
           await o.onTool(
@@ -125,7 +312,12 @@ describe("shared open document agent", () => {
   });
   it("sends the exact observed revision and fresh image, and requires review", async () => {
     const f = fixture(async (o) => {
-      const observed = await o.onTool("native_observe", {}, "1", f.signal);
+      const observed = await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        f.signal,
+      );
       expect(observed.contentItems[1]).toMatchObject({ type: "inputImage" });
       await o.onTool(
         "native_edit",
@@ -152,7 +344,12 @@ describe("shared open document agent", () => {
       slideIndexes: [],
     };
     const f = fixture(async (o) => {
-      await o.onTool("native_observe", {}, "1", f.signal);
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        f.signal,
+      );
       expect(
         (
           await o.onTool(
@@ -177,7 +374,12 @@ describe("shared open document agent", () => {
       slideIndexes: [0],
     };
     const create = fixture(async (o) => {
-      await o.onTool("native_observe", {}, "1", create.signal);
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        create.signal,
+      );
       expect(
         (
           await o.onTool(
@@ -202,7 +404,12 @@ describe("shared open document agent", () => {
   });
   it("invalidates review after another edit", async () => {
     const f = fixture(async (o) => {
-      await o.onTool("native_observe", {}, "1", f.signal);
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        f.signal,
+      );
       await o.onTool(
         "native_edit",
         { op: "replace_text", elementId: "0/0", text: "After" },
@@ -229,7 +436,12 @@ describe("shared open document agent", () => {
   });
   it("does not claim success when the live engine rejects stale state", async () => {
     const f = fixture(async (o) => {
-      await o.onTool("native_observe", {}, "1", f.signal);
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        f.signal,
+      );
       f.call.mockRejectedValueOnce(new Error("document_changed_observe_again"));
       expect(
         (
@@ -289,7 +501,12 @@ describe("shared open document agent", () => {
         invocation += 1;
         if (invocation === 1) {
           expect(options.allowImageGeneration).toBe(true);
-          await options.onTool("native_observe", {}, "observe", signal);
+          await options.onTool(
+            "native_observe",
+            { detailSlideIndex: null },
+            "observe",
+            signal,
+          );
           await options.onGeneratedImage?.({
             bytes: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
             mediaType: "image/png",
@@ -297,7 +514,12 @@ describe("shared open document agent", () => {
           return "이미지를 생성했습니다.";
         }
         expect(options.allowImageGeneration).toBe(false);
-        await options.onTool("native_observe", {}, "review-observe", signal);
+        await options.onTool(
+          "native_observe",
+          { detailSlideIndex: null },
+          "review-observe",
+          signal,
+        );
         await options.onTool(
           "native_review",
           { approved: true, problems: [] },
@@ -328,8 +550,69 @@ describe("shared open document agent", () => {
       {
         operation: "insert_image",
         assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
+        slideIndex: 0,
+        expectedRevision: "v2-test",
+        expectedSlides: JSON.stringify(state.slides),
+        permission,
       },
       signal,
     );
+  });
+
+  it("does not insert a generated image outside the granted slide", async () => {
+    const createImage = vi.fn(async () => ({ assetId: "unused" }));
+    const restricted: NativePermission = {
+      mode: "slides",
+      elementIds: [],
+      slideIndexes: [1],
+    };
+    const f = fixture(async (options) => {
+      await options.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "observe",
+        f.signal,
+      );
+      await expect(
+        options.onGeneratedImage?.({
+          bytes: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+          mediaType: "image/png",
+        }),
+      ).rejects.toThrow("허용된 슬라이드 밖입니다");
+    }, restricted);
+    await runNativeTurn(
+      {
+        runStructuredTurn: async (
+          _a: unknown,
+          _b: unknown,
+          _c: unknown,
+          options: AgentTurnOptions,
+        ) => {
+          await options.onTool(
+            "native_observe",
+            { detailSlideIndex: null },
+            "observe",
+            f.signal,
+          );
+          await expect(
+            options.onGeneratedImage?.({
+              bytes: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+              mediaType: "image/png",
+            }),
+          ).rejects.toThrow("허용된 슬라이드 밖입니다");
+          return "삽입하지 않았습니다.";
+        },
+      } as unknown as AppServerClient,
+      {
+        requestText: "이미지를 넣어줘",
+        host: { call: f.call, createImage },
+        signal: f.signal,
+        permission: restricted,
+        onText: vi.fn(),
+        onTool: vi.fn(),
+      },
+    );
+    expect(createImage).not.toHaveBeenCalled();
+    expect(f.call).toHaveBeenCalledTimes(1);
   });
 });

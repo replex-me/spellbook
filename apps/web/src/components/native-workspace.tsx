@@ -13,6 +13,7 @@ import { SpellbookBrand, SpellbookIcon } from "./spellbook-ui";
 import type { AvailableModel, ModelSettings } from "@/lib/ai-models";
 import { normalizeQuotedStrongMarkdown } from "@/lib/markdown";
 import { CHATGPT_SECURITY_URL, useAiAccount } from "@/lib/use-ai-account";
+import type { AiConnectorConfig } from "@/lib/ai-connector-config";
 import "./native-workspace.css";
 
 export interface NativeLaunch {
@@ -22,6 +23,7 @@ export interface NativeLaunch {
   accessToken: string;
   expiresAt: number;
   apiBase: string;
+  aiConnector: AiConnectorConfig;
 }
 type Message = {
   id: number;
@@ -43,6 +45,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   const turnRequested = useRef(false),
     saveRevision = useRef(0),
     downloadAfterRevision = useRef<number | null>(null);
+  const dispatchedLocalJobs = useRef(new Set<string>());
   const imagePayloads = useRef(
     new Map<
       string,
@@ -62,7 +65,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     "read_only" | "selection" | "slides" | "document"
   >("selection");
   const [model, setModel] = useState<ModelSettings>();
-  const ai = useAiAccount();
+  const ai = useAiAccount(launch.aiConnector);
   const aiConnected = Boolean(ai.account);
   const origin = new URL(launch.editorUrl).origin;
   const api = useCallback(
@@ -85,8 +88,25 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   );
   const loadModels = useCallback(
     (signal: AbortSignal): Promise<{ models: AvailableModel[] }> =>
-      api("models", undefined, signal),
-    [api],
+      ai.mode === "local"
+        ? ai.localRequest("/v1/models")
+        : api("models", undefined, signal),
+    [ai.localRequest, ai.mode, api],
+  );
+  const dispatchLocalJob = useCallback(
+    async (job: { jobId?: unknown }) => {
+      if (ai.mode !== "local" || typeof job.jobId !== "string")
+        throw new Error("invalid_local_native_job");
+      if (dispatchedLocalJobs.current.has(job.jobId)) return;
+      dispatchedLocalJobs.current.add(job.jobId);
+      try {
+        await ai.localRequest("/v1/jobs/native", job);
+      } catch (error) {
+        dispatchedLocalJobs.current.delete(job.jobId);
+        throw error;
+      }
+    },
+    [ai.localRequest, ai.mode],
   );
   const sendOffice = useCallback(
     (MessageId: string, Values: unknown = {}) =>
@@ -99,7 +119,18 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   const deliverTask = useCallback(
     (task: {
       id?: string;
-      request?: { operation?: string; assetId?: string };
+      request?: {
+        operation?: string;
+        assetId?: string;
+        slideIndex?: number;
+        expectedRevision?: string;
+        expectedSlides?: string;
+        permission?: {
+          mode?: string;
+          slideIndexes?: number[];
+          elementIds?: string[];
+        };
+      };
     }) => {
       if (
         task.request?.operation !== "insert_image" ||
@@ -130,6 +161,10 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
               operation: "insert_image",
               mediaType: payload.mediaType,
               imageBytes: bytes,
+              slideIndex: task.request?.slideIndex,
+              expectedRevision: task.request?.expectedRevision,
+              expectedSlides: task.request?.expectedSlides,
+              permission: task.request?.permission,
             },
           },
           [bytes],
@@ -293,6 +328,8 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           abort.signal,
         );
         if (stopped) return;
+        if (response.localJob && ai.mode === "local" && aiConnected)
+          await dispatchLocalJob(response.localJob);
         saveRevision.current =
           response.session?.saveRevision ?? saveRevision.current;
         if (response.session?.status === "validating")
@@ -396,7 +433,16 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       abort.abort();
       clearTimeout(timer);
     };
-  }, [bridgeReady, api, deliverTask, sendOffice, launch.apiBase]);
+  }, [
+    bridgeReady,
+    api,
+    deliverTask,
+    sendOffice,
+    launch.apiBase,
+    ai.mode,
+    aiConnected,
+    dispatchLocalJob,
+  ]);
   useEffect(() => () => port.current?.close(), []);
   useEffect(() => {
     if (!aiConnected) setModel(undefined);
@@ -413,8 +459,15 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       { id: -Date.now(), role: "user", text: draft, tools: [], status: "done" },
     ]);
     try {
-      await api("chat", { text: draft, permission, modelSettings: model });
+      const submitted = await api("chat", {
+        text: draft,
+        permission,
+        modelSettings: model,
+        execution: ai.mode,
+      });
+      if (submitted.localJob) await dispatchLocalJob(submitted.localJob);
     } catch (e) {
+      if (ai.mode === "local") await api("cancel", {}).catch(() => undefined);
       turnRequested.current = false;
       setBusy(false);
       setText(draft);
@@ -663,6 +716,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                       href={CHATGPT_SECURITY_URL}
                       target="_blank"
                       rel="noreferrer"
+                      hidden={ai.mode === "local"}
                     >
                       장치 코드 인증을 먼저 켜야 하나요?
                       <SpellbookIcon name="arrowRight" size={14} />

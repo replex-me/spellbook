@@ -20,6 +20,15 @@ pnpm selfhost:doctor
 
 The setup command creates `.env` with mode `0600`, generates independent secrets and prints the initial password once. Open `http://localhost:3000`, log in, then connect Codex from the AI panel if AI editing is needed.
 
+The default `internal` mode keeps the connector in the private Compose network. To exercise the same user-device boundary used by a hosted Spellbook service, set `SPELLBOOK_AI_CONNECTOR_MODE=local` in `.env`, recreate only the web container, and start the loopback connector on the user's computer:
+
+```bash
+docker compose up -d --no-deps --force-recreate web
+pnpm connector:start
+```
+
+The connector listens on `127.0.0.1:43127`, accepts only the exact `SPELLBOOK_PUBLIC_URL` origin unless `SPELLBOOK_CONNECTOR_ALLOWED_ORIGINS` is explicitly set, and opens the normal Codex browser login after the user approves the site. The approval session is stored in browser session storage and expires; the Codex authentication home stays on the user's computer. Do not expose the connector port through a reverse proxy or bind it to a LAN interface.
+
 ## Data and backup
 
 `database-data` holds metadata and version lineage. `document-data` holds uploaded documents, derived renders and job receipts. `ai-auth-data` is mounted only into the AI connector and holds its provider runtime home. A usable document backup requires a consistent copy of the database and document volumes; back up the AI volume separately if reconnecting the provider is not acceptable.

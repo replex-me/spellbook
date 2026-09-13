@@ -14,6 +14,10 @@ import { enqueueWorkerJob } from "./workers";
 import { signWopiToken, verifyWopiToken, type WopiClaims } from "./wopi-token";
 import { currentPresentationFormat } from "./document-formats";
 import { internalAppBaseUrl } from "./runtime-urls";
+import {
+  aiConnectorConfig,
+  type AiConnectorConfig,
+} from "./ai-connector-config";
 
 const SESSION_MS = 6 * 60 * 60 * 1000;
 const OFFICE_DISCOVERY_TIMEOUT_MS = 75_000;
@@ -27,6 +31,7 @@ export interface NativeLaunch {
   accessToken: string;
   expiresAt: number;
   apiBase: string;
+  aiConnector: AiConnectorConfig;
 }
 
 function publicUrl(): string {
@@ -258,6 +263,7 @@ export async function createNativeLaunch(
     accessToken: token,
     expiresAt,
     apiBase: `/api/documents/${documentId}/native`,
+    aiConnector: aiConnectorConfig(),
   };
 }
 

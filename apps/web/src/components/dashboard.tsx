@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AiConnectorConfig } from "@/lib/ai-connector-config";
 import { CHATGPT_SECURITY_URL, useAiAccount } from "@/lib/use-ai-account";
 import { SpellbookBrand, SpellbookIcon, StatusBadge } from "./spellbook-ui";
 
@@ -13,7 +14,13 @@ interface DocumentRow {
   createdAt: string;
 }
 
-export default function Dashboard({ email }: { email: string }) {
+export default function Dashboard({
+  email,
+  aiConnector,
+}: {
+  email: string;
+  aiConnector: AiConnectorConfig;
+}) {
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -29,7 +36,8 @@ export default function Dashboard({ email }: { email: string }) {
     deviceLogin,
     disconnect: disconnectAccount,
     message: connectionMessage,
-  } = useAiAccount();
+    mode: aiMode,
+  } = useAiAccount(aiConnector);
 
   const loadDocuments = useCallback(async () => {
     const response = await fetch("/api/documents", { cache: "no-store" });
@@ -232,25 +240,47 @@ export default function Dashboard({ email }: { email: string }) {
                   <li>
                     <span>1</span>
                     <div>
-                      <strong>처음 한 번만 연결을 허용하세요</strong>
-                      <p>
-                        OpenAI 보안 설정에서 ‘Codex용 장치 코드 인증’을 켭니다.
-                      </p>
-                      <a
-                        href={CHATGPT_SECURITY_URL}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        OpenAI 보안 설정 열기
-                        <SpellbookIcon name="arrowRight" size={14} />
-                      </a>
+                      <strong>
+                        {aiMode === "local"
+                          ? "이 컴퓨터의 AI Connector를 확인합니다"
+                          : "처음 한 번만 연결을 허용하세요"}
+                      </strong>
+                      {aiMode === "local" ? (
+                        <p>
+                          로컬 Connector가 구독 로그인과 문서 도구를 이
+                          컴퓨터에서 실행합니다.
+                        </p>
+                      ) : (
+                        <>
+                          <p>
+                            OpenAI 보안 설정에서 ‘Codex용 장치 코드 인증’을
+                            켭니다.
+                          </p>
+                          <a
+                            href={CHATGPT_SECURITY_URL}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            OpenAI 보안 설정 열기
+                            <SpellbookIcon name="arrowRight" size={14} />
+                          </a>
+                        </>
+                      )}
                     </div>
                   </li>
                   <li>
                     <span>2</span>
                     <div>
-                      <strong>Spellbook로 돌아와 연결하세요</strong>
-                      <p>일회용 코드를 받아 OpenAI 화면에서 승인합니다.</p>
+                      <strong>
+                        {aiMode === "local"
+                          ? "승인 창에서 연결을 허용하세요"
+                          : "Spellbook로 돌아와 연결하세요"}
+                      </strong>
+                      <p>
+                        {aiMode === "local"
+                          ? "허용 후 이어지는 OpenAI 화면에서 로그인합니다. 비밀번호와 구독 토큰은 Spellbook 서버로 전송되지 않습니다."
+                          : "일회용 코드를 받아 OpenAI 화면에서 승인합니다."}
+                      </p>
                     </div>
                   </li>
                 </ol>
@@ -265,7 +295,11 @@ export default function Dashboard({ email }: { email: string }) {
                   onClick={() => void connectAccount()}
                   disabled={connecting}
                 >
-                  {connecting ? "연결 준비 중…" : "설정을 켰어요 · 연결 계속"}
+                  {connecting
+                    ? "연결 준비 중…"
+                    : aiMode === "local"
+                      ? "AI Connector 연결"
+                      : "설정을 켰어요 · 연결 계속"}
                 </button>
               </div>
             )}

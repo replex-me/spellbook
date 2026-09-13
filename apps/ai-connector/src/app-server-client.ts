@@ -9,6 +9,7 @@ import type { ModelSettings } from "../../../contracts/ai-models.js";
 import type {
   AccountReadResult,
   AvailableModel,
+  BrowserLoginResult,
   DeviceLoginResult,
   RpcNotification,
 } from "./types.js";
@@ -236,6 +237,12 @@ export class AppServerClient {
   async startDeviceLogin(): Promise<DeviceLoginResult> {
     return this.request<DeviceLoginResult>("account/login/start", {
       type: "chatgptDeviceCode",
+    });
+  }
+
+  async startBrowserLogin(): Promise<BrowserLoginResult> {
+    return this.request<BrowserLoginResult>("account/login/start", {
+      type: "chatgpt",
     });
   }
 

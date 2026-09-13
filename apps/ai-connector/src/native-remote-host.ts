@@ -11,6 +11,7 @@ export class NativeRemoteHost implements NativeHost {
   constructor(
     private readonly url: string,
     private readonly identity: Identity,
+    private readonly bearerToken?: string,
   ) {}
 
   async start(signal: AbortSignal): Promise<void> {
@@ -63,15 +64,18 @@ export class NativeRemoteHost implements NativeHost {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(process.env.SPELLBOOK_INTERNAL_TOKEN
-          ? {
-              "x-spellbook-internal-token":
-                process.env.SPELLBOOK_INTERNAL_TOKEN,
-            }
-          : {}),
+        ...(this.bearerToken
+          ? { authorization: `Bearer ${this.bearerToken}` }
+          : process.env.SPELLBOOK_INTERNAL_TOKEN
+            ? {
+                "x-spellbook-internal-token":
+                  process.env.SPELLBOOK_INTERNAL_TOKEN,
+              }
+            : {}),
       },
       body: JSON.stringify({ ...this.identity, ...body }),
       signal,
+      redirect: "error",
     });
     const value = (await response.json()) as Record<string, unknown>;
     if (!response.ok)

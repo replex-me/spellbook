@@ -77,6 +77,23 @@ async function harness() {
           webSearch: true,
         },
       });
+    if (message.method === "account/login/start")
+      send({
+        id: message.id,
+        result:
+          message.params.type === "chatgpt"
+            ? {
+                type: "chatgpt",
+                loginId: "browser-login",
+                authUrl: "https://auth.openai.test/browser",
+              }
+            : {
+                type: "chatgptDeviceCode",
+                loginId: "device-login",
+                verificationUrl: "https://auth.openai.test/device",
+                userCode: "ABCD-EFGH",
+              },
+      });
     if (message.method === "thread/start")
       send({
         id: message.id,
@@ -105,6 +122,24 @@ async function harness() {
 }
 
 describe("structured turn isolation", () => {
+  it("starts standard browser login and keeps device code as an explicit fallback", async () => {
+    const h = await harness();
+    await expect(h.client.startBrowserLogin()).resolves.toMatchObject({
+      type: "chatgpt",
+      authUrl: "https://auth.openai.test/browser",
+    });
+    await expect(h.client.startDeviceLogin()).resolves.toMatchObject({
+      type: "chatgptDeviceCode",
+      userCode: "ABCD-EFGH",
+    });
+    expect(
+      h.calls
+        .filter((call) => call.method === "account/login/start")
+        .map((call) => call.params.type),
+    ).toEqual(["chatgpt", "chatgptDeviceCode"]);
+    h.client.close();
+  });
+
   it("reads provider image capability and returns a validated generated image", async () => {
     const h = await harness();
     await expect(h.client.providerCapabilities()).resolves.toMatchObject({

@@ -1,4 +1,5 @@
 import { currentSession } from "@/lib/auth";
+import { aiConnectorConfig } from "@/lib/ai-connector-config";
 import Dashboard from "@/components/dashboard";
 import { SpellbookBrand, SpellbookIcon } from "@/components/spellbook-ui";
 
@@ -66,5 +67,5 @@ export default async function HomePage({
       </main>
     );
   }
-  return <Dashboard email={session.email} />;
+  return <Dashboard email={session.email} aiConnector={aiConnectorConfig()} />;
 }
