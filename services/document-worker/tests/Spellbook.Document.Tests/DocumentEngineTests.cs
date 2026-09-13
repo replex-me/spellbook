@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -50,6 +51,38 @@ public sealed class DocumentEngineTests : IDisposable
     {
         Assert.True(LibreOfficeRenderer.IsRetryableLibreOfficeFailure(message));
         Assert.False(LibreOfficeRenderer.IsRetryableLibreOfficeFailure("The input is not a presentation document"));
+    }
+
+    [Theory]
+    [InlineData("Binary URP bridge already disposed")]
+    [InlineData("LibreOffice could not load /tmp/document.pptx")]
+    public void LibreOfficeRendererFallsBackFromAnIsolatedNormalizationFailure(string message)
+    {
+        Assert.True(LibreOfficeRenderer.IsNormalizationFallbackFailure(message));
+        Assert.False(LibreOfficeRenderer.IsNormalizationFallbackFailure("The input is not a presentation document"));
+    }
+
+    [Fact]
+    public void LibreOfficeRendererIsolatesTheCompleteUserProfilePerProcess()
+    {
+        var processDirectory = Path.Combine(directory, "render process");
+        var startInfo = new ProcessStartInfo();
+
+        LibreOfficeRenderer.ConfigureProcessEnvironment(
+            startInfo,
+            processDirectory,
+            new Dictionary<string, string> { ["FONTCONFIG_FILE"] = "/fonts.conf" });
+
+        Assert.Equal(processDirectory, startInfo.Environment["HOME"]);
+        Assert.Equal(
+            Path.Combine(processDirectory, ".cache"),
+            startInfo.Environment["XDG_CACHE_HOME"]);
+        Assert.Equal(
+            Path.Combine(processDirectory, ".config"),
+            startInfo.Environment["XDG_CONFIG_HOME"]);
+        Assert.Equal("/fonts.conf", startInfo.Environment["FONTCONFIG_FILE"]);
+        Assert.True(Directory.Exists(startInfo.Environment["XDG_CACHE_HOME"]));
+        Assert.True(Directory.Exists(startInfo.Environment["XDG_CONFIG_HOME"]));
     }
 
     [Fact]

@@ -58,8 +58,13 @@ public sealed class LibreOfficeRenderer : IPresentationRenderer
             {
                 File.Delete(diagnosticsPath);
             }
+            var normalizeForPowerPointFidelity = string.Equals(
+                Environment.GetEnvironmentVariable("SPELLBOOK_DISABLE_CJK_SCRIPT_SPACING"),
+                "1",
+                StringComparison.Ordinal);
             var pdfPath = string.Empty;
-            for (var pass = 0; pass < MaxRenderAttempts; pass++)
+            InvalidOperationException? normalizationFailure = null;
+            for (var pass = 0; pass < (normalizeForPowerPointFidelity ? MaxRenderAttempts : 1); pass++)
             {
                 try
                 {
@@ -70,17 +75,46 @@ public sealed class LibreOfficeRenderer : IPresentationRenderer
                         pass,
                         cancellationToken,
                         renderEnvironment,
-                        diagnosticsPath);
+                        diagnosticsPath,
+                        normalizeForPowerPointFidelity);
                     break;
                 }
                 catch (InvalidOperationException exception)
-                    when (pass + 1 < MaxRenderAttempts && IsRetryableLibreOfficeFailure(exception.Message))
+                    when (normalizeForPowerPointFidelity
+                        && IsNormalizationFallbackFailure(exception.Message))
                 {
+                    normalizationFailure = exception;
                     await File.AppendAllTextAsync(
                         diagnosticsPath,
-                        $"{JsonSerializer.Serialize(new { kind = "render-retry", attempt = pass + 1, reason = "libreoffice-process-terminated" })}\n",
+                        $"{JsonSerializer.Serialize(new
+                        {
+                            kind = pass + 1 < MaxRenderAttempts
+                                ? "normalization-retry"
+                                : "normalization-fallback",
+                            attempt = pass + 1,
+                            reason = "libreoffice-normalization-process-failed"
+                        })}\n",
                         cancellationToken);
                 }
+            }
+
+            // The UNO fidelity normalizer is an enhancement over LibreOffice's
+            // native export path, not a prerequisite for opening a valid PPTX.
+            // Some OOXML combinations can terminate the remote UNO bridge even
+            // though the same build exports the document correctly. Keep that
+            // optional process isolated and fall back to a clean native export
+            // rather than rejecting an otherwise editable document.
+            if (string.IsNullOrEmpty(pdfPath) && normalizationFailure is not null)
+            {
+                pdfPath = await ConvertToPdfAsync(
+                    soffice,
+                    renderInputPath,
+                    workDirectory,
+                    MaxRenderAttempts,
+                    cancellationToken,
+                    renderEnvironment,
+                    diagnosticsPath,
+                    normalizeForPowerPointFidelity: false);
             }
 
             if (string.IsNullOrEmpty(pdfPath))
@@ -132,7 +166,8 @@ public sealed class LibreOfficeRenderer : IPresentationRenderer
         int pass,
         CancellationToken cancellationToken,
         IReadOnlyDictionary<string, string>? environment,
-        string diagnosticsPath)
+        string diagnosticsPath,
+        bool normalizeForPowerPointFidelity)
     {
         var profileDirectory = Path.Combine(workDirectory, $"lo-profile-{pass}");
         Directory.CreateDirectory(profileDirectory);
@@ -143,10 +178,7 @@ public sealed class LibreOfficeRenderer : IPresentationRenderer
         var pdfPath = Path.Combine(
             pdfDirectory,
             $"{Path.GetFileNameWithoutExtension(renderInputPath)}.pdf");
-        if (string.Equals(
-            Environment.GetEnvironmentVariable("SPELLBOOK_DISABLE_CJK_SCRIPT_SPACING"),
-            "1",
-            StringComparison.Ordinal))
+        if (normalizeForPowerPointFidelity)
         {
             await File.AppendAllTextAsync(
                 diagnosticsPath,
@@ -196,6 +228,10 @@ public sealed class LibreOfficeRenderer : IPresentationRenderer
         || message.Contains("Unspecified Application Error", StringComparison.OrdinalIgnoreCase)
         || message.Contains("segmentation fault", StringComparison.OrdinalIgnoreCase);
 
+    internal static bool IsNormalizationFallbackFailure(string message) =>
+        IsRetryableLibreOfficeFailure(message)
+        || message.Contains("LibreOffice could not load", StringComparison.OrdinalIgnoreCase);
+
     private static async Task RunAsync(
         string executable,
         IReadOnlyList<string> arguments,
@@ -219,19 +255,7 @@ public sealed class LibreOfficeRenderer : IPresentationRenderer
         {
             process.StartInfo.ArgumentList.Add(argument);
         }
-        var cacheDirectory = Path.Combine(workingDirectory, ".cache");
-        var configDirectory = Path.Combine(workingDirectory, ".config");
-        Directory.CreateDirectory(cacheDirectory);
-        Directory.CreateDirectory(configDirectory);
-        process.StartInfo.Environment["XDG_CACHE_HOME"] = cacheDirectory;
-        process.StartInfo.Environment["XDG_CONFIG_HOME"] = configDirectory;
-        if (environment is not null)
-        {
-            foreach (var (name, value) in environment)
-            {
-                process.StartInfo.Environment[name] = value;
-            }
-        }
+        ConfigureProcessEnvironment(process.StartInfo, workingDirectory, environment);
         process.Start();
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
@@ -259,6 +283,31 @@ public sealed class LibreOfficeRenderer : IPresentationRenderer
                 standardOutputLogPath,
                 output.EndsWith('\n') ? output : $"{output}\n",
                 cancellationToken);
+        }
+    }
+
+    internal static void ConfigureProcessEnvironment(
+        ProcessStartInfo startInfo,
+        string workingDirectory,
+        IReadOnlyDictionary<string, string>? environment = null)
+    {
+        var cacheDirectory = Path.Combine(workingDirectory, ".cache");
+        var configDirectory = Path.Combine(workingDirectory, ".config");
+        Directory.CreateDirectory(cacheDirectory);
+        Directory.CreateDirectory(configDirectory);
+
+        // LibreOffice's Python UNO bootstrap does not pass an explicit
+        // UserInstallation argument. XDG_CONFIG_HOME alone is insufficient on
+        // every build: soffice can still create or lock state below HOME. A
+        // render-scoped HOME keeps concurrent and retried jobs from sharing a
+        // profile while preserving the container user's real home directory.
+        startInfo.Environment["HOME"] = workingDirectory;
+        startInfo.Environment["XDG_CACHE_HOME"] = cacheDirectory;
+        startInfo.Environment["XDG_CONFIG_HOME"] = configDirectory;
+        if (environment is null) return;
+        foreach (var (name, value) in environment)
+        {
+            startInfo.Environment[name] = value;
         }
     }
 }

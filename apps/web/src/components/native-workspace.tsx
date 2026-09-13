@@ -44,6 +44,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     bottom = useRef<HTMLDivElement>(null);
   const turnRequested = useRef(false),
     saveRevision = useRef(0),
+    pendingSaveRevision = useRef<number | null>(null),
     downloadAfterRevision = useRef<number | null>(null);
   const dispatchedLocalJobs = useRef(new Set<string>());
   const imagePayloads = useRef(
@@ -280,13 +281,19 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
         sendOffice("Host_PostmessageReady");
         if (value.Values?.Status === "Document_Loaded") setEngineReady(true);
       }
-      if (value?.MessageId === "Action_Save_Resp")
-        setSaveState(value.Values?.success ? "저장 확인 중…" : "저장 실패");
+      if (value?.MessageId === "Action_Save_Resp") {
+        if (value.Values?.success) setSaveState("저장 확인 중…");
+        else {
+          pendingSaveRevision.current = null;
+          downloadAfterRevision.current = null;
+          setSaveState("저장 실패");
+        }
+      }
       if (value?.MessageId === "Doc_ModifiedStatus")
         setSaveState((current) =>
           value.Values?.Modified
             ? "변경 사항 있음"
-            : /확인|검사/.test(current)
+            : pendingSaveRevision.current !== null
               ? current
               : "저장됨",
         );
@@ -335,11 +342,14 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
         if (response.session?.status === "validating")
           setSaveState("저장 검사 중…");
         else if (response.session?.status === "active") {
-          setSaveState((current) =>
-            ["저장 중…", "저장 확인 중…", "저장 검사 중…"].includes(current)
-              ? "저장됨"
-              : current,
-          );
+          const completedRevision = pendingSaveRevision.current;
+          if (
+            completedRevision !== null &&
+            saveRevision.current >= completedRevision
+          ) {
+            pendingSaveRevision.current = null;
+            setSaveState("저장됨");
+          }
           if (
             downloadAfterRevision.current !== null &&
             saveRevision.current >= downloadAfterRevision.current
@@ -527,6 +537,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
               title="저장"
               disabled={!engineReady}
               onClick={() => {
+                pendingSaveRevision.current = saveRevision.current + 1;
                 setSaveState("저장 중…");
                 sendOffice("Action_Save", {
                   Notify: true,
@@ -546,7 +557,9 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                 window.location.assign(downloadUrl);
                 return;
               }
-              downloadAfterRevision.current = saveRevision.current + 1;
+              const nextRevision = saveRevision.current + 1;
+              pendingSaveRevision.current = nextRevision;
+              downloadAfterRevision.current = nextRevision;
               setSaveState("다운로드 준비 중…");
               sendOffice("Action_Save", {
                 Notify: true,
