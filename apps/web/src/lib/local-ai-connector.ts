@@ -20,8 +20,11 @@ interface PairingRuntime {
   now(): number;
 }
 
-export function localConnectorOrigin(config: AiConnectorConfig): string | null {
-  return config.mode === "local" ? exactLoopbackOrigin(config.origin) : null;
+export function localConnectorOrigin(
+  config?: AiConnectorConfig,
+): string | null {
+  if (!config || config.mode === "internal") return null;
+  return exactLoopbackOrigin(config.origin);
 }
 
 export function readLocalConnectorSession(

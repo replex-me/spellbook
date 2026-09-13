@@ -19,6 +19,7 @@ function storage() {
 
 describe("local AI connector browser client", () => {
   it("uses only an explicit runtime connector configuration", () => {
+    expect(localConnectorOrigin(undefined)).toBeNull();
     expect(localConnectorOrigin({ mode: "internal" })).toBeNull();
     expect(
       localConnectorOrigin({
