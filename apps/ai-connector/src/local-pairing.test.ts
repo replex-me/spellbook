@@ -95,4 +95,17 @@ describe("local connector pairing", () => {
         ]),
     ).toThrow("local_pairing_secret_too_short");
   });
+
+  it("allows a secure origin after explicit approval when no operator allowlist is configured", () => {
+    const authority = new LocalPairingAuthority(secret);
+    const pairing = authority.begin("https://documents.example", challenge);
+    const approval = authority.approval(pairing.id);
+    const session = authority.confirm(pairing.id, approval.confirmationSecret);
+    expect(authority.verify("https://documents.example", session.token)).toMatchObject(
+      { origin: "https://documents.example" },
+    );
+    expect(() => authority.begin("http://documents.example", challenge)).toThrow(
+      "insecure_connector_origin",
+    );
+  });
 });

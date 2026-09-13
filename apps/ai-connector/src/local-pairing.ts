@@ -49,7 +49,7 @@ export class LocalPairingAuthority {
 
   constructor(
     private readonly secret: Buffer,
-    allowedOrigins: readonly string[],
+    allowedOrigins: readonly string[] = [],
     private readonly now: () => number = Date.now,
     private readonly pendingTtlMs = 2 * 60 * 1000,
     private readonly sessionTtlMs = 6 * 60 * 60 * 1000,
@@ -57,7 +57,7 @@ export class LocalPairingAuthority {
     if (secret.byteLength < MIN_SECRET_BYTES)
       throw new Error("local_pairing_secret_too_short");
     const normalized = allowedOrigins.map(normalizeAllowedOrigin);
-    if (!normalized.length || new Set(normalized).size !== normalized.length)
+    if (new Set(normalized).size !== normalized.length)
       throw new Error("invalid_local_connector_origins");
     this.allowedOrigins = new Set(normalized);
   }
@@ -65,6 +65,7 @@ export class LocalPairingAuthority {
   begin(rawOrigin: string, challenge: string): PairingRequest {
     this.cleanup();
     const origin = this.requireAllowedOrigin(rawOrigin);
+    if (this.pending.size >= 32) throw new Error("too_many_pairing_requests");
     if (
       challenge.length < MIN_CHALLENGE_LENGTH ||
       challenge.length > MAX_CHALLENGE_LENGTH ||
@@ -152,7 +153,7 @@ export class LocalPairingAuthority {
 
   private requireAllowedOrigin(rawOrigin: string): string {
     const origin = normalizeAllowedOrigin(rawOrigin);
-    if (!this.allowedOrigins.has(origin))
+    if (this.allowedOrigins.size > 0 && !this.allowedOrigins.has(origin))
       throw new Error("connector_origin_not_allowed");
     return origin;
   }

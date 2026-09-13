@@ -21,6 +21,7 @@ const generatedControlFiles = new Set([
 ]);
 const ignoredDirectories = new Set([
   ".git",
+  ".spellbook",
   ".next",
   "node_modules",
   "dist",

@@ -50,6 +50,8 @@ function markdownFiles(directory) {
     if (
       entry.isDirectory() &&
       (entry.name === "node_modules" ||
+        entry.name === ".git" ||
+        entry.name === ".spellbook" ||
         entry.name === "artifacts" ||
         entry.name.startsWith(".tmp"))
     ) {

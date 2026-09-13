@@ -22,11 +22,11 @@ const server = localMode
       createLocalConnectorHandler({
         authority: new LocalPairingAuthority(
           randomBytes(32),
-          requiredList("SPELLBOOK_CONNECTOR_ALLOWED_ORIGINS"),
+          optionalList("SPELLBOOK_CONNECTOR_ALLOWED_ORIGINS"),
         ),
         accounts: sessions,
         connectorOrigin: `http://127.0.0.1:${port}`,
-        identity: requiredEnvironment("SPELLBOOK_LOCAL_EMAIL"),
+        identity: process.env.SPELLBOOK_LOCAL_EMAIL?.trim() || "local@spellbook",
         runNativeJob: (job, capability) =>
           runAcceptedJob(
             job,
@@ -110,13 +110,11 @@ function requiredEnvironment(name: string): string {
   return value;
 }
 
-function requiredList(name: string): string[] {
-  const values = requiredEnvironment(name)
+function optionalList(name: string): string[] {
+  return (process.env[name] ?? "")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-  if (!values.length) throw new Error(`${name.toLowerCase()}_required`);
-  return values;
 }
 
 function parsePort(value: string | undefined, fallback: number): number {
