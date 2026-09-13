@@ -1,20 +1,30 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { generateRuntimeMutationContract } from "./mutation-contract.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const extension = fileURLToPath(new URL("./extension/", import.meta.url));
-for (const args of [
-  ["--filter", "@spellbook/ai-connector", "build"],
+generateRuntimeMutationContract();
+execFileSync("pnpm", ["--filter", "@spellbook/ai-connector", "build"], {
+  cwd: root,
+  stdio: "inherit",
+});
+execFileSync(
+  "pnpm",
   [
-    "--filter",
-    "@spellbook/web",
     "exec",
-    "vite",
-    "build",
-    "--config",
-    "native-preview/vite.config.mjs",
+    "esbuild",
+    "apps/web/native-preview/main.tsx",
+    "--bundle",
+    "--format=iife",
+    "--global-name=SpellbookWorkspace",
+    "--outfile=services/office-editor/workspace-dist/workspace.js",
+    "--loader:.css=css",
+    "--jsx=automatic",
+    "--alias:@=./apps/web/src",
+    '--define:process.env.NODE_ENV="production"',
   ],
-])
-  execFileSync("pnpm", args, { cwd: root, stdio: "inherit" });
+  { cwd: root, stdio: "inherit" },
+);
 execFileSync(
   "zip",
   [
@@ -24,6 +34,7 @@ execFileSync(
     "manifest.json",
     "icon.svg",
     "index.html",
+    "mutation-contract.generated.js",
     "operations.js",
     "bridge.js",
   ],

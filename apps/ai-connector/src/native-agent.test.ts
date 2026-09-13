@@ -5,6 +5,7 @@ import {
   type NativeObservation,
   type NativePermission,
 } from "./native-agent.js";
+import { nativeEditContract } from "./native-edit-contract.js";
 
 const state: NativeObservation = {
   unit: "1/100mm",
@@ -21,6 +22,14 @@ const state: NativeObservation = {
     },
   ],
   images: [{ slideIndex: 0, pngBytes: [137, 80, 78, 71] }],
+  changedSlideIndexes: [],
+  visualEvidenceComplete: true,
+};
+const changedState: NativeObservation = {
+  ...structuredClone(state),
+  revision: "v2-after",
+  changedSlideIndexes: [0],
+  visualEvidenceComplete: true,
 };
 const permission: NativePermission = {
   mode: "document",
@@ -30,10 +39,15 @@ const permission: NativePermission = {
 function fixture(
   work: (options: AgentTurnOptions) => Promise<void>,
   scope = permission,
+  mutationState: NativeObservation = changedState,
 ) {
+  let current = structuredClone(state);
   const call = vi.fn(
-    async (_request: Record<string, unknown>, _signal: AbortSignal) =>
-      structuredClone(state),
+    async (request: Record<string, unknown>, _signal: AbortSignal) => {
+      if (request.operation !== "observe" && !request.dryRun)
+        current = structuredClone(mutationState);
+      return structuredClone(current);
+    },
   );
   const signal = new AbortController().signal;
   const client = {
@@ -108,7 +122,9 @@ describe("shared open document agent", () => {
           column: { type: string[] };
         };
       };
-      expect(schema.properties.op.enum).toHaveLength(37);
+      expect(schema.properties.op.enum).toEqual(
+        nativeEditContract.toolInputSchema.properties.op.enum,
+      );
       expect(schema.properties.op.enum).toEqual(
         expect.arrayContaining([
           "add_text_box",
@@ -129,6 +145,8 @@ describe("shared open document agent", () => {
       expect(schema.properties.op.enum).not.toContain("set_background");
       expect(schema.properties.op.enum).not.toContain("set_table_cell");
       expect(schema.properties.op.enum).not.toContain("set_slide_layout");
+      expect(schema.properties.op.enum).not.toContain("text_shadow");
+      expect(schema.properties.op.enum).not.toContain("set_printable");
       expect(schema.properties.row.type).toContain("number");
       expect(schema.properties.column.type).toContain("number");
       expect(
@@ -454,7 +472,7 @@ describe("shared open document agent", () => {
       );
       await o.onTool(
         "native_review",
-        { approved: true, problems: [] },
+        { approved: true, problems: [], reviewedSlideIndexes: [0] },
         "3",
         f.signal,
       );
@@ -469,6 +487,124 @@ describe("shared open document agent", () => {
       reviewed: false,
       status: "needs_review",
     });
+  });
+  it("requires explicit review coverage for every changed slide", async () => {
+    const f = fixture(async (o) => {
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "1",
+        f.signal,
+      );
+      await o.onTool(
+        "native_edit",
+        { op: "replace_text", elementId: "0/0", text: "After" },
+        "2",
+        f.signal,
+      );
+      expect(
+        (
+          await o.onTool(
+            "native_review",
+            { approved: true, problems: [], reviewedSlideIndexes: [] },
+            "3",
+            f.signal,
+          )
+        ).success,
+      ).toBe(false);
+      expect(
+        (
+          await o.onTool(
+            "native_review",
+            { approved: true, problems: [], reviewedSlideIndexes: [0] },
+            "4",
+            f.signal,
+          )
+        ).success,
+      ).toBe(true);
+    });
+
+    expect(await f.run()).toMatchObject({
+      changed: true,
+      reviewed: true,
+      status: "completed",
+    });
+  });
+  it("cannot approve a mutation with a newly introduced layout issue", async () => {
+    const issueState: NativeObservation = {
+      ...structuredClone(changedState),
+      layoutAudit: {
+        issueCount: 1,
+        issues: [{ code: "overlap", slideIndex: 0 }],
+        introducedIssueCount: 1,
+        introducedIssues: [{ code: "overlap", slideIndex: 0 }],
+      },
+    };
+    const f = fixture(
+      async (o) => {
+        await o.onTool(
+          "native_observe",
+          { detailSlideIndex: null },
+          "1",
+          f.signal,
+        );
+        await o.onTool(
+          "native_edit",
+          { op: "move", elementId: "0/0", x: 100, y: 100 },
+          "2",
+          f.signal,
+        );
+        expect(
+          (
+            await o.onTool(
+              "native_review",
+              { approved: true, problems: [], reviewedSlideIndexes: [0] },
+              "3",
+              f.signal,
+            )
+          ).success,
+        ).toBe(false);
+      },
+      permission,
+      issueState,
+    );
+
+    expect(await f.run()).toMatchObject({
+      changed: true,
+      reviewed: false,
+      status: "needs_review",
+    });
+  });
+  it("does not accept a mutation result without complete fresh screenshots", async () => {
+    const incompleteState: NativeObservation = {
+      ...structuredClone(changedState),
+      images: [],
+      visualEvidenceComplete: false,
+    };
+    const f = fixture(
+      async (o) => {
+        await o.onTool(
+          "native_observe",
+          { detailSlideIndex: null },
+          "1",
+          f.signal,
+        );
+        expect(
+          (
+            await o.onTool(
+              "native_edit",
+              { op: "move", elementId: "0/0", x: 100, y: 100 },
+              "2",
+              f.signal,
+            )
+          ).success,
+        ).toBe(false);
+      },
+      permission,
+      incompleteState,
+    );
+
+    expect(await f.run()).toMatchObject({ changed: false, reviewed: false });
   });
   it("does not claim success when the live engine rejects stale state", async () => {
     const f = fixture(async (o) => {
@@ -516,12 +652,16 @@ describe("shared open document agent", () => {
           ],
         },
       ],
+      revision: "v2-image",
+      changedSlideIndexes: [0],
+      visualEvidenceComplete: true,
     };
+    let imageInserted = false;
     const call = vi.fn(
-      async (request: Record<string, unknown>, _signal: AbortSignal) =>
-        request.operation === "insert_image"
-          ? structuredClone(inserted)
-          : structuredClone(state),
+      async (request: Record<string, unknown>, _signal: AbortSignal) => {
+        if (request.operation === "insert_image") imageInserted = true;
+        return structuredClone(imageInserted ? inserted : state);
+      },
     );
     const createImage = vi.fn(async () => ({
       assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
@@ -558,7 +698,7 @@ describe("shared open document agent", () => {
         );
         await options.onTool(
           "native_review",
-          { approved: true, problems: [] },
+          { approved: true, problems: [], reviewedSlideIndexes: [0] },
           "review",
           signal,
         );

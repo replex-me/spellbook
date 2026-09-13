@@ -1,11 +1,15 @@
+ARG SPELLBOOK_COLLABORA_BASE_IMAGE=collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282
 ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL=stock
-FROM collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282 AS collabora
+FROM ${SPELLBOOK_COLLABORA_BASE_IMAGE} AS collabora
 
-FROM golang:1.24-alpine AS gateway-builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS gateway-builder
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /src
 COPY services/office-editor/gateway/ ./
 RUN CGO_ENABLED=0 go test ./... && \
-    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/spellbook-office-gateway .
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+      go build -trimpath -ldflags='-s -w' -o /out/spellbook-office-gateway .
 
 FROM node:24-alpine AS browser-assets
 ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL
@@ -14,10 +18,15 @@ COPY --from=collabora /usr/share/coolwsd /upstream
 COPY services/office-editor/patch-localization.mjs /tmp/patch-localization.mjs
 COPY services/office-editor/patch-host-bridge.mjs /tmp/patch-host-bridge.mjs
 COPY services/office-editor/localization-ko-overrides.json /tmp/localization-ko-overrides.json
+COPY contracts/native-edit-capabilities.json /tmp/native-edit-capabilities.json
+COPY services/office-editor/mutation-contract.mjs /tmp/mutation-contract.mjs
 COPY services/office-editor/extensions-index.json /upstream/browser/dist/extensions/index.json
 COPY services/office-editor/extension /upstream/browser/dist/extensions/org.spellbook.editor
 COPY services/office-editor/host-bridge.js /upstream/browser/dist/spellbook-host.js
-RUN if [ "${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}" != stock ]; then \
+RUN node /tmp/mutation-contract.mjs \
+      --contract /tmp/native-edit-capabilities.json \
+      --output /upstream/browser/dist/extensions/org.spellbook.editor/mutation-contract.generated.js \
+    && if [ "${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}" != stock ]; then \
       printf '%s\n' "${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}" | grep -Eq '^undo-v[1-9][0-9]*$'; \
     fi \
     && sed -i "s/__SPELLBOOK_ENGINE_PATCH_LEVEL__/${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}/g" \
@@ -41,7 +50,9 @@ RUN node /tmp/patch-localization.mjs \
     cp /upstream/favicon.ico /minimal/favicon.ico && \
     cp -a /upstream/browser/admin-templates /minimal/browser/admin-templates && \
     cp /upstream/browser/dist/cool.html /minimal/browser/dist/cool.html && \
-    cp /upstream/browser/dist/welcome/welcome.html /minimal/browser/dist/welcome/welcome.html && \
+    if [ -f /upstream/browser/dist/welcome/welcome.html ]; then \
+      cp /upstream/browser/dist/welcome/welcome.html /minimal/browser/dist/welcome/welcome.html; \
+    fi && \
     cp /upstream/browser/dist/l10n/help-localizations.json /minimal/browser/dist/l10n/help-localizations.json && \
     cp /upstream/browser/dist/l10n/localizations.json /minimal/browser/dist/l10n/localizations.json && \
     cp /upstream/browser/dist/l10n/uno-localizations.json /minimal/browser/dist/l10n/uno-localizations.json && \

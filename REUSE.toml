@@ -13,6 +13,12 @@ SPDX-FileCopyrightText = "LibreOffice contributors"
 SPDX-License-Identifier = "MPL-2.0"
 
 [[annotations]]
+path = ["services/office-editor/libreoffice/patches/**"]
+precedence = "override"
+SPDX-FileCopyrightText = "LibreOffice contributors"
+SPDX-License-Identifier = "MPL-2.0"
+
+[[annotations]]
 path = ["eval/public/**", "eval/corpus.example.json"]
 precedence = "override"
 SPDX-FileCopyrightText = "2026 Spellbook contributors"

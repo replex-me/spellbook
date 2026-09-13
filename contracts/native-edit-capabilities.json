@@ -16,9 +16,688 @@
     "identityReplacingOperations": ["set_chart_data", "set_chart_type"],
     "ordering": "Element and creation batches use the editor command domain and commit as one native Undo action. On the stock engine a structure-changing slide command must be the only command in its transaction; multi-command slide-structure batches require the verified engine patch because stock page moves can rename existing objects. An identity-replacing operation must be the only command in its transaction so no later command can target the replaced native object."
   },
+  "mutationModel": {
+    "version": "1.0.0",
+    "domains": {
+      "editor": {
+        "atomicBoundary": "uno_undo_context",
+        "description": "Commands executed against live editor objects and grouped by the document XUndoManager."
+      },
+      "slide_transform": {
+        "atomicBoundary": "sfx_list_action",
+        "description": "Typed document-structure commands executed by LibreOffice as one SfxUndoManager list action."
+      }
+    },
+    "changeBudgetContract": {
+      "baseline": "same_engine_no_edit_save",
+      "candidate": "same_engine_mutated_save",
+      "scope": "Target-scoped categories are resolved through the saved presentation relationship graph; unclassified package parts fail closed.",
+      "categories": [
+        "package_manifest",
+        "package_relationships",
+        "document_properties",
+        "presentation",
+        "presentation_relationships",
+        "slide_parts",
+        "slide_relationships",
+        "notes_parts",
+        "notes_relationships",
+        "notes_master_parts",
+        "notes_master_relationships",
+        "slide_layout_parts",
+        "slide_layout_relationships",
+        "slide_master_parts",
+        "slide_master_relationships",
+        "theme_parts",
+        "chart_parts",
+        "embedded_workbooks",
+        "media_parts",
+        "diagram_parts",
+        "comments",
+        "custom_xml",
+        "macros",
+        "unknown"
+      ]
+    },
+    "families": {
+      "slide_structure": {
+        "domain": "slide_transform",
+        "undoProvider": "page_model_action",
+        "fixture": "slide-structure",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": [
+          "package_manifest",
+          "presentation",
+          "presentation_relationships",
+          "slide_parts",
+          "slide_relationships",
+          "notes_parts",
+          "notes_relationships"
+        ]
+      },
+      "slide_properties": {
+        "domain": "slide_transform",
+        "undoProvider": "page_property_snapshot",
+        "fixture": "slide-properties",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["presentation", "slide_parts"]
+      },
+      "speaker_notes": {
+        "domain": "slide_transform",
+        "undoProvider": "notes_text_action",
+        "fixture": "speaker-notes",
+        "verification": ["structure", "save_reopen", "change_budget"],
+        "changeBudget": ["notes_parts", "notes_relationships"]
+      },
+      "object_creation": {
+        "domain": "editor",
+        "undoProvider": "sdr_creation_action",
+        "fixture": "object-creation",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts", "slide_relationships", "media_parts"]
+      },
+      "object_geometry": {
+        "domain": "editor",
+        "undoProvider": "sdr_geometry_action",
+        "fixture": "object-geometry",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts"]
+      },
+      "object_style": {
+        "domain": "editor",
+        "undoProvider": "sdr_attribute_action",
+        "fixture": "object-style",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts"]
+      },
+      "object_text": {
+        "domain": "editor",
+        "undoProvider": "sdr_text_action",
+        "fixture": "object-text",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts"]
+      },
+      "object_topology": {
+        "domain": "editor",
+        "undoProvider": "sdr_topology_action",
+        "fixture": "object-topology",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts", "slide_relationships"]
+      },
+      "table_content": {
+        "domain": "editor",
+        "undoProvider": "table_cell_snapshot",
+        "fixture": "table-content",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts"]
+      },
+      "table_structure": {
+        "domain": "editor",
+        "undoProvider": "table_model_action",
+        "fixture": "table-structure",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts"]
+      },
+      "table_style": {
+        "domain": "editor",
+        "undoProvider": "table_cell_snapshot",
+        "fixture": "table-style",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts"]
+      },
+      "chart_model": {
+        "domain": "editor",
+        "undoProvider": "chart_model_snapshot",
+        "fixture": "chart-model",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": [
+          "slide_parts",
+          "chart_parts",
+          "embedded_workbooks",
+          "slide_relationships"
+        ]
+      },
+      "media_geometry": {
+        "domain": "editor",
+        "undoProvider": "sdr_geometry_action",
+        "fixture": "media-geometry",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts"]
+      },
+      "slide_transition": {
+        "domain": "slide_transform",
+        "undoProvider": "transition_snapshot",
+        "fixture": "slide-transition",
+        "verification": [
+          "structure",
+          "save_reopen",
+          "change_budget",
+          "playback"
+        ],
+        "changeBudget": ["slide_parts"]
+      },
+      "animation": {
+        "domain": "slide_transform",
+        "undoProvider": "animation_tree_snapshot",
+        "fixture": "animation-timing",
+        "verification": [
+          "structure",
+          "save_reopen",
+          "change_budget",
+          "playback"
+        ],
+        "changeBudget": ["slide_parts"]
+      }
+    },
+    "operations": {
+      "insert_slide": {
+        "family": "slide_structure",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "create",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 9
+      },
+      "duplicate_slide": {
+        "family": "slide_structure",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "create",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "delete_slide": {
+        "family": "slide_structure",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "delete",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "move_slide": {
+        "family": "slide_structure",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "reorder",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "set_speaker_notes": {
+        "family": "speaker_notes",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "add_text_box": {
+        "family": "object_creation",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "create",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "add_shape": {
+        "family": "object_creation",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "create",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "add_table": {
+        "family": "object_creation",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "create",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "align": {
+        "family": "object_geometry",
+        "target": "elements",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "distribute": {
+        "family": "object_geometry",
+        "target": "elements",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "group": {
+        "family": "object_topology",
+        "target": "elements",
+        "execution": "editor_dispatch",
+        "identityEffect": "reparent",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "replace_text": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "move": {
+        "family": "object_geometry",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "resize": {
+        "family": "object_geometry",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "font_size": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "bold": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "italic": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "underline": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "strikethrough": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "text_shadow": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 9
+      },
+      "font_family": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "font_color": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "fill_color": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "line_color": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "line_width": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "fill_opacity": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "line_opacity": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "text_autofit": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "rotate": {
+        "family": "object_geometry",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "z_order": {
+        "family": "object_topology",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "reorder",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "paragraph_alignment": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "flip": {
+        "family": "object_geometry",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "ungroup": {
+        "family": "object_topology",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "reparent",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "duplicate_element": {
+        "family": "object_creation",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "create",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "delete_element": {
+        "family": "object_topology",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "delete",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "set_chart_data": {
+        "family": "chart_model",
+        "target": "element",
+        "execution": "model_replace",
+        "identityEffect": "replace",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "set_chart_type": {
+        "family": "chart_model",
+        "target": "element",
+        "execution": "model_replace",
+        "identityEffect": "replace",
+        "availability": "runtime_verified",
+        "minEnginePatch": 0
+      },
+      "set_slide_layout": {
+        "family": "slide_properties",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 6
+      },
+      "set_background": {
+        "family": "slide_properties",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 2
+      },
+      "set_table_cell": {
+        "family": "table_content",
+        "target": "table_cell",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 2
+      },
+      "rename_slide": {
+        "family": "slide_properties",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 2
+      },
+      "set_slide_hidden": {
+        "family": "slide_properties",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 2
+      },
+      "set_alt_text": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 3
+      },
+      "set_shape_name": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 3
+      },
+      "set_text_box": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 3
+      },
+      "set_character_spacing": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "set_script_position": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "set_shape_shadow": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 3
+      },
+      "set_object_lock": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 9
+      },
+      "set_printable": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "format_excluded",
+        "minEnginePatch": 0
+      },
+      "replace_text_range": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 4
+      },
+      "insert_table_rows": {
+        "family": "table_structure",
+        "target": "table_range",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "delete_table_rows": {
+        "family": "table_structure",
+        "target": "table_range",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "insert_table_columns": {
+        "family": "table_structure",
+        "target": "table_range",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "delete_table_columns": {
+        "family": "table_structure",
+        "target": "table_range",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "merge_table_cells": {
+        "family": "table_structure",
+        "target": "table_range",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "split_table_cell": {
+        "family": "table_structure",
+        "target": "table_cell",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "set_table_row_height": {
+        "family": "table_structure",
+        "target": "table_range",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "set_table_column_width": {
+        "family": "table_structure",
+        "target": "table_range",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 5
+      },
+      "set_table_cell_format": {
+        "family": "table_style",
+        "target": "table_range",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 6
+      },
+      "set_slide_transition": {
+        "family": "slide_transition",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 7
+      },
+      "set_animation_timing": {
+        "family": "animation",
+        "target": "animation_effect",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 8
+      },
+      "crop_image": {
+        "family": "media_geometry",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 6
+      }
+    }
+  },
   "operationGroups": {
     "slide": [
-      "insert_slide",
       "duplicate_slide",
       "delete_slide",
       "move_slide",
@@ -35,7 +714,6 @@
       "italic",
       "underline",
       "strikethrough",
-      "text_shadow",
       "font_family",
       "font_color",
       "fill_color",
@@ -56,6 +734,10 @@
     ]
   },
   "knownUnsafeOperations": [
+    {
+      "op": "insert_slide",
+      "reason": "The stock InsertMasterSlide command creates title and content placeholders before assigning the selected master. On imported blank layouts this mutates the master and creates a synthetic layout during PPTX save/reopen. The undo-v9 engine patch makes page creation inherit the selected master layout and must pass the cumulative image, browser, save/reopen, visual and PowerPoint gates before promotion."
+    },
     {
       "op": "set_slide_layout",
       "reason": "The typed adapter changes and visually restores the slide, but stock Undo recreates missing title/body placeholders on the master and leaves the imported master structure changed. The prepared engine patch must pass full master, save/reopen and PowerPoint gates."
@@ -101,12 +783,12 @@
       "reason": "The typed adapter is implemented, but shadow geometry and appearance require the undo-v3 engine candidate and rendered equivalence validation."
     },
     {
-      "op": "set_object_lock",
-      "reason": "The typed adapter is implemented, but exact protection-state Undo and save/reopen require the undo-v3 engine candidate to pass runtime promotion gates."
+      "op": "text_shadow",
+      "reason": "The editor command applies text shadow in memory, but the stock PPTX filter drops the run effect during save/reopen. The undo-v9 engine patch preserves the DrawingML outer shadow and must pass cumulative browser, visual and PowerPoint gates before promotion."
     },
     {
-      "op": "set_printable",
-      "reason": "The typed adapter is implemented, but exact printable-state Undo and save/reopen require the undo-v3 engine candidate to pass runtime promotion gates."
+      "op": "set_object_lock",
+      "reason": "The typed adapter and native Undo path are implemented, but the stock PPTX filter drops independent move and resize protection. The undo-v9 engine patch maps standard DrawingML locks across shapes, groups, pictures, connectors and graphical frames and must pass cumulative browser and PowerPoint gates before promotion."
     },
     {
       "op": "replace_text_range",
@@ -164,6 +846,13 @@
       "reason": "The live editor now observes original image dimensions and crop fractions, and direct GraphicCrop changes round-trip as OOXML source rectangles on rectangular pictures. Stock UNO records no Undo; the bounded SetGraphicCrop engine patch and browser adapter must pass engine, Undo/Redo, save/reopen, visual and PowerPoint gates before promotion."
     }
   ],
+  "formatExcludedOperations": [
+    {
+      "op": "set_printable",
+      "format": "pptx",
+      "reason": "PresentationML has no per-shape printable flag. LibreOffice's UNO Printable property is not representable in PPTX, so exposing it would promise state that the original format cannot preserve."
+    }
+  ],
   "knownUnsafeTransactions": [
     {
       "kind": "multi_command_slide_structure",
@@ -191,7 +880,6 @@
           "italic",
           "underline",
           "strikethrough",
-          "text_shadow",
           "font_family",
           "font_color",
           "fill_color",
@@ -215,7 +903,6 @@
           "add_text_box",
           "add_shape",
           "add_table",
-          "insert_slide",
           "duplicate_slide",
           "delete_slide",
           "move_slide",

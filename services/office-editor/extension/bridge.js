@@ -3,19 +3,22 @@
  */
 window.presentNative = {
   observe: (detailSlideIndex = null) =>
-    cool.callRemote(presentDocumentOperation, {
+    cool.callRemote(spellbookDocumentOperation, {
       operation: "observe",
       detailSlideIndex,
+      mutationContracts: spellbookMutationContracts,
     }),
   edit: (request) =>
-    cool.callRemote(presentDocumentOperation, {
+    cool.callRemote(spellbookDocumentOperation, {
       ...request,
       operation: "edit",
+      mutationContracts: spellbookMutationContracts,
     }),
   editBatch: (request) =>
-    cool.callRemote(presentDocumentOperation, {
+    cool.callRemote(spellbookDocumentOperation, {
       ...request,
       operation: "edit_batch",
+      mutationContracts: spellbookMutationContracts,
     }),
 };
 let connection;
@@ -48,8 +51,33 @@ const waitForInsertedImage = async (before, slideIndex) => {
       targetCount === beforeTargetCount + 1 &&
       elementCount(state) === elementCount(before) + 1 &&
       otherSlidesUnchanged
-    )
-      return state;
+    ) {
+      const issueKey = (issue) =>
+        JSON.stringify({
+          slideIndex: issue.slideIndex,
+          code: issue.code,
+          stableId: issue.stableId ?? null,
+          stableIds: issue.stableIds ?? null,
+        });
+      const beforeIssues = new Set(
+        (before.layoutAudit?.issues ?? []).map(issueKey),
+      );
+      const introducedIssues = (state.layoutAudit?.issues ?? []).filter(
+        (issue) => !beforeIssues.has(issueKey(issue)),
+      );
+      return {
+        ...state,
+        changedSlideIndexes: [slideIndex],
+        visualEvidenceComplete:
+          state.images?.length === 1 &&
+          state.images[0]?.slideIndex === slideIndex,
+        layoutAudit: {
+          ...state.layoutAudit,
+          introducedIssueCount: introducedIssues.length,
+          introducedIssues,
+        },
+      };
+    }
   }
   throw new Error("generated_image_was_not_inserted");
 };
@@ -116,7 +144,10 @@ window.addEventListener("message", (event) => {
       const task = tail.then(() =>
         message.request.operation === "insert_image"
           ? insertImage(message.request)
-          : cool.callRemote(presentDocumentOperation, message.request),
+          : cool.callRemote(spellbookDocumentOperation, {
+              ...message.request,
+              mutationContracts: spellbookMutationContracts,
+            }),
       );
       tail = task.catch(() => undefined);
       completed.set(message.id, task);

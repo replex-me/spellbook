@@ -44,6 +44,8 @@ The current `pptx` adapter owns:
 - LibreOffice rendering and PowerPoint-oriented compatibility patches;
 - the Impress WOPI editor bridge and native editing operations.
 
+The PPTX adapter uses two independently versioned LibreOffice lineages. The document worker's headless renderer produces comparison and self-review evidence; Collabora's embedded engine powers the live browser editor. They serve one product loop but cannot share binaries or patches because their upstream releases and ABIs differ. Each lineage has a pinned manifest, an ordered patch series, native regression tests and an explicit promotion gate. See the [browser-engine maintenance contract](../../services/office-editor/libreoffice/README.md) and [renderer-engine contract](../../services/document-worker/libreoffice/README.md).
+
 ## Current limitation that matters for expansion
 
 The worker boundary and upload registry are format-aware, but the current element graph, edit-command schema, conversation scope and UI still contain slide-specific fields. They are valid PPTX adapter contracts, not the future universal interchange model. Before enabling DOCX, introduce a small format-neutral observation envelope whose payload is validated by an adapter-owned schema. Do not stretch `slides[]` into `pages[]` or `paragraphs[]`.

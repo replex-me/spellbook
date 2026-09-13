@@ -4,6 +4,8 @@ The repository is governed by a small set of documents with distinct jobs:
 
 - [Document platform](architecture/document-platform.md): dependency direction and format-adapter architecture.
 - [Open-core boundary](architecture/open-core-boundary.md): what may enter this public repository and what remains in a hosted-service overlay.
+- [Browser editing engine](../services/office-editor/libreoffice/README.md): upstream pins, patch series and promotion workflow.
+- [Headless render engine](../services/document-worker/libreoffice/README.md): PowerPoint-fidelity patch and upgrade workflow.
 - [Format support](product/format-support.md): the user-visible support truth for each document type.
 - [Multi-format roadmap](product/multiformat-roadmap.md): how PPTX becomes one adapter without flattening DOCX or page-layout semantics.
 - [Self-hosting](delivery/self-hosting.md): installation, secrets, storage and operational requirements.

@@ -1,0 +1,344 @@
+{
+  "version": "1.0.0",
+  "reviewedAt": "2026-09-13",
+  "purpose": "Route the complete raw Impress command inventory into product-level families and track verified typed operations. This is not yet a command-by-command support classification; raw UNO commands are evidence inputs, not an AI API.",
+  "engineBaseline": {
+    "product": "Collabora Online cp-26.04.3-3 / stock CODE 26.04.3.2.1",
+    "sourceRepository": "https://github.com/CollaboraOnline/online.mirror",
+    "sourceRef": "cp-26.04.3-3",
+    "sourceCommit": "7ddebab0ef71e249941ff21d2c8e4fbefa474499",
+    "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
+    "observedUniqueUiUnoCommands": 804,
+    "observedUiUnoCommandsSha256": "cafedc6b8c621afbb8399d76fc498c1e86273c2c290bb914e41298df0b203cd1",
+    "inventoryScope": [
+      "engine/sd/uiconfig/simpress",
+      "browser/src/control/Control.NotebookbarImpress.js"
+    ]
+  },
+  "states": {
+    "runtime_verified": "Typed operation, permission check, live readback, native Undo and browser-session probe all pass.",
+    "runtime_verified_auxiliary_tool": "The same safety and browser-session gates pass, but the operation still travels through a specialized asset tool rather than the native edit schema.",
+    "engine_patch_ready": "Root-cause engine patch and native unit test exist, but the patched Collabora image has not been built and probed.",
+    "format_excluded": "The human editor may expose a local property, but the target document format has no interoperable representation, so AI mutation is intentionally unavailable.",
+    "observation_verified": "The live browser editor exposes stable, bounded structure for this family and the observation was checked on a representative public PPTX; mutation safety is a separate state.",
+    "runtime_validation_required": "A bounded typed adapter exists and its immediate browser transaction passes, but save/reopen, visual or native-application release gates remain.",
+    "typed_adapter_required": "The human editor has the capability, but the AI still needs a bounded schema, readback and Undo test.",
+    "observation_required": "Safe execution depends on first exposing the relevant structure and stable targets.",
+    "visual_validation_required": "Deterministic structure checks are insufficient; render or media-specific review is required.",
+    "platform_owned": "The product platform, not the model, owns this lifecycle operation.",
+    "human_ui_only": "Useful editor state that should not be an AI document mutation.",
+    "security_excluded": "Intentionally unavailable to document AI because it expands authority beyond the document contract."
+  },
+  "operationCoverage": {
+    "runtimeVerified": [
+      "duplicate_slide",
+      "delete_slide",
+      "move_slide",
+      "set_speaker_notes",
+      "add_text_box",
+      "add_shape",
+      "add_table",
+      "align",
+      "distribute",
+      "group",
+      "replace_text",
+      "move",
+      "resize",
+      "font_size",
+      "bold",
+      "italic",
+      "underline",
+      "strikethrough",
+      "font_family",
+      "font_color",
+      "fill_color",
+      "line_color",
+      "line_width",
+      "fill_opacity",
+      "line_opacity",
+      "text_autofit",
+      "rotate",
+      "z_order",
+      "paragraph_alignment",
+      "flip",
+      "ungroup",
+      "duplicate_element",
+      "delete_element",
+      "set_chart_data",
+      "set_chart_type"
+    ],
+    "enginePatchReady": [
+      "insert_slide",
+      "set_slide_layout",
+      "set_background",
+      "set_table_cell",
+      "rename_slide",
+      "set_slide_hidden",
+      "set_alt_text",
+      "set_shape_name",
+      "set_text_box",
+      "set_character_spacing",
+      "set_script_position",
+      "set_shape_shadow",
+      "text_shadow",
+      "set_object_lock",
+      "replace_text_range",
+      "insert_table_rows",
+      "delete_table_rows",
+      "insert_table_columns",
+      "delete_table_columns",
+      "merge_table_cells",
+      "split_table_cell",
+      "set_table_row_height",
+      "set_table_column_width",
+      "set_table_cell_format",
+      "set_slide_transition",
+      "set_animation_timing"
+    ],
+    "runtimeValidationRequired": ["crop_image"],
+    "formatExcluded": ["set_printable"],
+    "enginePatchReadyTransactions": ["multi_command_slide_structure"],
+    "runtimeVerifiedAuxiliaryTools": [
+      {
+        "op": "insert_generated_image",
+        "editorOperation": "insert_image",
+        "reason": "Image generation and binary asset delivery are platform-mediated. Live revision, target slide, permission, exact one-image insertion, native Undo and Redo pass, but the operation has not yet been unified with native_edit/native_batch_edit."
+      }
+    ]
+  },
+  "semanticFamilies": [
+    {
+      "id": "document_lifecycle",
+      "scope": "open, lock, save candidate, version, undo/redo, approve, download and recover",
+      "states": ["platform_owned"],
+      "decision": "Keep identity, locking, immutable original, version promotion and recovery outside model tools; expose status only."
+    },
+    {
+      "id": "slide_structure",
+      "scope": "insert, duplicate, delete, reorder, hide, layout, rename and sections",
+      "states": [
+        "runtime_verified",
+        "engine_patch_ready",
+        "typed_adapter_required"
+      ],
+      "next": [
+        "activate rename after patched-engine probe",
+        "activate exact slide visibility after patched-engine probe",
+        "activate multi-command slide-structure transactions after object-name-preserving MovePage is built and probed",
+        "add section observation and typed operations"
+      ]
+    },
+    {
+      "id": "slide_background_master_theme",
+      "scope": "background fills, master assignment, master objects, theme and slide size",
+      "states": [
+        "engine_patch_ready",
+        "observation_verified",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "activate solid background after patched-engine probe",
+        "add bounded master/theme mutation tools without allowing slide-layout Undo to mutate master placeholders"
+      ]
+    },
+    {
+      "id": "shape_geometry_arrangement",
+      "scope": "position, size, rotation, flip, z-order, alignment, distribution, grouping, duplication and deletion",
+      "states": ["runtime_verified", "typed_adapter_required"],
+      "next": [
+        "add lock/aspect-ratio, equal-size, connector and freeform adapters with exact readback"
+      ]
+    },
+    {
+      "id": "shape_appearance",
+      "scope": "fill, outline, opacity, dash, arrowheads, gradients, patterns, shadows and effects",
+      "states": [
+        "runtime_verified",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "add line style/arrowhead and shape shadow first",
+        "gate gradient/effects on serialized and visual equivalence"
+      ]
+    },
+    {
+      "id": "text_content",
+      "scope": "whole-object text, runs, paragraphs, fields and search/replace",
+      "states": [
+        "runtime_verified",
+        "observation_required",
+        "typed_adapter_required"
+      ],
+      "next": [
+        "expose run and paragraph identities",
+        "activate formatting-preserving range replacement after the undo-v5 engine candidate passes compiled unit, browser, Undo/Redo and save/reopen gates",
+        "model dynamic fields explicitly"
+      ]
+    },
+    {
+      "id": "character_formatting",
+      "scope": "font family/size/color, weight, posture, underline, strike, shadow, case, script and spacing",
+      "states": ["runtime_verified", "typed_adapter_required"],
+      "next": [
+        "activate superscript/subscript and character spacing after patched-engine verification",
+        "add case and language only after the bridge can enter Impress Outliner text-edit mode with an explicit range; selecting a shape or UNO text cursor does not activate the human text-edit command context"
+      ]
+    },
+    {
+      "id": "paragraph_list_textbox",
+      "scope": "alignment, vertical alignment, bullets, numbering, indentation, spacing, direction, columns, margins and autofit",
+      "states": [
+        "runtime_verified",
+        "observation_required",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "add paragraph/list structure before mutation",
+        "detect overflow with engine metrics plus screenshot review"
+      ]
+    },
+    {
+      "id": "tables",
+      "scope": "create, cell text/style/borders, rows, columns, merge/split, dimensions and distribution",
+      "states": [
+        "runtime_verified",
+        "engine_patch_ready",
+        "observation_verified",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "activate cell text and eight structural operations after undo-v5 browser and save/reopen gates",
+        "verify merged-cell content, formatting and exact outline geometry on representative tables",
+        "activate the bounded cell fill, font family/color/size/weight/underline/strike/shadow/spacing, paragraph, margin and four-side border adapter after the cell-property engine patch passes native Undo and round-trip gates",
+        "verify each border color and point width through BorderLine readback, Undo/Redo, save/reopen and PowerPoint instead of treating a visible border as completion"
+      ]
+    },
+    {
+      "id": "pictures_media",
+      "scope": "insert/generated image, replace, crop, transparency, filters, video and audio",
+      "states": [
+        "runtime_verified",
+        "observation_verified",
+        "runtime_validation_required",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "move image insert into the same typed transaction contract",
+        "build and verify the bounded GraphicCrop native Undo path without replacing or rasterizing the source picture",
+        "add media metadata and keep crop unavailable for imported picture-to-shape cases whose no-op Collabora save already flattens the source rectangle",
+        "keep remote asset fetching platform-mediated"
+      ]
+    },
+    {
+      "id": "charts_data",
+      "scope": "chart types, series, categories, data, labels, axes, legends and formatting",
+      "states": [
+        "runtime_verified",
+        "observation_verified",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "map embedded workbook and external-link identity separately from the verified chart type, series, category/series labels and data-matrix observation",
+        "separate data edits from chart styling",
+        "extend beyond the verified fixed-size internal-data values and labels to embedded workbooks and externally linked charts"
+      ]
+    },
+    {
+      "id": "smartart_diagrams",
+      "scope": "diagram data, layout, styles and fallback drawing shapes",
+      "states": [
+        "observation_verified",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "route imported fallback groups without semantic diagram data to an OOXML-aware preservation path",
+        "never flatten SmartArt merely to make it editable"
+      ]
+    },
+    {
+      "id": "connectors_freeform_3d_fontwork",
+      "scope": "connectors and glue points, Bezier/freeform, 3D and Fontwork",
+      "states": [
+        "observation_required",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "model endpoints and parent relationships before geometry edits",
+        "treat 3D and Fontwork as separate typed families"
+      ]
+    },
+    {
+      "id": "hyperlinks_actions",
+      "scope": "links, action settings, mouse-over/click behavior and QR objects",
+      "states": ["observation_required", "typed_adapter_required"],
+      "next": [
+        "normalize URLs and internal slide targets",
+        "require explicit user intent for external links"
+      ]
+    },
+    {
+      "id": "animations_transitions_timing",
+      "scope": "object animations, slide transitions, durations, order and rehearsal timing",
+      "states": [
+        "observation_verified",
+        "typed_adapter_required",
+        "visual_validation_required"
+      ],
+      "next": [
+        "activate the bounded named slide-transition presets after the UndoTransition engine command passes compiled, browser, playback and PowerPoint gates",
+        "activate the bounded element-effect duration, delay and start-mode adapter after its UndoAnimation engine command passes compiled, browser, playback and PowerPoint gates",
+        "add bounded preset replacement, effect insertion/removal and effect-order mutation after each operation has the same native history and playback evidence",
+        "validate playback rather than static screenshots alone"
+      ]
+    },
+    {
+      "id": "notes_comments_accessibility",
+      "scope": "speaker notes, annotations, author threads, alt text, title/description and reading order",
+      "states": ["observation_required", "typed_adapter_required"],
+      "next": [
+        "separate private notes from visible slide content",
+        "add accessibility audit and reading-order adapters"
+      ]
+    },
+    {
+      "id": "equations_embedded_objects",
+      "scope": "math, OLE/package objects and linked files",
+      "states": [
+        "observation_required",
+        "typed_adapter_required",
+        "security_excluded"
+      ],
+      "next": [
+        "allow bounded math edits only after round-trip evidence",
+        "do not execute or fetch embedded active content"
+      ]
+    },
+    {
+      "id": "view_navigation_presenter",
+      "scope": "zoom, panes, ruler, guides, selection, slide show and presenter state",
+      "states": ["human_ui_only"],
+      "decision": "AI may request observation or focus but must not pretend editor-view commands are document edits."
+    },
+    {
+      "id": "macros_forms_external_automation",
+      "scope": "macros, Basic, form controls, address books, scanners, external editing and arbitrary links",
+      "states": ["security_excluded"],
+      "decision": "Keep disabled in AI document sessions; preserve inert source content according to format policy."
+    },
+    {
+      "id": "file_export_print_share",
+      "scope": "save as, export, PDF, print, email and remote-file commands",
+      "states": ["platform_owned", "security_excluded"],
+      "decision": "Use server-authoritative candidate validation and download/export APIs, never raw editor file or network commands."
+    }
+  ],
+  "releaseRule": "An operation or transaction mode moves into the public runtime contract only after typed schema, permission enforcement, revision binding, exact live readback, native Undo/Redo, failed-batch rollback and browser-session verification all pass. Visual families additionally require rendered review, and engine_patch_ready behavior requires a patched Collabora image probe."
+}

@@ -1,0 +1,24 @@
+diff --git a/sd/source/ui/view/drviews7.cxx b/sd/source/ui/view/drviews7.cxx
+index 79adca966..7e2084a28 100644
+--- a/sd/source/ui/view/drviews7.cxx
++++ b/sd/source/ui/view/drviews7.cxx
+@@ -89,6 +89,7 @@
+ #include <fuformatpaintbrush.hxx>
+ #include <stlsheet.hxx>
+ #include <SlideSectionManager.hxx>
++#include <undoback.hxx>
+ 
+ using namespace ::com::sun::star;
+ using namespace ::com::sun::star::uno;
+@@ -1782,6 +1783,11 @@ void DrawViewShell::SetPageProperties (SfxRequest& rReq)
+         SfxItemSet aTempSet = aPageItemSet.CloneAsValue(false, &mpDrawView->GetModel().GetItemPool());
+         const SfxPoolItem* pItem = nullptr;
+ 
++        if (GetDoc()->IsUndoEnabled())
++            GetDocSh()->GetUndoManager()->AddUndoAction(
++                std::make_unique<SdBackgroundObjUndoAction>(
++                    *GetDoc(), *pPage, aPageItemSet), true);
++
+         rPageProperties.ClearItem(XATTR_FILLSTYLE);
+         rPageProperties.ClearItem(XATTR_FILLGRADIENT);
+         rPageProperties.ClearItem(XATTR_FILLHATCH);

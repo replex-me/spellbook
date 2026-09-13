@@ -1,0 +1,33 @@
+diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
+--- a/sd/qa/unit/uiimpress.cxx
++++ b/sd/qa/unit/uiimpress.cxx
+@@ -32,3 +32,5 @@
+ #include <com/sun/star/drawing/XDrawPage.hpp>
++#include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
++#include <com/sun/star/drawing/XShape.hpp>
+ #include <com/sun/star/drawing/XMasterPageTarget.hpp>
+ #include <com/sun/star/style/ParagraphAdjust.hpp>
+@@ -2845,3 +2847,8 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTypedLayoutPreservesImportedMaster)
+     SdPage& rMasterPage = static_cast<SdPage&>(pPage->TRG_GetMasterPage());
++    uno::Reference<drawing::XMasterPagesSupplier> xMasterPagesSupplier(
++        mxComponent, uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XDrawPage> xMasterPage(
++        xMasterPagesSupplier->getMasterPages()->getByIndex(0),
++        uno::UNO_QUERY_THROW);
+ 
+     // Model an imported PPTX master that intentionally has no LibreOffice
+@@ -2848,8 +2855,12 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTypedLayoutPreservesImportedMaster)
+     // title/body placeholders and owns hard background attributes. The typed
+     // AI command must be a slide-local edit, not a master normalization pass.
+-    auto removePlaceholder = [&rMasterPage](PresObjKind eKind) {
++    auto removePlaceholder = [&rMasterPage, &xMasterPage](PresObjKind eKind) {
+         if (SdrObject* pObject = rMasterPage.GetPresObj(eKind))
+-            rMasterPage.RemoveObject(pObject->GetOrdNum());
++        {
++            uno::Reference<drawing::XShape> xShape = pObject->getUnoShape();
++            CPPUNIT_ASSERT(xShape.is());
++            xMasterPage->remove(xShape);
++        }
+     };
+     removePlaceholder(PresObjKind::Title);
+     removePlaceholder(PresObjKind::Outline);

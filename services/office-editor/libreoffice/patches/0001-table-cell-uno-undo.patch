@@ -1,0 +1,35 @@
+diff --git a/svx/source/table/cell.cxx b/svx/source/table/cell.cxx
+index b1556e4b7..367e72315 100644
+--- a/svx/source/table/cell.cxx
++++ b/svx/source/table/cell.cxx
+@@ -1688,6 +1688,10 @@ OUString SAL_CALL Cell::getString(  )
+ 
+ void SAL_CALL Cell::setString( const OUString& aString )
+ {
++    if (getString() == aString)
++        return;
++
++    AddUndo();
+     SvxUnoTextBase::setString( aString );
+     notifyModified();
+ }
+diff --git a/svx/source/table/tableundo.cxx b/svx/source/table/tableundo.cxx
+index 27f0e7024..c02783ec9 100644
+--- a/svx/source/table/tableundo.cxx
++++ b/svx/source/table/tableundo.cxx
+@@ -115,10 +115,12 @@ void CellUndo::setDataToCell( const Data& rData )
+ 
+     if(auto pObj = mxObjRef.get())
+     {
+-        // #i120201# ActionChanged is not enough, we need to trigger TableLayouter::UpdateBorderLayout()
+-        // and this is done best using ReformatText() for table objects
+-        pObj->ActionChanged();
++        // #i120201# ReformatText() triggers TableLayouter::UpdateBorderLayout().
++        // The object-change broadcast also invalidates cached UNO text
++        // forwarders so readback observes the restored OutlinerParaObject.
+         pObj->NbcReformatText();
++        pObj->SetChanged();
++        pObj->BroadcastObjectChange();
+     }
+ }
+ 

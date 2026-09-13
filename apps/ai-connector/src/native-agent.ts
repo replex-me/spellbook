@@ -47,6 +47,8 @@ export interface NativeObservation {
     }>;
   };
   images: Array<{ slideIndex: number; pngBytes: number[] }>;
+  changedSlideIndexes: number[];
+  visualEvidenceComplete: boolean;
   layoutAudit?: {
     issueCount: number;
     issues: Array<Record<string, unknown>>;
@@ -99,6 +101,13 @@ export async function runNativeTurn(
   },
 ) {
   let observed: NativeObservation | undefined;
+  let pendingReview:
+    | {
+        revision: string;
+        slideIndexes: number[];
+        introducedIssueCount: number;
+      }
+    | undefined;
   let changed = false,
     reviewed = false;
   let toolTail: Promise<unknown> = Promise.resolve();
@@ -127,6 +136,49 @@ export async function runNativeTurn(
       })),
     ],
   });
+  const registerMutationEvidence = (state: NativeObservation): boolean => {
+    if (state.visualEvidenceComplete !== true)
+      throw new Error("Mutation result has incomplete visual evidence.");
+    if (!Array.isArray(state.changedSlideIndexes))
+      throw new Error("Mutation result has no changed-slide identity.");
+    const slideIndexes = [...new Set(state.changedSlideIndexes)].sort(
+      (left, right) => left - right,
+    );
+    if (slideIndexes.some((value) => !Number.isInteger(value) || value < 0))
+      throw new Error("Mutation result has invalid changed-slide identity.");
+    if (slideIndexes.length === 0) {
+      pendingReview = undefined;
+      return false;
+    }
+    if (typeof state.revision !== "string" || !state.revision)
+      throw new Error("Mutation result has no reviewable revision.");
+    const imageSlideIndexes = state.images
+      .map((image) => image.slideIndex)
+      .sort((left, right) => left - right);
+    if (
+      JSON.stringify(imageSlideIndexes) !== JSON.stringify(slideIndexes) ||
+      state.images.some(
+        (image) =>
+          image.pngBytes.length < 4 ||
+          image.pngBytes[0] !== 137 ||
+          image.pngBytes[1] !== 80 ||
+          image.pngBytes[2] !== 78 ||
+          image.pngBytes[3] !== 71,
+      )
+    )
+      throw new Error(
+        "Mutation result does not include one fresh PNG for every changed slide.",
+      );
+    pendingReview = {
+      revision: state.revision,
+      slideIndexes,
+      introducedIssueCount:
+        state.layoutAudit?.introducedIssueCount ??
+        state.layoutAudit?.introducedIssues?.length ??
+        0,
+    };
+    return true;
+  };
   const authorize = (
     command: NativeEditCommand,
     state: NativeObservation,
@@ -261,15 +313,20 @@ export async function runNativeTurn(
             type: "function",
             name: "native_review",
             description:
-              "Record a visual review of the latest changed slide. This is not user approval.",
+              "Record a visual review of the latest mutation. Inspect every returned changed-slide screenshot and pass exactly those changedSlideIndexes. This is not user approval.",
             inputSchema: {
               type: "object",
               additionalProperties: false,
               properties: {
                 approved: { type: "boolean" },
                 problems: { type: "array", items: { type: "string" } },
+                reviewedSlideIndexes: {
+                  type: "array",
+                  items: { type: "integer", minimum: 0 },
+                  uniqueItems: true,
+                },
               },
-              required: ["approved", "problems"],
+              required: ["approved", "problems", "reviewedSlideIndexes"],
             },
           },
         ],
@@ -333,6 +390,8 @@ export async function runNativeTurn(
                 );
                 if (afterCount <= beforeCount)
                   throw new Error("generated_image_was_not_inserted");
+                if (!registerMutationEvidence(observed))
+                  throw new Error("generated_image_has_no_visual_evidence");
                 generatedImageInserted = true;
                 changed = true;
                 reviewed = false;
@@ -352,10 +411,18 @@ export async function runNativeTurn(
               )
                 throw new Error("Invalid detail slide.");
               input.onTool("현재 슬라이드 확인");
-              observed = await input.host.call(
+              const nextObservation = await input.host.call(
                 { operation: "observe", detailSlideIndex },
                 signal,
               );
+              if (
+                pendingReview &&
+                nextObservation.revision !== pendingReview.revision
+              ) {
+                pendingReview = undefined;
+                reviewed = false;
+              }
+              observed = nextObservation;
               return content(observed);
             }
             if (name === "native_edit") {
@@ -380,8 +447,10 @@ export async function runNativeTurn(
                 },
                 signal,
               );
-              changed = true;
-              reviewed = false;
+              if (registerMutationEvidence(observed)) {
+                changed = true;
+                reviewed = false;
+              }
               return content(observed);
             }
             if (name === "native_batch_edit") {
@@ -428,8 +497,10 @@ export async function runNativeTurn(
                 signal,
               );
               if (!batch.dryRun) {
-                changed = true;
-                reviewed = false;
+                if (registerMutationEvidence(observed)) {
+                  changed = true;
+                  reviewed = false;
+                }
               }
               return content(observed);
             }
@@ -439,13 +510,52 @@ export async function runNativeTurn(
               const result = args as {
                 approved?: boolean;
                 problems?: unknown[];
+                reviewedSlideIndexes?: unknown[];
               };
               if (
                 typeof result.approved !== "boolean" ||
                 !Array.isArray(result.problems) ||
-                result.problems.some((p) => typeof p !== "string")
+                result.problems.some((p) => typeof p !== "string") ||
+                !Array.isArray(result.reviewedSlideIndexes) ||
+                result.reviewedSlideIndexes.some(
+                  (slideIndex) => !Number.isInteger(slideIndex),
+                )
               )
                 throw new Error("Invalid review.");
+              if (
+                !pendingReview ||
+                observed.revision !== pendingReview.revision
+              )
+                throw new Error("The visual review evidence is stale.");
+              const reviewedSlideIndexes = [
+                ...new Set(result.reviewedSlideIndexes as number[]),
+              ].sort((left, right) => left - right);
+              if (
+                JSON.stringify(reviewedSlideIndexes) !==
+                JSON.stringify(pendingReview.slideIndexes)
+              )
+                throw new Error(
+                  "Every changed slide must be included in the visual review.",
+                );
+              const current = await input.host.call(
+                { operation: "observe", detailSlideIndex: null },
+                signal,
+              );
+              if (current.revision !== pendingReview.revision) {
+                observed = current;
+                pendingReview = undefined;
+                reviewed = false;
+                throw new Error("The visual review evidence is stale.");
+              }
+              observed = current;
+              if (result.approved && result.problems.length > 0)
+                throw new Error(
+                  "A visual review cannot approve while reporting problems.",
+                );
+              if (result.approved && pendingReview.introducedIssueCount > 0)
+                throw new Error(
+                  "A visual review cannot approve newly introduced layout issues.",
+                );
               reviewed = result.approved && result.problems.length === 0;
               input.onTool(
                 reviewed ? "수정 화면 확인 완료" : "수정 화면 재검토 필요",

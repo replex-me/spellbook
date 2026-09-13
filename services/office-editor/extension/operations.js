@@ -2,7 +2,7 @@
  * JavaScript. This function is serialized by cool.callRemote and runs against
  * the same open Collabora document the user is editing.
  */
-function presentDocumentOperation(request) {
+function spellbookDocumentOperation(request) {
   const enginePatchLevel = "__SPELLBOOK_ENGINE_PATCH_LEVEL__";
   const patchLevelMatch = /^undo-v([1-9][0-9]*)$/.exec(enginePatchLevel);
   const enginePatchVersion = patchLevelMatch ? Number(patchLevelMatch[1]) : 0;
@@ -18,8 +18,28 @@ function presentDocumentOperation(request) {
   const patchedSlideLayoutEngine = hasEnginePatch(6);
   const patchedSlideTransitionEngine = hasEnginePatch(7);
   const patchedAnimationTimingEngine = hasEnginePatch(8);
+  const patchedSlideInsertionEngine = hasEnginePatch(9);
   if (request.expiresAt && Date.now() > request.expiresAt)
     throw new Error("expired_operation");
+  const mutationContracts = request.mutationContracts;
+  if (!mutationContracts || typeof mutationContracts !== "object")
+    throw new Error("native_mutation_contract_unavailable");
+  const mutationContractFor = (operation) => {
+    const contract = mutationContracts[operation];
+    if (!contract || typeof contract !== "object")
+      throw new Error("unsupported_native_operation");
+    if (contract.availability === "format_excluded")
+      throw new Error("operation_not_supported_for_pptx");
+    if (
+      !Number.isInteger(contract.minEnginePatch) ||
+      contract.minEnginePatch < 0 ||
+      enginePatchVersion < contract.minEnginePatch
+    )
+      throw new Error(
+        `native_engine_patch_level_${contract.minEnginePatch}_required`,
+      );
+    return contract;
+  };
 
   const desktop = uno.idl.com.sun.star.frame.Desktop.create(
     uno.componentContext,
@@ -94,7 +114,10 @@ function presentDocumentOperation(request) {
       prop(
         "DataJson",
         uno.type.string,
-        JSON.stringify({ Transforms: { SlideCommands: commands } }),
+        JSON.stringify({
+          Strict: true,
+          Transforms: { SlideCommands: commands },
+        }),
       ),
     ]);
   const activateSlide = (slideIndex) =>
@@ -126,6 +149,20 @@ function presentDocumentOperation(request) {
     } catch (_) {
       return safeProperty(shape, name);
     }
+  };
+  // The public command contract follows PowerPoint and expresses character
+  // spacing in points. LibreOffice stores SvxKerningItem values in twips, but
+  // the native text transform accepts 1/100 mm before converting to twips.
+  // Keep those boundaries explicit so observations never leak engine units
+  // and table-cell edits do not accidentally treat 1/100 mm as twips.
+  const pointsToKerningTwips = (value) => Math.round(Number(value) * 20);
+  const pointsToKerningMm100 = (value) =>
+    Math.round((Number(value) * 2540) / 72);
+  const mm100ToKerningTwips = (value) => Math.round((Number(value) * 72) / 127);
+  const kerningTwipsToPoints = (value) => {
+    if (value === null || value === undefined) return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric / 20 : null;
   };
   const stableJson = (value) => {
     const normalize = (candidate) => {
@@ -164,8 +201,9 @@ function presentDocumentOperation(request) {
     // (often speaker notes) instead of the real later difference.
     return null;
   };
+  const documentStateJson = stableJson;
   const revisionOf = (value) => {
-    const text = stableJson(value);
+    const text = documentStateJson(value);
     let first = 2166136261;
     let second = 2166136261;
     for (let index = 0; index < text.length; index++) {
@@ -236,7 +274,9 @@ function presentDocumentOperation(request) {
             strikethrough: safeProperty(cell, "CharStrikeout"),
             textShadow: safeProperty(cell, "CharShadowed"),
             color: safeProperty(cell, "CharColor"),
-            characterSpacing: safeProperty(cell, "CharKerning"),
+            characterSpacing: kerningTwipsToPoints(
+              safeProperty(cell, "CharKerning"),
+            ),
             paragraphAlignment: safeProperty(cell, "ParaAdjust"),
             textMargins: {
               left: safeProperty(cell, "TextLeftDistance"),
@@ -324,7 +364,9 @@ function presentDocumentOperation(request) {
               strikethrough: safeProperty(portion, "CharStrikeout"),
               shadow: safeProperty(portion, "CharShadowed"),
               color: safeProperty(portion, "CharColor"),
-              spacing: safeProperty(portion, "CharKerning"),
+              spacing: kerningTwipsToPoints(
+                safeProperty(portion, "CharKerning"),
+              ),
               escapement: safeProperty(portion, "CharEscapement"),
               escapementHeight: safeProperty(portion, "CharEscapementHeight"),
               locale: safeProperty(portion, "CharLocale"),
@@ -863,7 +905,9 @@ function presentDocumentOperation(request) {
               top: safeProperty(shape, "TextUpperDistance"),
               bottom: safeProperty(shape, "TextLowerDistance"),
             },
-            characterSpacing: safeTextProperty(shape, "CharKerning"),
+            characterSpacing: kerningTwipsToPoints(
+              safeTextProperty(shape, "CharKerning"),
+            ),
             scriptPosition: {
               escapement: safeTextProperty(shape, "CharEscapement"),
               relativeHeight: safeTextProperty(shape, "CharEscapementHeight"),
@@ -1184,6 +1228,54 @@ function presentDocumentOperation(request) {
       introducedIssues,
     };
   };
+  const visualEvidence = (
+    previous,
+    next,
+    requestedSlideIndexes,
+    fallbackSlideIndex,
+    suppressCapture = false,
+  ) => {
+    const changed =
+      documentStateJson(previous.slides) !== documentStateJson(next.slides);
+    const changedSlideIndexes = changed
+      ? [
+          ...new Set(
+            requestedSlideIndexes.filter(
+              (slideIndex) =>
+                Number.isInteger(slideIndex) &&
+                slideIndex >= 0 &&
+                slideIndex < next.slides.length,
+            ),
+          ),
+        ].sort((left, right) => left - right)
+      : [];
+    if (
+      changed &&
+      changedSlideIndexes.length === 0 &&
+      Number.isInteger(fallbackSlideIndex) &&
+      fallbackSlideIndex >= 0 &&
+      fallbackSlideIndex < next.slides.length
+    )
+      changedSlideIndexes.push(fallbackSlideIndex);
+    const captureSlideIndexes = changedSlideIndexes.length
+      ? changedSlideIndexes
+      : [fallbackSlideIndex].filter(
+          (slideIndex) =>
+            Number.isInteger(slideIndex) &&
+            slideIndex >= 0 &&
+            slideIndex < next.slides.length,
+        );
+    return {
+      changedSlideIndexes,
+      images: suppressCapture
+        ? []
+        : captureSlideIndexes.map((slideIndex) => capture(slideIndex)),
+      visualEvidenceComplete:
+        !changed ||
+        (!suppressCapture &&
+          captureSlideIndexes.length === changedSlideIndexes.length),
+    };
+  };
 
   const detailSlideForCommand = (command) => {
     if (
@@ -1210,7 +1302,13 @@ function presentDocumentOperation(request) {
     const result = (state, slideIndex) => ({
       ...state,
       layoutAudit: withAuditDelta(before, state),
-      images: request.suppressCapture ? [] : [capture(slideIndex)],
+      ...visualEvidence(
+        before,
+        state,
+        [slideIndex],
+        slideIndex,
+        request.suppressCapture,
+      ),
     });
     if (request.operation === "observe")
       return result(before, before.textDetails.slideIndex);
@@ -1225,38 +1323,23 @@ function presentDocumentOperation(request) {
     if (
       typeof request.expectedRevision === "string"
         ? before.revision !== request.expectedRevision
-        : stableJson(before.slides) !== stableJson(expectedSlides)
+        : documentStateJson(before.slides) !== documentStateJson(expectedSlides)
     )
       throw new Error("document_changed_observe_again");
 
     const command = request.command;
     if (!command || typeof command.op !== "string")
       throw new Error("invalid_command");
-    if (
-      [
-        "set_background",
-        "set_table_cell",
-        "rename_slide",
-        "set_slide_hidden",
-      ].includes(command.op) &&
-      !patchedUndoEngine
-    )
-      throw new Error("native_engine_patch_required");
+    const mutationContract = mutationContractFor(command.op);
     const permission = request.permission;
     if (!permission || permission.mode === "read_only")
       throw new Error("read_only");
     const slideOperation = [
-      "insert_slide",
-      "duplicate_slide",
-      "delete_slide",
-      "move_slide",
-      "rename_slide",
-      "set_slide_hidden",
-      "set_slide_layout",
-      "set_background",
-      "set_speaker_notes",
-      "set_slide_transition",
-    ].includes(command.op);
+      "slide_structure",
+      "slide_properties",
+      "speaker_notes",
+      "slide_transition",
+    ].includes(mutationContract.family);
     if (slideOperation) {
       const slideIndex = command.slideIndex;
       if (
@@ -1322,6 +1405,8 @@ function presentDocumentOperation(request) {
         );
       if (command.op === "set_slide_layout" && !patchedSlideLayoutEngine)
         throw new Error("native_engine_slide_layout_patch_required");
+      if (command.op === "insert_slide" && !patchedSlideInsertionEngine)
+        throw new Error("native_engine_slide_insertion_patch_required");
       const supportedLayouts = [
         0, 1, 3, 12, 14, 15, 16, 18, 19, 20, 27, 28, 29, 30, 32, 34,
       ];
@@ -1337,7 +1422,7 @@ function presentDocumentOperation(request) {
       if (command.op === "insert_slide")
         transformSlides([
           { JumpToSlide: slideIndex },
-          { InsertMasterSlide: 0 },
+          { InsertMasterSlide: before.slides[slideIndex].masterIndex },
         ]);
       else if (command.op === "duplicate_slide")
         transformSlides([{ DuplicateSlide: slideIndex }]);
@@ -1432,7 +1517,8 @@ function presentDocumentOperation(request) {
                           })
                         : after.slides[pageIndexAfter()]?.backgroundColor ===
                           command.color;
-      const changed = stableJson(before.slides) !== stableJson(after.slides);
+      const changed =
+        documentStateJson(before.slides) !== documentStateJson(after.slides);
       if (
         !applied ||
         (changed &&
@@ -1643,7 +1729,10 @@ function presentDocumentOperation(request) {
           }
           while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
           const rolledBack = read();
-          if (stableJson(rolledBack.slides) !== stableJson(before.slides))
+          if (
+            documentStateJson(rolledBack.slides) !==
+            documentStateJson(before.slides)
+          )
             throw new Error(
               `add_table_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}`,
             );
@@ -1782,7 +1871,8 @@ function presentDocumentOperation(request) {
       controller.select(collection);
       dispatch(unoCommand);
       const after = read();
-      const changed = stableJson(before.slides) !== stableJson(after.slides);
+      const changed =
+        documentStateJson(before.slides) !== documentStateJson(after.slides);
       const grouped =
         command.op !== "group" ||
         after.slides[slideIndex].topLevelElementCount ===
@@ -1887,9 +1977,10 @@ function presentDocumentOperation(request) {
         afterEffect.delay === command.delay &&
         afterEffect.start === command.start;
       const unrelatedChanged =
-        stableJson(after.masters) !== stableJson(before.masters) ||
-        stableJson(withoutAnimations(after.slides)) !==
-          stableJson(withoutAnimations(before.slides)) ||
+        documentStateJson(after.masters) !==
+          documentStateJson(before.masters) ||
+        documentStateJson(withoutAnimations(after.slides)) !==
+          documentStateJson(withoutAnimations(before.slides)) ||
         stableJson(otherEffects(after)) !== stableJson(otherEffects(before));
       if (
         !applied ||
@@ -1986,7 +2077,7 @@ function presentDocumentOperation(request) {
           const next = after.slides[index]?.elements.find(
             (value) => value.elementId === candidate.elementId,
           );
-          return stableJson(candidate) !== stableJson(next);
+          return documentStateJson(candidate) !== documentStateJson(next);
         }),
       );
       const applied = afterParagraph?.text === expectedParagraph;
@@ -2021,12 +2112,12 @@ function presentDocumentOperation(request) {
       if (element.parentElementId !== null || element.text === null)
         throw new Error("unsupported_character_spacing_target");
 
-      // PowerPoint exposes character spacing in points. LibreOffice's
-      // CharKerning value and .uno:Spacing argument use 1/100 mm, so use the
-      // same conversion as the Impress character-spacing sidebar instead of
-      // writing a shape-level text property. The typed engine command applies
-      // only this attribute to every run and snapshots the text object for Undo.
-      const expectedSpacing = Math.round((command.spacing * 2540) / 72);
+      // The typed engine command accepts 1/100 mm, then stores kerning in
+      // integer twips. Readback is normalized back to PowerPoint points.
+      const nativeSpacing = pointsToKerningMm100(command.spacing);
+      const expectedSpacing = kerningTwipsToPoints(
+        mm100ToKerningTwips(nativeSpacing),
+      );
       const beforeDetails = read(slideIndex);
       const beforePortions =
         beforeDetails.textDetails.elements
@@ -2048,7 +2139,7 @@ function presentDocumentOperation(request) {
         { JumpToSlide: slideIndex },
         {
           [`SetTextProperties.${objectIndex}`]: {
-            Kerning: expectedSpacing,
+            Kerning: nativeSpacing,
           },
         },
       ]);
@@ -2065,7 +2156,7 @@ function presentDocumentOperation(request) {
           const next = after.slides[index]?.elements.find(
             (value) => value.elementId === candidate.elementId,
           );
-          return stableJson(candidate) !== stableJson(next);
+          return documentStateJson(candidate) !== documentStateJson(next);
         }),
       );
       const applied =
@@ -2084,7 +2175,9 @@ function presentDocumentOperation(request) {
           unrelatedChanged
             ? "unexpected_edit_scope"
             : !applied
-              ? "native_command_not_applied"
+              ? `native_command_not_applied:expected_${expectedSpacing}:observed_${afterPortions
+                  .map((portion) => Number(portion.spacing ?? 0))
+                  .join(",")}`
               : "native_undo_not_recorded",
         );
       }
@@ -2142,7 +2235,7 @@ function presentDocumentOperation(request) {
           const next = after.slides[index]?.elements.find(
             (value) => value.elementId === candidate.elementId,
           );
-          return stableJson(candidate) !== stableJson(next);
+          return documentStateJson(candidate) !== documentStateJson(next);
         }),
       );
       const applied = hasScript(afterPortions, expectedScript);
@@ -2482,12 +2575,15 @@ function presentDocumentOperation(request) {
         value ? 1 : 0,
       );
       setOptional("textShadow", "CharShadowed", "textShadow");
-      setOptional(
-        "characterSpacing",
-        "CharKerning",
-        "characterSpacing",
-        (value) => Math.round((value * 2540) / 72),
-      );
+      if (
+        format.characterSpacing !== null &&
+        format.characterSpacing !== undefined
+      ) {
+        properties.CharKerning = pointsToKerningTwips(format.characterSpacing);
+        expected.characterSpacing = kerningTwipsToPoints(
+          properties.CharKerning,
+        );
+      }
       setOptional(
         "paragraphAlignment",
         "ParaAdjust",
@@ -2630,8 +2726,9 @@ function presentDocumentOperation(request) {
         }));
         const applied = stableJson(afterCell) === stableJson(expectedCell);
         const unrelatedChanged =
-          stableJson(after.masters) !== stableJson(before.masters) ||
-          stableJson(after.slides) !== stableJson(expectedSlides);
+          documentStateJson(after.masters) !==
+            documentStateJson(before.masters) ||
+          documentStateJson(after.slides) !== documentStateJson(expectedSlides);
         const undoActionsAdded =
           undo.getAllUndoActionTitles().length - undoCount;
         if (
@@ -2657,8 +2754,10 @@ function presentDocumentOperation(request) {
         while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
         const rolledBack = read();
         if (
-          stableJson(rolledBack.slides) !== stableJson(before.slides) ||
-          stableJson(rolledBack.masters) !== stableJson(before.masters)
+          documentStateJson(rolledBack.slides) !==
+            documentStateJson(before.slides) ||
+          documentStateJson(rolledBack.masters) !==
+            documentStateJson(before.masters)
         )
           throw new Error(
             `table_cell_format_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}`,
@@ -2769,8 +2868,9 @@ function presentDocumentOperation(request) {
       }));
       const applied = stableJson(target) === stableJson(expectedTarget);
       const unrelatedChanged =
-        stableJson(after.masters) !== stableJson(before.masters) ||
-        stableJson(after.slides) !== stableJson(expectedSlides);
+        documentStateJson(after.masters) !==
+          documentStateJson(before.masters) ||
+        documentStateJson(after.slides) !== documentStateJson(expectedSlides);
       if (
         !applied ||
         unrelatedChanged ||
@@ -3132,8 +3232,9 @@ function presentDocumentOperation(request) {
           ),
         }));
         const unrelatedChanged =
-          stableJson(after.masters) !== stableJson(before.masters) ||
-          stableJson(after.slides) !== stableJson(expectedSlides);
+          documentStateJson(after.masters) !==
+            documentStateJson(before.masters) ||
+          documentStateJson(after.slides) !== documentStateJson(expectedSlides);
         const undoActionsAdded =
           undo.getAllUndoActionTitles().length - undoCount;
         if (
@@ -3166,8 +3267,10 @@ function presentDocumentOperation(request) {
         while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
         const rolledBack = read();
         if (
-          stableJson(rolledBack.slides) !== stableJson(before.slides) ||
-          stableJson(rolledBack.masters) !== stableJson(before.masters)
+          documentStateJson(rolledBack.slides) !==
+            documentStateJson(before.slides) ||
+          documentStateJson(rolledBack.masters) !==
+            documentStateJson(before.masters)
         )
           throw new Error(
             `chart_type_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}`,
@@ -3391,8 +3494,9 @@ function presentDocumentOperation(request) {
         }));
         const applied = stableJson(target) === stableJson(expectedTarget);
         const unrelatedChanged =
-          stableJson(after.masters) !== stableJson(before.masters) ||
-          stableJson(after.slides) !== stableJson(expectedSlides);
+          documentStateJson(after.masters) !==
+            documentStateJson(before.masters) ||
+          documentStateJson(after.slides) !== documentStateJson(expectedSlides);
         const undoActionsAdded =
           undo.getAllUndoActionTitles().length - undoCount;
         if (
@@ -3427,8 +3531,10 @@ function presentDocumentOperation(request) {
         while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
         const rolledBack = read();
         if (
-          stableJson(rolledBack.slides) !== stableJson(before.slides) ||
-          stableJson(rolledBack.masters) !== stableJson(before.masters)
+          documentStateJson(rolledBack.slides) !==
+            documentStateJson(before.slides) ||
+          documentStateJson(rolledBack.masters) !==
+            documentStateJson(before.masters)
         )
           throw new Error(
             `chart_operation_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}`,
@@ -3625,7 +3731,8 @@ function presentDocumentOperation(request) {
                           range.endColumn === command.endColumn,
                       )
                     : command.op === "split_table_cell"
-                      ? stableJson(nextTable) !== stableJson(element.table) &&
+                      ? documentStateJson(nextTable) !==
+                          documentStateJson(element.table) &&
                         !nextTable?.mergedRanges?.some(
                           (range) =>
                             range.startRow <= command.row &&
@@ -3651,7 +3758,10 @@ function presentDocumentOperation(request) {
         if (!request.transactionActive) {
           while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
           const rolledBack = read();
-          if (stableJson(rolledBack.slides) !== stableJson(before.slides))
+          if (
+            documentStateJson(rolledBack.slides) !==
+            documentStateJson(before.slides)
+          )
             throw new Error(
               `table_operation_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}`,
             );
@@ -4013,8 +4123,10 @@ function presentDocumentOperation(request) {
                                           ? target?.rotation ===
                                             Math.round(command.degrees * 100)
                                           : structuralOrDispatch
-                                            ? stableJson(before.slides) !==
-                                              stableJson(after.slides)
+                                            ? documentStateJson(
+                                                before.slides,
+                                              ) !==
+                                              documentStateJson(after.slides)
                                             : command.op === "duplicate_element"
                                               ? after.slides[slideIndex]
                                                   .topLevelElementCount ===
@@ -4084,7 +4196,7 @@ function presentDocumentOperation(request) {
   if (
     typeof request.expectedRevision === "string"
       ? before.revision !== request.expectedRevision
-      : stableJson(before.slides) !== stableJson(expectedSlides)
+      : documentStateJson(before.slides) !== documentStateJson(expectedSlides)
   )
     throw new Error("document_changed_observe_again");
   if (
@@ -4093,14 +4205,10 @@ function presentDocumentOperation(request) {
     request.commands.length > 50
   )
     throw new Error("invalid_transaction");
-  const identityReplacingOperations = new Set([
-    "set_chart_data",
-    "set_chart_type",
-  ]);
   if (
     request.commands.length > 1 &&
-    request.commands.some((command) =>
-      identityReplacingOperations.has(command.op),
+    request.commands.some(
+      (command) => mutationContractFor(command.op).identityEffect === "replace",
     )
   )
     throw new Error("identity_replacing_operation_must_be_isolated");
@@ -4116,23 +4224,17 @@ function presentDocumentOperation(request) {
       reference: pages.getByIndex(slideIndex),
     }),
   );
-  const structureChangingSlideOperations = new Set([
-    "insert_slide",
-    "duplicate_slide",
-    "delete_slide",
-    "move_slide",
-  ]);
-  const transactionalSlideOperations = new Set([
-    ...structureChangingSlideOperations,
-    "set_slide_layout",
-    "set_speaker_notes",
-    "set_slide_transition",
-  ]);
+  const isStructureChangingSlideOperation = (operation) =>
+    mutationContractFor(operation).family === "slide_structure";
+  const isTransactionalSlideOperation = (operation) => {
+    const contract = mutationContractFor(operation);
+    return contract.domain === "slide_transform" && contract.target === "slide";
+  };
   const hasStructureChangingSlideCommand = request.commands.some((command) =>
-    structureChangingSlideOperations.has(command.op),
+    isStructureChangingSlideOperation(command.op),
   );
   const hasNonSlideCommand = request.commands.some(
-    (command) => !transactionalSlideOperations.has(command.op),
+    (command) => !isTransactionalSlideOperation(command.op),
   );
   if (hasStructureChangingSlideCommand && hasNonSlideCommand)
     throw new Error("mixed_slide_structure_and_content_transaction");
@@ -4180,6 +4282,8 @@ function presentDocumentOperation(request) {
       ...before,
       layoutAudit: withAuditDelta(before, before),
       images: [capture(before.activeSlide)],
+      changedSlideIndexes: [],
+      visualEvidenceComplete: true,
       transaction: {
         status: "validated",
         commandCount: request.commands.length,
@@ -4237,7 +4341,7 @@ function presentDocumentOperation(request) {
   const undoCount = undo.getAllUndoActionTitles().length;
   if (
     request.commands.every((command) =>
-      transactionalSlideOperations.has(command.op),
+      isTransactionalSlideOperation(command.op),
     )
   ) {
     const initialPageReferences = Array.from(
@@ -4251,6 +4355,8 @@ function presentDocumentOperation(request) {
     const expectedLayouts = [];
     const expectedNotes = [];
     const expectedTransitions = [];
+    const expectedNames = [];
+    const expectedVisibility = [];
     const findVirtualPage = (reference) =>
       virtualPages.findIndex(
         (entry) =>
@@ -4261,7 +4367,14 @@ function presentDocumentOperation(request) {
       const slideIndex = findVirtualPage(reference);
       if (slideIndex < 0) throw new Error("transaction_slide_no_longer_exists");
       if (command.op === "insert_slide") {
-        transforms.push({ JumpToSlide: slideIndex }, { InsertMasterSlide: 0 });
+        if (!patchedSlideInsertionEngine)
+          throw new Error("native_engine_slide_insertion_patch_required");
+        transforms.push(
+          { JumpToSlide: slideIndex },
+          {
+            InsertMasterSlide: before.slides[command.slideIndex].masterIndex,
+          },
+        );
         virtualPages.splice(slideIndex + 1, 0, { created: true });
       } else if (command.op === "duplicate_slide") {
         transforms.push({ DuplicateSlide: slideIndex });
@@ -4294,6 +4407,18 @@ function presentDocumentOperation(request) {
           { SetNotes: command.text },
         );
         expectedNotes.push({ reference, text: command.text });
+      } else if (command.op === "rename_slide") {
+        transforms.push(
+          { JumpToSlide: slideIndex },
+          { RenameSlide: command.name.trim() },
+        );
+        expectedNames.push({ reference, name: command.name.trim() });
+      } else if (command.op === "set_slide_hidden") {
+        transforms.push(
+          { JumpToSlide: slideIndex },
+          { SetSlideVisible: !command.hidden },
+        );
+        expectedVisibility.push({ reference, visible: !command.hidden });
       } else if (command.op === "set_slide_transition") {
         const preset = slideTransitionPresets[command.transitionEffect];
         const transition = {
@@ -4344,27 +4469,58 @@ function presentDocumentOperation(request) {
           );
         },
       );
-      const changed = stableJson(before.slides) !== stableJson(after.slides);
+      const namesApplied = expectedNames.every(({ reference, name }) => {
+        const index = currentPageIndex(reference);
+        return after.slides[index]?.name === name;
+      });
+      const visibilityApplied = expectedVisibility.every(
+        ({ reference, visible }) =>
+          safeProperty(reference, "Visible") === visible,
+      );
+      const changed =
+        documentStateJson(before.slides) !== documentStateJson(after.slides);
       const undoActionsAdded = undo.getAllUndoActionTitles().length - undoCount;
       if (
         !orderApplied ||
         !layoutsApplied ||
         !notesApplied ||
         !transitionsApplied ||
+        !namesApplied ||
+        !visibilityApplied ||
         (changed && undoActionsAdded !== 1)
       )
         throw new Error(
           !orderApplied ||
           !layoutsApplied ||
           !notesApplied ||
-          !transitionsApplied
+          !transitionsApplied ||
+          !namesApplied ||
+          !visibilityApplied
             ? "native_command_not_applied"
             : "transaction_undo_not_recorded",
         );
+      const affectedSlideIndexes = [];
+      for (const entry of virtualPages) {
+        if (entry.created)
+          affectedSlideIndexes.push(virtualPages.indexOf(entry));
+      }
+      for (const command of request.commands) {
+        const reference = pageReferences[command.slideIndex];
+        if (!reference || command.op === "delete_slide") continue;
+        try {
+          affectedSlideIndexes.push(currentPageIndex(reference));
+        } catch (_) {}
+      }
+      const evidence = visualEvidence(
+        before,
+        after,
+        affectedSlideIndexes,
+        Math.min(after.activeSlide, after.slides.length - 1),
+      );
       return {
         ...after,
         layoutAudit: withAuditDelta(before, after),
-        images: [capture(after.activeSlide)],
+        ...evidence,
         transaction: {
           status: changed ? "applied" : "unchanged",
           commandCount: request.commands.length,
@@ -4375,7 +4531,10 @@ function presentDocumentOperation(request) {
     } catch (error) {
       while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
       const rolledBack = read();
-      if (stableJson(rolledBack.slides) !== stableJson(before.slides))
+      if (
+        documentStateJson(rolledBack.slides) !==
+        documentStateJson(before.slides)
+      )
         throw new Error(
           `transaction_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}:expected_${before.revision}:actual_${rolledBack.revision}`,
         );
@@ -4416,13 +4575,30 @@ function presentDocumentOperation(request) {
     undo.leaveUndoContext();
     contextOpen = false;
     const after = read();
-    const changed = stableJson(before.slides) !== stableJson(after.slides);
+    const changed =
+      documentStateJson(before.slides) !== documentStateJson(after.slides);
     if (changed && undo.getAllUndoActionTitles().length <= undoCount)
       throw new Error("transaction_undo_not_recorded");
+    const affectedSlideIndexes = request.commands.flatMap((command) => {
+      if (Number.isInteger(command.slideIndex)) return [command.slideIndex];
+      if (typeof command.elementId === "string")
+        return [Number(command.elementId.split("/")[0])];
+      if (Array.isArray(command.elementIds))
+        return command.elementIds.map((elementId) =>
+          Number(elementId.split("/")[0]),
+        );
+      return [];
+    });
+    const evidence = visualEvidence(
+      before,
+      after,
+      affectedSlideIndexes,
+      after.activeSlide,
+    );
     return {
       ...after,
       layoutAudit: withAuditDelta(before, after),
-      images: [capture(after.activeSlide)],
+      ...evidence,
       transaction: {
         status: changed ? "applied" : "unchanged",
         commandCount: request.commands.length,
@@ -4438,7 +4614,9 @@ function presentDocumentOperation(request) {
     }
     while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
     const rolledBack = read();
-    if (stableJson(rolledBack.slides) !== stableJson(before.slides))
+    if (
+      documentStateJson(rolledBack.slides) !== documentStateJson(before.slides)
+    )
       throw new Error(
         `transaction_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}:expected_${before.revision}:actual_${rolledBack.revision}`,
       );

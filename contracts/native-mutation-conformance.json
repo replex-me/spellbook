@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "enginePatchLevel": 9,
+  "executionOrder": [
+    "general-native-surface",
+    "table-structure",
+    "layout-master",
+    "chart-data",
+    "chart-type",
+    "picture-crop",
+    "table-style",
+    "slide-transition",
+    "animation-timing"
+  ],
+  "genericProviders": {
+    "change_budget": {
+      "kind": "document_tool",
+      "command": "validate-change-budget",
+      "baseline": "same_engine_no_edit_save",
+      "candidate": "same_engine_mutated_save"
+    },
+    "visual": {
+      "kind": "native_agent_review_evidence",
+      "implementation": "apps/ai-connector/src/native-agent.ts",
+      "test": "apps/ai-connector/src/native-agent.test.ts",
+      "policy": "Every changed slide must have a fresh PNG, no introduced deterministic layout issue, and explicit model review coverage for the same revision."
+    },
+    "playback": {
+      "kind": "collabora_web_slideshow_evidence",
+      "implementation": "services/office-session-spike/slideshow-playback.mjs",
+      "test": "services/office-session-spike/slideshow-playback.test.mjs",
+      "families": ["slide_transition", "animation"],
+      "policy": "The edited timing data must reach Collabora's web slideshow runtime, create a real playback activity, render multiple frames, and reach its completion event in the same document session."
+    }
+  },
+  "nativeTests": {
+    "strict-transform-rollback": {
+      "minEnginePatch": 8,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testStrictDocumentMutationRollsBackPartialFailure",
+      "proves": ["failure_rollback"]
+    },
+    "insert-slide-inherits-layout": {
+      "minEnginePatch": 9,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureInsertSlideInheritsMasterLayout",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    },
+    "slide-multi-move-history": {
+      "minEnginePatch": 1,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureMultiMovePreservesObjectNames",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "object-properties-history": {
+      "minEnginePatch": 3,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureObjectPropertiesUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "object-lock-roundtrip": {
+      "minEnginePatch": 9,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testPptxObjectLocksRoundTrip",
+      "proves": ["save_reopen", "structure"]
+    },
+    "rename-slide-history": {
+      "minEnginePatch": 2,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testRenameSlideUndoRestoresUnnamedState",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "slide-visibility-history": {
+      "minEnginePatch": 2,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testTransformSlideVisibilityUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "text-range-history": {
+      "minEnginePatch": 4,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureTextRangePreservesFormatting",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "text-properties-history": {
+      "minEnginePatch": 3,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureTextPropertiesUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "text-shadow-roundtrip": {
+      "minEnginePatch": 9,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testPptxTextShadowRoundTrip",
+      "proves": ["save_reopen", "structure", "visual"]
+    },
+    "layout-master-history": {
+      "minEnginePatch": 6,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testTypedLayoutPreservesImportedMaster",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    },
+    "layout-animation-tree-history": {
+      "minEnginePatch": 9,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testTypedLayoutUndoRestoresAnimationTree",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    },
+    "graphic-crop-history": {
+      "minEnginePatch": 6,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureGraphicCropUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "slide-transition-history": {
+      "minEnginePatch": 7,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureSlideTransitionUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "animation-history": {
+      "minEnginePatch": 8,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureAnimationTimingUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "table-cell-history": {
+      "minEnginePatch": 6,
+      "target": "CppunitTest_sd_misc_tests",
+      "name": "testApiTableCellPropertyUndo",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "table-cell-text-history": {
+      "minEnginePatch": 2,
+      "target": "CppunitTest_sd_misc_tests",
+      "name": "testApiTableCellTextUndo",
+      "proves": ["single_undo", "exact_undo_redo"]
+    },
+    "table-insert-history": {
+      "minEnginePatch": 5,
+      "target": "CppunitTest_sd_misc_tests",
+      "name": "testApiTableInsertInheritsDimensions",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    }
+  },
+  "scenarios": {
+    "general-native-surface": {
+      "minEnginePatch": 5,
+      "source": "eval/public/downloads/ox-typical.pptx",
+      "sourceSha256": "9e577e380f7d19f4834639f35eaa0ea40ca3f287b99ea4fff0b697abeb66f034",
+      "apply": {
+        "script": "services/office-session-spike/probe-uno.mjs",
+        "env": {
+          "SPELLBOOK_PROBE_PATCHED_ENGINE": "1"
+        }
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-reopen.mjs",
+        "env": {
+          "SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL": "undo-v9"
+        }
+      },
+      "proves": [
+        "structure",
+        "preflight_no_mutation",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "failure_rollback",
+        "save_reopen"
+      ]
+    },
+    "layout-master": {
+      "minEnginePatch": 6,
+      "source": "eval/public/downloads/lo-master-layouts.pptx",
+      "sourceSha256": "900ca1955f5c78762f8599740378dfe1cbeced59747a6f59f200d08bf43b0d3a",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-layout-master.mjs"
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-layout-master-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "table-structure": {
+      "minEnginePatch": 5,
+      "source": "eval/public/downloads/lo-table-borders.pptx",
+      "sourceSha256": "137e3b9c380f965bb2650d6760f7c4d7c32f2b64ec3bc64c8150e9281363386f",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-table-structure.mjs"
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-table-structure-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "table-style": {
+      "minEnginePatch": 6,
+      "source": "eval/public/downloads/lo-table-borders.pptx",
+      "sourceSha256": "137e3b9c380f965bb2650d6760f7c4d7c32f2b64ec3bc64c8150e9281363386f",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-table-cell-format.mjs"
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-table-cell-format-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "chart-data": {
+      "minEnginePatch": 0,
+      "source": "eval/public/downloads/ox-chart-2d.pptx",
+      "sourceSha256": "dad57bde3989dbc48e5c52988773ccf74d1cf56af875e5366e4c92992ce258f3",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-chart-operation.mjs"
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-chart-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "chart-type": {
+      "minEnginePatch": 0,
+      "source": "eval/public/downloads/ox-chart-2d.pptx",
+      "sourceSha256": "dad57bde3989dbc48e5c52988773ccf74d1cf56af875e5366e4c92992ce258f3",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-chart-type-operation.mjs"
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-chart-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "picture-crop": {
+      "minEnginePatch": 6,
+      "source": "eval/public/downloads/lo-picture-crop.pptx",
+      "sourceSha256": "56025c102ed893688356f82207e14549a98e5bb1d394955a59bb805f0df22dd7",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-picture-crop-operation.mjs"
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-picture-crop-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "slide-transition": {
+      "minEnginePatch": 7,
+      "source": "eval/public/downloads/lo-transition-media.pptx",
+      "sourceSha256": "5809f88f8e4500f42582dd8a61ac9fb3dadb61b5cfc13ae854dd3eb69a6ee878",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-slide-transition.mjs"
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-slide-transition-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "animation-timing": {
+      "minEnginePatch": 8,
+      "source": "eval/public/downloads/lo-connector-animation.pptx",
+      "sourceSha256": "40d07c0c9433c65c640bc6d4d5f25228735dc15d1bb719530cad0662a926a618",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-animation-timing.mjs"
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-animation-timing-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    }
+  },
+  "fixtures": {
+    "slide-structure": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": [
+        "strict-transform-rollback",
+        "insert-slide-inherits-layout",
+        "slide-multi-move-history"
+      ]
+    },
+    "slide-properties": {
+      "scenarios": ["general-native-surface", "layout-master"],
+      "nativeTests": [
+        "strict-transform-rollback",
+        "rename-slide-history",
+        "slide-visibility-history",
+        "layout-master-history",
+        "layout-animation-tree-history"
+      ]
+    },
+    "speaker-notes": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": ["strict-transform-rollback"]
+    },
+    "object-creation": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": []
+    },
+    "object-geometry": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": []
+    },
+    "object-style": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": [
+        "strict-transform-rollback",
+        "object-properties-history",
+        "object-lock-roundtrip"
+      ]
+    },
+    "object-text": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": [
+        "strict-transform-rollback",
+        "text-range-history",
+        "text-properties-history",
+        "text-shadow-roundtrip"
+      ]
+    },
+    "object-topology": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": []
+    },
+    "table-content": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": ["table-cell-text-history"]
+    },
+    "table-structure": {
+      "scenarios": ["table-structure"],
+      "nativeTests": ["table-insert-history"]
+    },
+    "table-style": {
+      "scenarios": ["table-style"],
+      "nativeTests": ["table-cell-history"]
+    },
+    "chart-model": {
+      "scenarios": ["chart-data", "chart-type"],
+      "nativeTests": []
+    },
+    "media-geometry": {
+      "scenarios": ["picture-crop"],
+      "nativeTests": ["graphic-crop-history"]
+    },
+    "slide-transition": {
+      "scenarios": ["slide-transition"],
+      "nativeTests": ["slide-transition-history"]
+    },
+    "animation-timing": {
+      "scenarios": ["animation-timing"],
+      "nativeTests": ["animation-history"]
+    }
+  }
+}

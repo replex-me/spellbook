@@ -1,0 +1,37 @@
+diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
+index 7f5e4c3b2..8a6f5d4c3 100644
+--- a/sd/qa/unit/uiimpress.cxx
++++ b/sd/qa/unit/uiimpress.cxx
+@@ -3860,5 +3860,12 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testRenameSlideUndoRestoresUnnamedState)
+     pImpressDocument->GetDocShell()->GetUndoManager()->Redo();
+     CPPUNIT_ASSERT_EQUAL(u"Custom slide name"_ustr, pPage->GetRealName());
++
++    saveAndReload(TestFilter::PPTX);
++    pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
++    CPPUNIT_ASSERT(pImpressDocument);
++    pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
++    CPPUNIT_ASSERT(pPage);
++    CPPUNIT_ASSERT_EQUAL(u"Custom slide name"_ustr, pPage->GetRealName());
+ }
+ 
+ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTransformSlideVisibilityUndoRedo)
+diff --git a/sd/source/filter/eppt/pptx-epptooxml.cxx b/sd/source/filter/eppt/pptx-epptooxml.cxx
+index 123456789..987654321 100644
+--- a/sd/source/filter/eppt/pptx-epptooxml.cxx
++++ b/sd/source/filter/eppt/pptx-epptooxml.cxx
+@@ -1864,7 +1864,14 @@ void PowerPointExport::ImplWriteSlide(sal_uInt32 nPageNum, sal_uInt32 nMasterNum
+ 
+     pFS->startElementNS(XML_p, XML_sld, pAttributes);
+ 
+-    pFS->startElementNS(XML_p, XML_cSld);
++    OUString aSlideName;
++    Reference<XNamed> xNamed(mXDrawPage, UNO_QUERY);
++    if (xNamed.is())
++        aSlideName = xNamed->getName();
++    if (aSlideName.isEmpty())
++        pFS->startElementNS(XML_p, XML_cSld);
++    else
++        pFS->startElementNS(XML_p, XML_cSld, XML_name, aSlideName);
+ 
+     // background
+     if (bHasBackground)

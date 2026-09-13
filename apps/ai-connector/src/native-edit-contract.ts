@@ -21,17 +21,50 @@ interface NativeEditContract {
     multiElement: string[];
     element: string[];
   };
+  mutationModel: {
+    version: string;
+    domains: Record<string, { atomicBoundary: string; description: string }>;
+    families: Record<
+      string,
+      {
+        domain: string;
+        undoProvider: string;
+        fixture: string;
+        verification: string[];
+        changeBudget: string[];
+      }
+    >;
+    operations: Record<
+      string,
+      {
+        family: string;
+        target: string;
+        execution: string;
+        identityEffect:
+          | "preserve"
+          | "create"
+          | "delete"
+          | "reorder"
+          | "reparent"
+          | "replace";
+        availability:
+          | "runtime_verified"
+          | "engine_patch_ready"
+          | "runtime_validation_required"
+          | "format_excluded";
+        minEnginePatch: number;
+      }
+    >;
+  };
   toolInputSchema: Record<string, unknown> & {
     properties: { op: { enum: string[] } };
   };
 }
 
+const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const contractsDirectory =
   process.env.SPELLBOOK_CONTRACTS_DIR ??
-  path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../../../contracts",
-  );
+  path.resolve(moduleDirectory, "../../../contracts");
 
 export const nativeEditContract = JSON.parse(
   readFileSync(
@@ -42,11 +75,16 @@ export const nativeEditContract = JSON.parse(
 
 const grouped = Object.values(nativeEditContract.operationGroups).flat();
 const declared = nativeEditContract.toolInputSchema.properties.op.enum;
+const mutationOperations = nativeEditContract.mutationModel.operations;
 if (
   !nativeEditContract.nativeUndoRequired ||
   new Set(grouped).size !== grouped.length ||
   grouped.length !== declared.length ||
-  grouped.some((operation) => !declared.includes(operation))
+  grouped.some((operation) => !declared.includes(operation)) ||
+  declared.some(
+    (operation) =>
+      mutationOperations[operation]?.availability !== "runtime_verified",
+  )
 )
   throw new Error("Invalid native edit capability contract.");
 
@@ -63,8 +101,16 @@ export const nativeElementOperations = new Set(
   nativeEditContract.operationGroups.element,
 );
 export const nativeIdentityReplacingOperations = new Set(
-  nativeEditContract.transaction.identityReplacingOperations,
+  Object.entries(mutationOperations)
+    .filter(
+      ([, contract]) =>
+        contract.availability === "runtime_verified" &&
+        contract.identityEffect === "replace",
+    )
+    .map(([operation]) => operation),
 );
+
+export const nativeMutationOperations = mutationOperations;
 
 export const nativeBatchEditSchema = {
   type: "object",

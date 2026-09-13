@@ -1,0 +1,389 @@
+--- a/sd/source/ui/view/drviews2.cxx
++++ b/sd/source/ui/view/drviews2.cxx
+@@ -26,6 +26,7 @@
+ #include <map>
+ #include <optional>
+ #include <set>
++#include <stdexcept>
+ #include <string_view>
+ #include <utility>
+ #include <vector>
+@@ -977,7 +978,82 @@
+     {
+         if (pPage)
+             maTouchedPages.insert(pPage);
++    }
++
++    void addUndo(std::unique_ptr<SfxUndoAction> pAction) const
++    {
++        if (mbUndo && pAction)
++            mpUndoManager->AddUndoAction(std::move(pAction));
++    }
++};
++
++// Owns the native history boundary of one document transform. Command
++// handlers only contribute typed Undo actions; this guard is the sole owner of
++// list-action lifetime, commit and failure rollback.
++class NativeMutationTransaction final
++{
++public:
++    NativeMutationTransaction(SfxUndoManager* pUndoManager, bool bUndo, ViewShellId nViewShellId)
++        : mpUndoManager(pUndoManager)
++        , mbUndo(bUndo)
++        , mnInitialDepth(bUndo ? pUndoManager->GetListActionDepth() : 0)
++        , mnInitialUndoCount(
++              bUndo ? pUndoManager->GetUndoActionCount(SfxUndoManager::TopLevel) : 0)
++    {
++        if (!mbUndo)
++            return;
++        mpUndoManager->EnterListAction(SdResId(STR_UNDO_TRANSFORM_DOCUMENT),
++                                       SdResId(STR_UNDO_TRANSFORM_DOCUMENT), 0,
++                                       nViewShellId);
++        mbOpen = true;
++    }
++
++    NativeMutationTransaction(const NativeMutationTransaction&) = delete;
++    NativeMutationTransaction& operator=(const NativeMutationTransaction&) = delete;
++
++    ~NativeMutationTransaction() { rollback(); }
++
++    void commit()
++    {
++        if (!mbOpen)
++            return;
++        if (mpUndoManager->GetListActionDepth() != mnInitialDepth + 1)
++            throw std::runtime_error("Unbalanced nested Undo context in document transform");
++        mpUndoManager->LeaveListAction();
++        mbOpen = false;
++        if (mpUndoManager->GetListActionDepth() != mnInitialDepth
++            || mpUndoManager->GetUndoActionCount(SfxUndoManager::TopLevel)
++                   > mnInitialUndoCount + 1)
++            throw std::runtime_error("Invalid Undo result from document transform");
++        mbCommitted = true;
++    }
++
++    void rollback() noexcept
++    {
++        if (!mbUndo || mbCommitted)
++            return;
++        while (mpUndoManager->GetListActionDepth() > mnInitialDepth)
++            mpUndoManager->LeaveListAction();
++        mbOpen = false;
++        while (mpUndoManager->GetUndoActionCount(SfxUndoManager::TopLevel)
++               > mnInitialUndoCount)
++        {
++            if (!mpUndoManager->Undo())
++                break;
++        }
++        SAL_WARN_IF(mpUndoManager->GetListActionDepth() != mnInitialDepth
++                        || mpUndoManager->GetUndoActionCount(SfxUndoManager::TopLevel)
++                               != mnInitialUndoCount,
++                    "sd", "Document transform rollback did not restore its Undo boundary");
+     }
++
++private:
++    SfxUndoManager* mpUndoManager;
++    bool mbUndo;
++    size_t mnInitialDepth;
++    size_t mnInitialUndoCount;
++    bool mbOpen = false;
++    bool mbCommitted = false;
+ };
+ 
+ // Slide visibility is document state, not slide-sorter selection state. Keep
+@@ -1053,7 +1129,7 @@
+     SdrLayerID aBg = rLayerAdmin.GetLayerID(sUNO_LayerName_background);
+     SdrLayerID aBgObj = rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects);
+     SdrLayerIDSet aVisibleLayers = pPg->TRG_GetMasterPageVisibleLayers();
+-    rCtx.mpUndoManager->AddUndoAction(std::make_unique<ModifyPageUndoAction>(
++    rCtx.addUndo(std::make_unique<ModifyPageUndoAction>(
+         *rCtx.mpDoc, pPg, rNewName, eNewLayout, aVisibleLayers.IsSet(aBg),
+         aVisibleLayers.IsSet(aBgObj), bPreserveMaster));
+ }
+@@ -1176,8 +1252,8 @@
+ 
+     if (rCtx.mbUndo)
+     {
+-        rCtx.mpDrawView->AddUndo(SdrUndoFactory::CreateUndoNewPage(*pPageStandard));
+-        rCtx.mpDrawView->AddUndo(SdrUndoFactory::CreateUndoNewPage(*pPageNote));
++        rCtx.addUndo(SdrUndoFactory::CreateUndoNewPage(*pPageStandard));
++        rCtx.addUndo(SdrUndoFactory::CreateUndoNewPage(*pPageNote));
+     }
+ }
+ 
+@@ -1225,9 +1301,9 @@
+             // Capture the notes page before removal.
+             SdPage* pDelNotes = rCtx.mpDoc->GetSdPage(nPageIdToDel, PageKind::Notes);
+             if (pDelNotes)
+-                rCtx.mpDrawView->AddUndo(SdrUndoFactory::CreateUndoDeletePage(*pDelNotes));
++                rCtx.addUndo(SdrUndoFactory::CreateUndoDeletePage(*pDelNotes));
+             if (pDelStd)
+-                rCtx.mpDrawView->AddUndo(SdrUndoFactory::CreateUndoDeletePage(*pDelStd));
++                rCtx.addUndo(SdrUndoFactory::CreateUndoDeletePage(*pDelStd));
+         }
+         rCtx.mpDoc->RemovePage(nPageIdToDel * 2 + 1);
+         rCtx.mpDoc->RemovePage(nPageIdToDel * 2 + 1);
+@@ -1290,7 +1366,7 @@
+         {
+             SdrPage* pMv = rCtx.mpDoc->GetPage(nMoveFrom * 2 + nFirst);
+             if (pMv)
+-                rCtx.mpDrawView->AddUndo(SdrUndoFactory::CreateUndoSetPageNum(
++                rCtx.addUndo(SdrUndoFactory::CreateUndoSetPageNum(
+                     *pMv, nMoveFrom * 2 + nFirst, nMoveTo * 2 + nFirst));
+         }
+         rCtx.mpDoc->MovePage(nMoveFrom * 2 + nFirst, nMoveTo * 2 + nFirst);
+@@ -1298,7 +1374,7 @@
+         {
+             SdrPage* pMv = rCtx.mpDoc->GetPage(nMoveFrom * 2 + nSecond);
+             if (pMv)
+-                rCtx.mpDrawView->AddUndo(SdrUndoFactory::CreateUndoSetPageNum(
++                rCtx.addUndo(SdrUndoFactory::CreateUndoSetPageNum(
+                     *pMv, nMoveFrom * 2 + nSecond, nMoveTo * 2 + nSecond));
+         }
+         rCtx.mpDoc->MovePage(nMoveFrom * 2 + nSecond, nMoveTo * 2 + nSecond);
+@@ -1359,9 +1435,9 @@
+     {
+         SdPage* pDupNotes = rCtx.mpDoc->GetSdPage(nDupSlideId + 1, PageKind::Notes);
+         if (pDupStd)
+-            rCtx.mpDrawView->AddUndo(SdrUndoFactory::CreateUndoNewPage(*pDupStd));
++            rCtx.addUndo(SdrUndoFactory::CreateUndoNewPage(*pDupStd));
+         if (pDupNotes)
+-            rCtx.mpDrawView->AddUndo(SdrUndoFactory::CreateUndoNewPage(*pDupNotes));
++            rCtx.addUndo(SdrUndoFactory::CreateUndoNewPage(*pDupNotes));
+     }
+     // Jump to the created page.
+     rCtx.mnNextPageId = nDupSlideId + 1;
+@@ -1418,7 +1494,7 @@
+         return;
+ 
+     if (rCtx.mbUndo)
+-        rCtx.mpUndoManager->AddUndoAction(
++        rCtx.addUndo(
+             std::make_unique<SetSlideExcludedUndoAction>(
+                 *rCtx.mpDoc, pPage, bOldExcluded, bNewExcluded));
+     lcl_SetSlideExcluded(*rCtx.mpDoc, pPage, bNewExcluded);
+@@ -1455,7 +1531,7 @@
+         {
+             SdrTextObj* pSdrTxt = static_cast<SdrTextObj*>(pSdrObj);
+             if (rCtx.mbUndo)
+-                rCtx.mpDrawView->AddUndo(
++                rCtx.addUndo(
+                     rCtx.mpDoc->GetSdrUndoFactory().CreateUndoObjectSetText(*pSdrObj, 0));
+             pSdrTxt->SetText(
+                 OStringToOUString(rValue.get_value<std::string>(), RTL_TEXTENCODING_UTF8));
+@@ -1522,7 +1598,7 @@
+     if (aExpected == aReplacement)
+         return;
+     if (rCtx.mbUndo)
+-        rCtx.mpDrawView->AddUndo(
++        rCtx.addUndo(
+             rCtx.mpDoc->GetSdrUndoFactory().CreateUndoObjectSetText(*pObject, 0));
+     pOutliner->QuickInsertText(
+         aReplacement, ESelection(nParagraph, nStart, nParagraph, nEnd));
+@@ -1560,7 +1636,7 @@
+ 
+     SdrTextObj* pSdrTxt = static_cast<SdrTextObj*>(pObj);
+     if (rCtx.mbUndo)
+-        rCtx.mpDrawView->AddUndo(
++        rCtx.addUndo(
+             rCtx.mpDoc->GetSdrUndoFactory().CreateUndoObjectSetText(*pObj, 0));
+     pSdrTxt->SetText(
+         OStringToOUString(rValue.get_value<std::string>(), RTL_TEXTENCODING_UTF8));
+@@ -1676,9 +1752,9 @@
+     // them into one user-visible Undo step.
+     if (rCtx.mbUndo)
+     {
+-        rCtx.mpDrawView->AddUndo(
++        rCtx.addUndo(
+             rCtx.mpDoc->GetSdrUndoFactory().CreateUndoAttrObject(*pObject, true, true));
+-        rCtx.mpDrawView->AddUndo(
++        rCtx.addUndo(
+             rCtx.mpDoc->GetSdrUndoFactory().CreateUndoGeoObject(*pObject));
+     }
+     for (const auto& [rName, rValueAny] : aValues)
+@@ -1763,7 +1839,7 @@
+             static_cast<sal_uInt8>(*oEscapementHeight), EE_CHAR_ESCAPEMENT));
+ 
+     if (rCtx.mbUndo)
+-        rCtx.mpDrawView->AddUndo(
++        rCtx.addUndo(
+             rCtx.mpDoc->GetSdrUndoFactory().CreateUndoObjectSetText(*pObject, 0));
+     for (sal_Int32 nParagraph = 0; nParagraph < pOutliner->GetParagraphCount(); ++nParagraph)
+         pOutliner->SetCharAttribs(nParagraph, aTextAttributes);
+@@ -1819,7 +1895,7 @@
+     // Snapshot the object's merged attributes before applying the typed crop;
+     // the surrounding document-structure transform then presents one Undo step.
+     if (rCtx.mbUndo)
+-        rCtx.mpDrawView->AddUndo(
++        rCtx.addUndo(
+             rCtx.mpDoc->GetSdrUndoFactory().CreateUndoAttrObject(*pObject));
+     xProperties->setPropertyValue(u"GraphicCrop"_ustr, cpo::uno::Any(aNewCrop));
+     rCtx.touch(pPage);
+@@ -1855,7 +1931,7 @@
+     // Reuse it for typed document transforms so effect, direction, duration
+     // and sound state remain one native history operation.
+     if (rCtx.mbUndo)
+-        rCtx.mpUndoManager->AddUndoAction(
++        rCtx.addUndo(
+             std::make_unique<sd::UndoTransition>(*rCtx.mpDoc, pPage));
+     pPage->setTransitionType(nType);
+     pPage->setTransitionSubtype(nSubtype);
+@@ -1935,7 +2011,7 @@
+         return;
+ 
+     if (rCtx.mbUndo)
+-        rCtx.mpDrawView->AddUndo(
++        rCtx.addUndo(
+             std::make_unique<sd::UndoAnimation>(rCtx.mpDoc, pPage));
+ 
+     {
+@@ -2283,6 +2359,56 @@
+             return &rCommand;
+     }
+     return nullptr;
++}
++
++// AI-issued transforms opt into strict mode. Validate the complete command
++// vocabulary before opening the native transaction so an unknown command can
++// never leave an earlier valid mutation behind.
++void lcl_ValidateStrictTransform(const boost::property_tree::ptree& rTree)
++{
++    bool bSawSlideCommands = false;
++    for (const auto& rRootItem : rTree)
++    {
++        if (rRootItem.first == "Strict")
++            continue;
++        if (rRootItem.first != "Transforms")
++            throw lang::IllegalArgumentException(u"Unsupported strict transform root"_ustr,
++                                                  nullptr, 0);
++
++        for (const auto& rTransformObject : rRootItem.second)
++        {
++            if (rTransformObject.first.empty() && rTransformObject.second.empty())
++                throw lang::IllegalArgumentException(u"Empty strict transform"_ustr, nullptr,
++                                                      0);
++            const auto& rTransform
++                = rTransformObject.first.empty()
++                      ? *rTransformObject.second.ordered_begin()
++                      : rTransformObject;
++            if (rTransform.first != "SlideCommands")
++                throw lang::IllegalArgumentException(
++                    u"Unsupported strict transform collection"_ustr, nullptr, 0);
++            bSawSlideCommands = true;
++
++            for (const auto& rCommandObject : rTransform.second)
++            {
++                if (rCommandObject.first.empty() && rCommandObject.second.empty())
++                    throw lang::IllegalArgumentException(u"Empty strict slide command"_ustr,
++                                                          nullptr, 0);
++                const auto& rCommand
++                    = rCommandObject.first.empty()
++                          ? *rCommandObject.second.ordered_begin()
++                          : rCommandObject;
++                if (!lcl_FindSlideCommand(rCommand.first))
++                    throw lang::IllegalArgumentException(
++                        u"Unsupported strict slide command: "_ustr
++                            + OUString::fromUtf8(rCommand.first),
++                        nullptr, 0);
++            }
++        }
++    }
++    if (!bSawSlideCommands)
++        throw lang::IllegalArgumentException(u"Strict transform has no slide commands"_ustr,
++                                              nullptr, 0);
+ }
+ 
+ class ClassificationCommon
+@@ -2668,23 +2794,17 @@
+         throw;
+     }
+ 
+-    // Group all changes below into one undo step so a single undo reverts the
+-    // whole transform. An empty list action (e.g. navigation only) is dropped.
++    const bool bStrict = aTree.get<bool>("Strict", false);
++    if (bStrict)
++        lcl_ValidateStrictTransform(aTree);
++
++    // Group all changes below into one native transaction. The transaction is
++    // committed only after every command and deferred template application
++    // succeeds; any exception rolls back the group it owns.
+     SfxUndoManager* pUndoManager = GetDocSh() ? GetDocSh()->GetUndoManager() : nullptr;
+     const bool bUndo = mpDrawView && mpDrawView->IsUndoEnabled() && pUndoManager;
+-    if (bUndo)
+-        pUndoManager->EnterListAction(SdResId(STR_UNDO_TRANSFORM_DOCUMENT),
+-                                      SdResId(STR_UNDO_TRANSFORM_DOCUMENT), 0,
+-                                      GetViewShellBase().GetViewShellId());
+-
+-    // Close the undo group when the function returns, even if a malformed
+-    // command in the loop below throws.
+-    comphelper::ScopeGuard aUndoGuard(
+-        [bUndo, pUndoManager]
+-        {
+-            if (bUndo)
+-                pUndoManager->LeaveListAction();
+-        });
++    NativeMutationTransaction aMutationTransaction(
++        pUndoManager, bUndo, GetViewShellBase().GetViewShellId());
+ 
+     // The state the slide-command handlers share, including the design-template
+     // URL that is applied after the command loop.
+@@ -2836,6 +2956,8 @@
+             GetDoc()->CloseBookmarkDoc();
+     }
+ 
++    aMutationTransaction.commit();
++
+     // Build a JSON result so the caller knows what happened.
+     tools::JsonWriter aJson;
+     aJson.put("success", true);
+--- a/sd/qa/unit/uiimpress.cxx
++++ b/sd/qa/unit/uiimpress.cxx
+@@ -407,7 +407,48 @@
+     CPPUNIT_ASSERT_EQUAL(sal_Int32(3), pImpressDocument->getDrawPages()->getCount());
+     CPPUNIT_ASSERT_EQUAL(u"Generated title"_ustr, getSlide0Title());
+ }
++
++CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testStrictDocumentMutationRollsBackPartialFailure)
++{
++    createSdImpressDoc();
++    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
++    CPPUNIT_ASSERT(pImpressDocument);
++    SdPage* pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
++    CPPUNIT_ASSERT(pPage);
++    const OUString aOriginalName = pPage->GetRealName();
++    auto* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
++    const size_t nUndoBefore
++        = pUndoManager->GetUndoActionCount(SfxUndoManager::TopLevel);
+ 
++    // The first command is valid and mutates the page. The second command is
++    // in the known vocabulary but fails during execution. Strict transforms
++    // must restore both the document and their native Undo boundary.
++    static constexpr OUString aJson = uR"json(
++{
++    "Strict": true,
++    "Transforms": {
++        "SlideCommands": [
++            {"RenameSlide": "Must be rolled back"},
++            {"SetObjectProperties.9999": {"Name": "No such object"}}
++        ]
++    }
++}
++)json"_ustr;
++    try
++    {
++        dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
++                        { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
++    }
++    catch (...)
++    {
++    }
++
++    CPPUNIT_ASSERT_EQUAL(aOriginalName, pPage->GetRealName());
++    CPPUNIT_ASSERT_EQUAL(
++        nUndoBefore,
++        pUndoManager->GetUndoActionCount(SfxUndoManager::TopLevel));
++}
++
+ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureMultiMovePreservesObjectNames)
+ {
+     createSdImpressDoc();
