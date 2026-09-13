@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { AppServerClient } from "./app-server-client.js";
@@ -20,7 +21,7 @@ export class SessionManager {
     runtime: typeof activeAiRuntime;
   }> {
     const session = await this.get(rawEmail);
-    const account = await session.client.accountRead(true);
+    const account = await session.client.accountRead();
     let rateLimits: unknown = null;
     if (account.account?.type === "chatgpt") {
       try {
@@ -47,7 +48,7 @@ export class SessionManager {
 
   async client(rawEmail: string): Promise<AppServerClient> {
     const session = await this.get(rawEmail);
-    const status = await session.client.accountRead(true);
+    const status = await session.client.accountRead();
     if (status.account?.type !== "chatgpt")
       throw new Error("ChatGPT subscription is not connected.");
     return session.client;
@@ -75,18 +76,43 @@ export class SessionManager {
   }
 
   private async create(email: string): Promise<ManagedSession> {
-    const base = path.resolve(
-      process.env.SPELLBOOK_CODEX_AUTH_DIR?.trim() || ".spellbook/ai-auth",
-    );
-    const home = path.join(base, stableIdentityKey(email));
+    const location = codexSessionLocation(email);
+    const home = location.home;
     await fs.mkdir(home, { recursive: true, mode: 0o700 });
     await fs.chmod(home, 0o700);
     return {
-      client: await AppServerClient.start(home),
+      client: await AppServerClient.start(home, {
+        createRestrictedConfig: location.isolated,
+        processHome: location.processHome,
+      }),
       home,
       email,
     };
   }
+}
+
+export function codexSessionLocation(email: string): {
+  home: string;
+  processHome: string;
+  isolated: boolean;
+} {
+  const processHome = os.homedir();
+  const mode =
+    process.env.SPELLBOOK_CODEX_AUTH_MODE?.trim() ||
+    (process.env.SPELLBOOK_CONNECTOR_MODE === "local" ? "shared" : "isolated");
+  if (mode !== "shared" && mode !== "isolated")
+    throw new Error("invalid_spellbook_codex_auth_mode");
+  if (mode === "shared") {
+    const home = path.resolve(
+      process.env.CODEX_HOME?.trim() || path.join(processHome, ".codex"),
+    );
+    return { home, processHome, isolated: false };
+  }
+  const base = path.resolve(
+    process.env.SPELLBOOK_CODEX_AUTH_DIR?.trim() || ".spellbook/ai-auth",
+  );
+  const home = path.join(base, stableIdentityKey(email));
+  return { home, processHome: home, isolated: true };
 }
 
 export function isAllowedAiIdentity(email: string): boolean {

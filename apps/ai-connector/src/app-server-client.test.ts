@@ -121,6 +121,48 @@ async function harness() {
   return { client, child, calls, send };
 }
 
+it("can reuse a standard Codex home without modifying its configuration", async () => {
+  const home = await fs.mkdtemp(
+    path.join(os.tmpdir(), "spellbook-shared-codex-test-"),
+  );
+  homes.push(home);
+  const existingConfig = "model = \"user-choice\"\n";
+  await fs.writeFile(path.join(home, "config.toml"), existingConfig);
+  const child = Object.assign(new EventEmitter(), {
+    stdin: new PassThrough(),
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    kill: vi.fn(),
+    exitCode: null,
+    signalCode: null,
+  });
+  child.stdin.on("data", (chunk) => {
+    const message = JSON.parse(String(chunk));
+    if (message.method === "initialize")
+      child.stdout.write(`${JSON.stringify({ id: message.id, result: {} })}\n`);
+  });
+  mocks.spawn.mockReturnValue(child);
+
+  const client = await AppServerClient.start(home, {
+    createRestrictedConfig: false,
+    processHome: "/Users/example",
+  });
+  expect(await fs.readFile(path.join(home, "config.toml"), "utf8")).toBe(
+    existingConfig,
+  );
+  expect(mocks.spawn).toHaveBeenLastCalledWith(
+    expect.any(String),
+    ["app-server", "--listen", "stdio://"],
+    expect.objectContaining({
+      env: expect.objectContaining({
+        HOME: "/Users/example",
+        CODEX_HOME: home,
+      }),
+    }),
+  );
+  client.close();
+});
+
 describe("structured turn isolation", () => {
   it("starts standard browser login and keeps device code as an explicit fallback", async () => {
     const h = await harness();

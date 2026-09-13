@@ -63,6 +63,11 @@ export interface AgentTurnOptions {
   onGeneratedImage?: (image: GeneratedImage) => void | Promise<void>;
 }
 
+export interface AppServerStartOptions {
+  createRestrictedConfig?: boolean;
+  processHome?: string;
+}
+
 export class AppServerClient {
   private readonly process: ChildProcessWithoutNullStreams;
   private readonly pending = new Map<number, PendingRequest>();
@@ -110,17 +115,22 @@ export class AppServerClient {
     );
   }
 
-  static async start(codexHome: string): Promise<AppServerClient> {
+  static async start(
+    codexHome: string,
+    options: AppServerStartOptions = {},
+  ): Promise<AppServerClient> {
     await fs.mkdir(codexHome, { recursive: true, mode: 0o700 });
-    const configPath = path.join(codexHome, "config.toml");
-    try {
-      await fs.access(configPath);
-    } catch {
-      await fs.writeFile(
-        configPath,
-        'cli_auth_credentials_store = "file"\ncheck_for_update_on_startup = false\ndisable_response_storage = true\nweb_search = "disabled"\n',
-        { mode: 0o600 },
-      );
+    if (options.createRestrictedConfig !== false) {
+      const configPath = path.join(codexHome, "config.toml");
+      try {
+        await fs.access(configPath);
+      } catch {
+        await fs.writeFile(
+          configPath,
+          'cli_auth_credentials_store = "file"\ncheck_for_update_on_startup = false\ndisable_response_storage = true\nweb_search = "disabled"\n',
+          { mode: 0o600 },
+        );
+      }
     }
 
     const configured = process.env.CODEX_BIN?.trim();
@@ -132,7 +142,7 @@ export class AppServerClient {
       configured || path.join(packageRoot, "node_modules", ".bin", "codex");
     const allowedEnvironment: NodeJS.ProcessEnv = {
       PATH: process.env.PATH,
-      HOME: codexHome,
+      HOME: options.processHome ?? codexHome,
       CODEX_HOME: codexHome,
       LANG: process.env.LANG ?? "C.UTF-8",
       LOG_FORMAT: "json",

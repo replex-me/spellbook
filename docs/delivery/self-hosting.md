@@ -27,7 +27,7 @@ docker compose up -d --no-deps --force-recreate web
 pnpm connector:start
 ```
 
-The connector listens on `127.0.0.1:43127`, accepts only the exact `SPELLBOOK_PUBLIC_URL` origin unless `SPELLBOOK_CONNECTOR_ALLOWED_ORIGINS` is explicitly set, and opens the normal Codex browser login after the user approves the site. The approval session is stored in browser session storage and expires; the Codex authentication home stays on the user's computer. Do not expose the connector port through a reverse proxy or bind it to a LAN interface.
+The connector listens on `127.0.0.1:43127`, accepts only the exact `SPELLBOOK_PUBLIC_URL` origin unless `SPELLBOOK_CONNECTOR_ALLOWED_ORIGINS` is explicitly set, and requires the user to approve that site. By default it uses the same local Codex login cache as the CLI and IDE extension, so an already signed-in user does not authenticate again. Set `SPELLBOOK_CODEX_AUTH_MODE=isolated` to use a separate Spellbook-only login instead. The approval session is stored in browser session storage and expires; Codex credentials stay on the user's computer and are never copied into Spellbook storage. Do not expose the connector port through a reverse proxy or bind it to a LAN interface.
 
 ## Data and backup
 
