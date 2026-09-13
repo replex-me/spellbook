@@ -11,6 +11,13 @@ const url = process.argv[2] ?? "http://localhost:3190";
 const reportPath = process.argv[3] ? path.resolve(process.argv[3]) : null;
 const browser = await chromium.launch({ headless: true });
 const stable = (value) => JSON.stringify(value);
+const persistedTransition = (transition) => ({
+  type: transition?.type,
+  subtype: transition?.subtype,
+  direction: transition?.direction,
+  duration: transition?.duration,
+  fadeColor: transition?.fadeColor,
+});
 
 try {
   const page = await browser.newPage({
@@ -55,7 +62,7 @@ try {
     if (!frame) throw new Error("Native extension frame was lost.");
     return frame.evaluate(
       (requestedDirection) =>
-        cool.callRemote(function presentSlideTransitionHistory(value) {
+        cool.callRemote(function spellbookSlideTransitionHistory(value) {
           const undo = uno.idl.com.sun.star.frame.Desktop.create(
             uno.componentContext,
           )
@@ -135,7 +142,8 @@ try {
   ]);
   const historyAfter = await history();
   if (
-    stable(after.slides[0].transition) !== stable(firstExpected) ||
+    stable(persistedTransition(after.slides[0].transition)) !==
+      stable(firstExpected) ||
     after.transaction?.status !== "applied" ||
     after.transaction?.commandCount !== 1 ||
     after.transaction?.undoActionsAdded !== 1 ||
@@ -171,7 +179,8 @@ try {
   };
   const batchHistoryAfter = await history();
   if (
-    stable(batchAfter.slides[0].transition) !== stable(batchExpected) ||
+    stable(persistedTransition(batchAfter.slides[0].transition)) !==
+      stable(batchExpected) ||
     batchAfter.transaction?.status !== "applied" ||
     batchAfter.transaction?.commandCount !== 2 ||
     batchAfter.transaction?.undoActionsAdded !== 1 ||

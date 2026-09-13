@@ -54,7 +54,7 @@ try {
     if (!frame) throw new Error("Native extension frame was lost.");
     return frame.evaluate(
       (remoteDirection) =>
-        cool.callRemote(function presentPictureProbeHistory(value) {
+        cool.callRemote(function spellbookPictureProbeHistory(value) {
           const undo = uno.idl.com.sun.star.frame.Desktop.create(
             uno.componentContext,
           )
@@ -150,10 +150,28 @@ try {
     after.transaction?.undoActionsAdded !== 1
   )
     throw new Error("Picture crop and move did not apply atomically.");
+  const cropPropertyByEdge = {
+    left: "Left",
+    top: "Top",
+    right: "Right",
+    bottom: "Bottom",
+  };
   for (const [edge, value] of Object.entries(crop)) {
-    if (Math.abs(afterTarget.picture.crop[edge] - value) > 0.0001)
+    // GraphicCrop is stored in integer 1/100 mm. Compare with the exact
+    // representable fraction for this source image instead of the unquantized
+    // request, so the same rule holds for small and large source dimensions.
+    const dimension = ["left", "right"].includes(edge)
+      ? target.picture.sourceSize.width
+      : target.picture.sourceSize.height;
+    const expectedFraction =
+      Math.round((Math.round(dimension * value) / dimension) * 1e6) / 1e6;
+    if (
+      afterTarget.graphicCrop[cropPropertyByEdge[edge]] !==
+        Math.round(dimension * value) ||
+      afterTarget.picture.crop[edge] !== expectedFraction
+    )
       throw new Error(
-        `Picture crop ${edge} differs: expected ${value}, got ${afterTarget.picture.crop[edge]}`,
+        `Picture crop ${edge} differs: expected ${expectedFraction}, got ${afterTarget.picture.crop[edge]}`,
       );
   }
 

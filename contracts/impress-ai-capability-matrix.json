@@ -44,12 +44,8 @@
       "replace_text",
       "move",
       "resize",
-      "font_size",
-      "bold",
-      "italic",
       "underline",
       "strikethrough",
-      "font_family",
       "font_color",
       "fill_color",
       "line_color",
@@ -68,6 +64,10 @@
       "set_chart_type"
     ],
     "enginePatchReady": [
+      "font_size",
+      "bold",
+      "italic",
+      "font_family",
       "insert_slide",
       "set_slide_layout",
       "set_background",

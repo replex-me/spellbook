@@ -136,6 +136,28 @@ test("delta comparison applies OOXML millisecond canonicalization only to raw an
   });
 });
 
+test("delta comparison accepts one model unit only on persisted geometry", () => {
+  const compareAt = (path, observed = 1001) =>
+    firstPersistenceDeltaDifference(900, 1000, 900, observed, path);
+  assert.equal(compareAt("$.slides[0].elements[0].height"), null);
+  assert.equal(
+    compareAt("$.slides[0].elements[0].table.rowHeights[1]", 999),
+    null,
+  );
+  assert.deepEqual(compareAt("$.slides[0].elements[0].height", 1002), {
+    path: "$.slides[0].elements[0].height",
+    expected: 1000,
+    observed: 1002,
+    invariant: "intended-change",
+  });
+  assert.deepEqual(compareAt("$.slides[0].elements[0].fillColor"), {
+    path: "$.slides[0].elements[0].fillColor",
+    expected: 1000,
+    observed: 1001,
+    invariant: "intended-change",
+  });
+});
+
 test("document persistence compares masters by semantics rather than relationship order", () => {
   const before = {
     masters: [
@@ -248,6 +270,102 @@ test("document persistence excludes regenerated observation diagnostics but not 
         "Persistence failed.",
       ),
     /fillColor/,
+  );
+});
+
+test("document persistence compares standard transition state, not derived UI projections", () => {
+  const expected = normalizeDocumentPersistenceState({
+    slides: [
+      {
+        slideIndex: 0,
+        transition: {
+          type: 37,
+          subtype: 101,
+          direction: true,
+          duration: 0.75,
+          fadeColor: 0,
+          effect: "com.sun.star.presentation.FadeEffect.DISSOLVE",
+          speed: "com.sun.star.presentation.AnimationSpeed.FAST",
+        },
+      },
+    ],
+    masters: [],
+  });
+  const observed = normalizeDocumentPersistenceState({
+    slides: [
+      {
+        slideIndex: 0,
+        transition: {
+          type: 37,
+          subtype: 101,
+          direction: true,
+          duration: 0.75,
+          fadeColor: 0,
+          effect: "com.sun.star.presentation.FadeEffect.NONE",
+          speed: "com.sun.star.presentation.AnimationSpeed.MEDIUM",
+        },
+      },
+    ],
+    masters: [],
+  });
+  assert.deepEqual(observed, expected);
+});
+
+test("document persistence ignores dormant formatting on merged continuation cells only", () => {
+  const state = {
+    masters: [],
+    slides: [
+      {
+        elements: [
+          {
+            table: {
+              cellDetails: [
+                [
+                  {
+                    row: 0,
+                    column: 0,
+                    text: "visible",
+                    merged: false,
+                    rowSpan: 2,
+                    columnSpan: 1,
+                    fillColor: 10,
+                  },
+                ],
+                [
+                  {
+                    row: 1,
+                    column: 0,
+                    text: "",
+                    merged: true,
+                    rowSpan: 1,
+                    columnSpan: 1,
+                    fillColor: 20,
+                    borders: { top: { color: 30 } },
+                  },
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const reopened = structuredClone(state);
+  reopened.slides[0].elements[0].table.cellDetails[1][0].fillColor = 99;
+  reopened.slides[0].elements[0].table.cellDetails[1][0].borders.top.color = 88;
+  const report = {
+    persistenceBefore: state,
+    persistenceExpected: state,
+    persistenceBaseline: state,
+  };
+  assert.doesNotThrow(() =>
+    assertDocumentPersistenceDelta(report, reopened, "Persistence failed."),
+  );
+  reopened.slides[0].elements[0].table.cellDetails[0][0].fillColor = 99;
+  assert.throws(
+    () =>
+      assertDocumentPersistenceDelta(report, reopened, "Persistence failed."),
+    /cellDetails\[0\]\[0\]\.fillColor/,
   );
 });
 

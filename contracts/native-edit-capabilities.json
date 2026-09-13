@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "coordinateUnit": "1/100mm",
   "nativeUndoRequired": true,
   "verifiedWith": {
@@ -307,24 +307,24 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "runtime_verified",
-        "minEnginePatch": 0
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 13
       },
       "bold": {
         "family": "object_text",
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "runtime_verified",
-        "minEnginePatch": 0
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 13
       },
       "italic": {
         "family": "object_text",
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "runtime_verified",
-        "minEnginePatch": 0
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 13
       },
       "underline": {
         "family": "object_text",
@@ -355,8 +355,8 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "runtime_verified",
-        "minEnginePatch": 0
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 13
       },
       "font_color": {
         "family": "object_text",
@@ -492,7 +492,7 @@
         "execution": "native_transform",
         "identityEffect": "preserve",
         "availability": "engine_patch_ready",
-        "minEnginePatch": 6
+        "minEnginePatch": 12
       },
       "set_background": {
         "family": "slide_properties",
@@ -709,12 +709,8 @@
       "replace_text",
       "move",
       "resize",
-      "font_size",
-      "bold",
-      "italic",
       "underline",
       "strikethrough",
-      "font_family",
       "font_color",
       "fill_color",
       "line_color",
@@ -735,12 +731,28 @@
   },
   "knownUnsafeOperations": [
     {
+      "op": "font_size",
+      "reason": "The stock editor applies only the western-script height consistently. The undo-v13 typed command synchronizes western, Asian and complex-script heights and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
+    },
+    {
+      "op": "bold",
+      "reason": "The stock editor can leave Asian and complex-script weight values different from the western run. The undo-v13 typed command synchronizes all three script families and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
+    },
+    {
+      "op": "italic",
+      "reason": "The stock editor can leave Asian and complex-script posture values different from the western run. The undo-v13 typed command synchronizes all three script families and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
+    },
+    {
+      "op": "font_family",
+      "reason": "The stock editor can change only the western font family, so mixed Korean and Latin text is exported and reopened with different metrics. The undo-v13 typed command synchronizes western, Asian and complex-script families and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
+    },
+    {
       "op": "insert_slide",
       "reason": "The stock InsertMasterSlide command creates title and content placeholders before assigning the selected master. On imported blank layouts this mutates the master and creates a synthetic layout during PPTX save/reopen. The undo-v9 engine patch makes page creation inherit the selected master layout and must pass the cumulative image, browser, save/reopen, visual and PowerPoint gates before promotion."
     },
     {
       "op": "set_slide_layout",
-      "reason": "The typed adapter changes and visually restores the slide, but stock Undo recreates missing title/body placeholders on the master and leaves the imported master structure changed. The prepared engine patch must pass full master, save/reopen and PowerPoint gates."
+      "reason": "A numeric LibreOffice AutoLayout does not uniquely identify an OOXML slide-layout part. The typed adapter must select the exact observed masterIndex, preserve the existing master/layout relationship through Undo and save/reopen, and avoid synthesizing a new layout part before this command can be promoted."
     },
     {
       "op": "set_background",
@@ -875,12 +887,8 @@
           "replace_text",
           "move",
           "resize",
-          "font_size",
-          "bold",
-          "italic",
           "underline",
           "strikethrough",
-          "font_family",
           "font_color",
           "fill_color",
           "line_color",
@@ -915,6 +923,10 @@
         "items": { "type": "string" }
       },
       "slideIndex": { "type": ["number", "null"] },
+      "masterIndex": {
+        "type": ["number", "null"],
+        "description": "Exact slide-layout index from the current native observation. Required by set_slide_layout."
+      },
       "targetSlideIndex": { "type": ["number", "null"] },
       "hidden": { "type": ["boolean", "null"] },
       "layout": { "type": ["number", "null"] },
@@ -1263,6 +1275,7 @@
       "elementId",
       "elementIds",
       "slideIndex",
+      "masterIndex",
       "targetSlideIndex",
       "hidden",
       "layout",

@@ -1,7 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { assertDocumentPersistenceDelta } from "./persistence-evidence.mjs";
+import {
+  assertDocumentPersistenceDelta,
+  documentPersistenceDeltaDifferences,
+} from "./persistence-evidence.mjs";
 
 const require = createRequire(
   new URL("../../apps/web/package.json", import.meta.url),
@@ -36,7 +39,16 @@ try {
       throw new Error("Native editor extension did not connect.");
     await page.waitForTimeout(250);
   }
-  const observed = await page.evaluate(async () => {
+  const detailSlideIndex = expected.slides.find((slide) =>
+    slide.elements?.some(
+      (element) => element.objectName === expected.objectName && element.table,
+    ),
+  )?.slideIndex;
+  if (!Number.isInteger(detailSlideIndex))
+    throw new Error(
+      "The persistence report has no slide for the edited table.",
+    );
+  const observed = await page.evaluate(async (requestedSlideIndex) => {
     const launch = window.__spellbookLaunch;
     const response = await fetch("/native/probe", {
       method: "POST",
@@ -44,12 +56,15 @@ try {
         authorization: `Bearer ${launch.accessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ operation: "observe" }),
+      body: JSON.stringify({
+        operation: "observe",
+        detailSlideIndex: requestedSlideIndex,
+      }),
     });
     const value = await response.json();
     if (!response.ok) throw new Error(value.error ?? `HTTP ${response.status}`);
     return value;
-  });
+  }, detailSlideIndex);
   const patchLevelMatch = /^undo-v([1-9][0-9]*)$/.exec(
     observed.engine?.patchLevel ?? "",
   );
@@ -62,11 +77,6 @@ try {
     .find((element) => element.objectName === expected.objectName);
   if (!table?.table)
     throw new Error("Reopened PPTX has no expected editable table.");
-  assertDocumentPersistenceDelta(
-    report,
-    observed,
-    "Saved PPTX did not preserve the exact table, slide and master structure.",
-  );
   if (process.env.SPELLBOOK_PROBE_REOPEN_SCREENSHOT) {
     const image = observed.images?.[0];
     if (!image?.pngBytes?.length)
@@ -76,6 +86,20 @@ try {
       Buffer.from(image.pngBytes),
     );
   }
+  const persistenceDifferences = documentPersistenceDeltaDifferences(
+    report,
+    observed,
+  );
+  if (persistenceDifferences.length)
+    await writeFile(
+      path.resolve(path.dirname(reportPath), "reopen-differences.json"),
+      `${JSON.stringify(persistenceDifferences, null, 2)}\n`,
+    );
+  assertDocumentPersistenceDelta(
+    report,
+    observed,
+    "Saved PPTX did not preserve the exact table, slide and master structure.",
+  );
   process.stdout.write(
     `${JSON.stringify({ reopened: true, enginePatchLevel: observed.engine.patchLevel, operationCount: 8, objectName: table.objectName, geometry: { x: table.x, y: table.y, width: table.width, height: table.height } }, null, 2)}\n`,
   );

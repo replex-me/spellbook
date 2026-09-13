@@ -1,3 +1,5 @@
+import { quantizedGeometryEquivalent } from "./document-state-evidence.mjs";
+
 function valueSummary(value) {
   if (value === undefined) return "undefined";
   const encoded = JSON.stringify(value);
@@ -38,6 +40,33 @@ function withoutObservationOnlyFields(value) {
         ]),
     );
   return value;
+}
+
+function withoutMergedContinuationFormatting(slides) {
+  for (const slide of slides) {
+    for (const element of slide.elements ?? []) {
+      const rows = element.table?.cellDetails;
+      if (!Array.isArray(rows)) continue;
+      element.table.cellDetails = rows.map((row) =>
+        row.map((cell) => {
+          if (cell?.merged !== true) return cell;
+          // A merged continuation cell has no independently rendered surface.
+          // LibreOffice reconstructs its dormant formatting from the merge
+          // anchor when PPTX is reopened, so only its structural marker and
+          // non-rendered text identity are stable persisted semantics.
+          return {
+            row: cell.row,
+            column: cell.column,
+            text: cell.text,
+            merged: true,
+            rowSpan: cell.rowSpan,
+            columnSpan: cell.columnSpan,
+          };
+        }),
+      );
+    }
+  }
+  return slides;
 }
 
 /**
@@ -87,9 +116,19 @@ export function normalizeDocumentPersistenceState(state) {
       const rightIdentity = `${right.name ?? ""}\u0000${right.layout ?? ""}\u0000${stableJson(right)}`;
       return leftIdentity.localeCompare(rightIdentity, "en");
     });
-  const slides = (state?.slides ?? []).map(
-    ({ masterIndex: _masterIndex, ...slide }) =>
-      withoutObservationOnlyFields(structuredClone(slide)),
+  const slides = withoutMergedContinuationFormatting(
+    (state?.slides ?? []).map(({ masterIndex: _masterIndex, ...slide }) => {
+      const normalized = withoutObservationOnlyFields(structuredClone(slide));
+      if (normalized.transition) {
+        const {
+          effect: _effect,
+          speed: _speed,
+          ...persistedTransition
+        } = normalized.transition;
+        normalized.transition = persistedTransition;
+      }
+      return normalized;
+    }),
   );
   return { slides, masters };
 }
@@ -163,11 +202,18 @@ function ooxmlAnimationTime(seconds) {
 }
 
 function isFormatCanonicalEquivalent(expected, observed, path) {
-  return (
+  const numeric =
     typeof expected === "number" &&
     typeof observed === "number" &&
     Number.isFinite(expected) &&
-    Number.isFinite(observed) &&
+    Number.isFinite(observed);
+  if (!numeric) return false;
+  if (
+    /\.elements\[\d+\]\.(?:x|y|width|height)$/.test(path) ||
+    /\.table\.(?:rowHeights|columnWidths)\[\d+\]$/.test(path)
+  )
+    return quantizedGeometryEquivalent(expected, observed);
+  return (
     isAnimationTreeTime(path) &&
     Object.is(ooxmlAnimationTime(expected), observed)
   );

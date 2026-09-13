@@ -13,9 +13,10 @@ function spellbookDocumentOperation(request) {
   const patchedTextRangeEngine = hasEnginePatch(4);
   const patchedTableStructureEngine = hasEnginePatch(5);
   const patchedTextPropertiesEngine = hasEnginePatch(5);
+  const patchedTextFormattingEngine = hasEnginePatch(13);
   const patchedTableCellPropertiesEngine = hasEnginePatch(6);
   const patchedGraphicCropEngine = hasEnginePatch(6);
-  const patchedSlideLayoutEngine = hasEnginePatch(6);
+  const patchedSlideLayoutEngine = hasEnginePatch(12);
   const patchedSlideTransitionEngine = hasEnginePatch(7);
   const patchedAnimationTimingEngine = hasEnginePatch(8);
   const patchedSlideInsertionEngine = hasEnginePatch(9);
@@ -177,6 +178,17 @@ function spellbookDocumentOperation(request) {
     };
     return JSON.stringify(normalize(value));
   };
+  // Effect and Speed are legacy UI projections derived by LibreOffice from
+  // the standard transition fields. They are useful observations but are not
+  // part of the typed command's persisted state and must not make an exact
+  // native readback look like a failed mutation.
+  const persistedSlideTransition = (transition) => ({
+    type: transition?.type,
+    subtype: transition?.subtype,
+    direction: transition?.direction,
+    duration: transition?.duration,
+    fadeColor: transition?.fadeColor,
+  });
   const firstDifferencePath = (left, right, path = "slides") => {
     if (Object.is(left, right)) return null;
     if (
@@ -266,18 +278,18 @@ function spellbookDocumentOperation(request) {
             fillColor: safeProperty(cell, "FillColor"),
             fillOpacity:
               fillTransparency === null ? null : 100 - Number(fillTransparency),
-            fontFamily: safeProperty(cell, "CharFontName"),
-            fontSize: safeProperty(cell, "CharHeight"),
-            fontWeight: safeProperty(cell, "CharWeight"),
-            fontStyle: enumName(safeProperty(cell, "CharPosture")),
-            underline: safeProperty(cell, "CharUnderline"),
-            strikethrough: safeProperty(cell, "CharStrikeout"),
-            textShadow: safeProperty(cell, "CharShadowed"),
-            color: safeProperty(cell, "CharColor"),
+            fontFamily: safeTextProperty(cell, "CharFontName"),
+            fontSize: safeTextProperty(cell, "CharHeight"),
+            fontWeight: safeTextProperty(cell, "CharWeight"),
+            fontStyle: enumName(safeTextProperty(cell, "CharPosture")),
+            underline: safeTextProperty(cell, "CharUnderline"),
+            strikethrough: safeTextProperty(cell, "CharStrikeout"),
+            textShadow: safeTextProperty(cell, "CharShadowed"),
+            color: safeTextProperty(cell, "CharColor"),
             characterSpacing: kerningTwipsToPoints(
-              safeProperty(cell, "CharKerning"),
+              safeTextProperty(cell, "CharKerning"),
             ),
-            paragraphAlignment: safeProperty(cell, "ParaAdjust"),
+            paragraphAlignment: safeTextProperty(cell, "ParaAdjust"),
             textMargins: {
               left: safeProperty(cell, "TextLeftDistance"),
               right: safeProperty(cell, "TextRightDistance"),
@@ -359,7 +371,15 @@ function spellbookDocumentOperation(request) {
               fontSizeAsian: safeProperty(portion, "CharHeightAsian"),
               fontSizeComplex: safeProperty(portion, "CharHeightComplex"),
               fontWeight: safeProperty(portion, "CharWeight"),
+              fontWeightAsian: safeProperty(portion, "CharWeightAsian"),
+              fontWeightComplex: safeProperty(portion, "CharWeightComplex"),
               fontStyle: enumName(safeProperty(portion, "CharPosture")),
+              fontStyleAsian: enumName(
+                safeProperty(portion, "CharPostureAsian"),
+              ),
+              fontStyleComplex: enumName(
+                safeProperty(portion, "CharPostureComplex"),
+              ),
               underline: safeProperty(portion, "CharUnderline"),
               strikethrough: safeProperty(portion, "CharStrikeout"),
               shadow: safeProperty(portion, "CharShadowed"),
@@ -1279,7 +1299,15 @@ function spellbookDocumentOperation(request) {
 
   const detailSlideForCommand = (command) => {
     if (
-      command?.op === "replace_text_range" &&
+      [
+        "replace_text_range",
+        "set_character_spacing",
+        "set_script_position",
+        "font_size",
+        "bold",
+        "italic",
+        "font_family",
+      ].includes(command?.op) &&
       typeof command.elementId === "string" &&
       /^\d+(?:\/\d+)+$/.test(command.elementId)
     )
@@ -1407,14 +1435,27 @@ function spellbookDocumentOperation(request) {
         throw new Error("native_engine_slide_layout_patch_required");
       if (command.op === "insert_slide" && !patchedSlideInsertionEngine)
         throw new Error("native_engine_slide_insertion_patch_required");
-      const supportedLayouts = [
-        0, 1, 3, 12, 14, 15, 16, 18, 19, 20, 27, 28, 29, 30, 32, 34,
-      ];
       if (
         command.op === "set_slide_layout" &&
-        !supportedLayouts.includes(command.layout)
+        (!Number.isInteger(command.masterIndex) ||
+          command.masterIndex < 0 ||
+          command.masterIndex >= before.masters.length ||
+          (command.layout !== null &&
+            command.layout !== undefined &&
+            command.layout !== before.masters[command.masterIndex].layout))
       )
         throw new Error("invalid_slide_layout");
+      const selectedLayoutMaster =
+        command.op === "set_slide_layout"
+          ? before.masters[command.masterIndex]
+          : null;
+      if (
+        selectedLayoutMaster &&
+        before.slides[slideIndex].masterIndex === command.masterIndex &&
+        before.slides[slideIndex].masterName === selectedLayoutMaster.name &&
+        before.slides[slideIndex].layout === selectedLayoutMaster.layout
+      )
+        return result(before, slideIndex);
       if (request.dryRun) return result(before, before.activeSlide);
       const undo = model.getUndoManager();
       const undoCount = undo.getAllUndoActionTitles().length;
@@ -1447,7 +1488,12 @@ function spellbookDocumentOperation(request) {
       else if (command.op === "set_slide_layout")
         transformSlides([
           { JumpToSlide: slideIndex },
-          { ChangeLayout: command.layout },
+          {
+            ChangeLayout: {
+              MasterIndex: command.masterIndex,
+              Layout: selectedLayoutMaster.layout,
+            },
+          },
         ]);
       else if (command.op === "set_background") {
         activateSlide(slideIndex);
@@ -1492,13 +1538,20 @@ function spellbookDocumentOperation(request) {
                 : command.op === "set_slide_hidden"
                   ? safeProperty(targetPage, "Visible") === !command.hidden
                   : command.op === "set_slide_layout"
-                    ? safeProperty(targetPage, "Layout") === command.layout
+                    ? after.slides[pageIndexAfter()]?.layout ===
+                        selectedLayoutMaster.layout &&
+                      after.slides[pageIndexAfter()]?.masterIndex ===
+                        command.masterIndex &&
+                      after.slides[pageIndexAfter()]?.masterName ===
+                        selectedLayoutMaster.name
                     : command.op === "set_speaker_notes"
                       ? after.slides[pageIndexAfter()]?.speakerNotes?.text ===
                         command.text
                       : command.op === "set_slide_transition"
                         ? stableJson(
-                            after.slides[pageIndexAfter()]?.transition,
+                            persistedSlideTransition(
+                              after.slides[pageIndexAfter()]?.transition,
+                            ),
                           ) ===
                           stableJson({
                             type: slideTransitionPresets[
@@ -2109,7 +2162,10 @@ function spellbookDocumentOperation(request) {
         command.spacing > 100
       )
         throw new Error("invalid_character_spacing");
-      if (element.parentElementId !== null || element.text === null)
+      if (
+        (!patchedTextFormattingEngine && element.parentElementId !== null) ||
+        !element.text
+      )
         throw new Error("unsupported_character_spacing_target");
 
       // The typed engine command accepts 1/100 mm, then stores kerning in
@@ -2134,11 +2190,11 @@ function spellbookDocumentOperation(request) {
 
       const undo = model.getUndoManager();
       const undoCount = undo.getAllUndoActionTitles().length;
-      const objectIndex = Number(command.elementId.split("/")[1]);
+      const objectPath = command.elementId.split("/").slice(1).join("/");
       transformSlides([
         { JumpToSlide: slideIndex },
         {
-          [`SetTextProperties.${objectIndex}`]: {
+          [`SetTextProperties.${objectPath}`]: {
             Kerning: nativeSpacing,
           },
         },
@@ -2193,7 +2249,10 @@ function spellbookDocumentOperation(request) {
         subscript: [-33, 58],
       }[command.script];
       if (!expectedScript) throw new Error("invalid_script_position");
-      if (element.parentElementId !== null || element.text === null)
+      if (
+        (!patchedTextFormattingEngine && element.parentElementId !== null) ||
+        !element.text
+      )
         throw new Error("unsupported_script_position_target");
 
       const portionsFor = (state) =>
@@ -2215,11 +2274,11 @@ function spellbookDocumentOperation(request) {
 
       const undo = model.getUndoManager();
       const undoCount = undo.getAllUndoActionTitles().length;
-      const objectIndex = Number(command.elementId.split("/")[1]);
+      const objectPath = command.elementId.split("/").slice(1).join("/");
       transformSlides([
         { JumpToSlide: slideIndex },
         {
-          [`SetTextProperties.${objectIndex}`]: {
+          [`SetTextProperties.${objectPath}`]: {
             Escapement: expectedScript[0],
             EscapementHeight: expectedScript[1],
           },
@@ -2562,7 +2621,15 @@ function spellbookDocumentOperation(request) {
         properties.FillTransparence = 100 - Math.round(format.fillOpacity);
         expected.fillOpacity = Math.round(format.fillOpacity);
       }
-      setOptional("fontColor", "CharColor", "color", Math.round);
+      if (format.fontColor !== null && format.fontColor !== undefined) {
+        // A direct RGB edit must stop inheriting the prior theme reference.
+        // Otherwise the live UNO value changes but PPTX export writes the old
+        // scheme color and the text reverts when PowerPoint reopens the file.
+        properties.CharColorTheme = -1;
+        properties.CharColorTintOrShade = 0;
+        properties.CharColor = Math.round(format.fontColor);
+        expected.color = properties.CharColor;
+      }
       setOptional("fontSize", "CharHeight", "fontSize");
       setOptional("fontFamily", "CharFontName", "fontFamily");
       setOptional("bold", "CharWeight", "fontWeight", (value) =>
@@ -2656,9 +2723,26 @@ function spellbookDocumentOperation(request) {
       const shape = resolveShape(command.elementId);
       const table = shape.getPropertyValue("Model");
       const cell = table.getCellByPosition(command.column, command.row);
-      const unoTypeFor = (name) => {
+      const textCursor = cell.createTextCursor();
+      textCursor.gotoEnd(true);
+      const textPropertyNames = new Set([
+        "CharColor",
+        "CharColorTheme",
+        "CharColorTintOrShade",
+        "CharHeight",
+        "CharFontName",
+        "CharWeight",
+        "CharUnderline",
+        "CharStrikeout",
+        "CharShadowed",
+        "CharKerning",
+        "ParaAdjust",
+      ]);
+      const propertyTarget = (name) =>
+        textPropertyNames.has(name) ? textCursor : cell;
+      const unoTypeFor = (target, name) => {
         const typeName = String(
-          cell.getPropertySetInfo().getPropertyByName(name).Type,
+          target.getPropertySetInfo().getPropertyByName(name).Type,
         );
         return {
           boolean: uno.type.boolean,
@@ -2681,16 +2765,17 @@ function spellbookDocumentOperation(request) {
           undoContextOpen = true;
         }
         for (const [name, value] of Object.entries(properties)) {
+          const targetPropertySet = propertyTarget(name);
           if (value?.kind === "tableBorderLine") {
-            cell.setPropertyValue(
+            targetPropertySet.setPropertyValue(
               name,
               new uno.idl.com.sun.star.table.BorderLine(value.value),
             );
             continue;
           }
-          const type = unoTypeFor(name);
+          const type = unoTypeFor(targetPropertySet, name);
           if (!type) throw new Error(`unsupported_table_cell_property:${name}`);
-          cell.setPropertyValue(name, new uno.Any(type, value));
+          targetPropertySet.setPropertyValue(name, new uno.Any(type, value));
         }
         if (ownsUndoContext) {
           undo.leaveUndoContext();
@@ -3887,6 +3972,59 @@ function spellbookDocumentOperation(request) {
     const struck = (value) => Number(value ?? 0) !== 0;
     const autofit = (value) =>
       value !== null && !String(value).toUpperCase().includes("NONE");
+    const typedTextFormattingOperations = new Set([
+      "font_size",
+      "bold",
+      "italic",
+      "font_family",
+    ]);
+    const usesTypedTextFormatting = typedTextFormattingOperations.has(
+      command.op,
+    );
+    if (usesTypedTextFormatting && !patchedTextFormattingEngine)
+      throw new Error("native_engine_text_formatting_patch_required");
+    if (usesTypedTextFormatting && element.text === null)
+      throw new Error("unsupported_text_target");
+    const textPortions = (state) =>
+      state.textDetails.elements
+        .find((candidate) => candidate.elementId === command.elementId)
+        ?.paragraphs.flatMap((paragraph) => paragraph.portions) ?? [];
+    const expectedFontSize =
+      command.op === "font_size" ? Math.round(command.size * 20) / 20 : null;
+    const typedTextFormattingMatches = (state) => {
+      if (!usesTypedTextFormatting) return false;
+      const portions = textPortions(state);
+      return (
+        portions.length > 0 &&
+        portions.every((portion) =>
+          command.op === "font_size"
+            ? [
+                portion.fontSize,
+                portion.fontSizeAsian,
+                portion.fontSizeComplex,
+              ].every((value) => Number(value) === expectedFontSize)
+            : command.op === "font_family"
+              ? [
+                  portion.fontFamily,
+                  portion.fontFamilyAsian,
+                  portion.fontFamilyComplex,
+                ].every((value) => value === command.family.trim())
+              : command.op === "bold"
+                ? [
+                    portion.fontWeight,
+                    portion.fontWeightAsian,
+                    portion.fontWeightComplex,
+                  ].every(
+                    (value) => Number(value) === (command.bold ? 150 : 100),
+                  )
+                : [
+                    portion.fontStyle,
+                    portion.fontStyleAsian,
+                    portion.fontStyleComplex,
+                  ].every((value) => italic(value) === command.italic),
+        )
+      );
+    };
     const unchanged =
       command.op === "replace_text"
         ? command.text === element.text
@@ -3897,11 +4035,11 @@ function spellbookDocumentOperation(request) {
             ? Math.round(command.width) === element.width &&
               Math.round(command.height) === element.height
             : command.op === "font_size"
-              ? command.size === element.fontSize
+              ? typedTextFormattingMatches(before)
               : command.op === "bold"
-                ? element.fontWeight === (command.bold ? 150 : 100)
+                ? typedTextFormattingMatches(before)
                 : command.op === "italic"
-                  ? italic(element.fontStyle) === command.italic
+                  ? typedTextFormattingMatches(before)
                   : command.op === "underline"
                     ? underlined(element.underline) === command.underline
                     : command.op === "strikethrough"
@@ -3909,7 +4047,7 @@ function spellbookDocumentOperation(request) {
                       : command.op === "text_shadow"
                         ? element.textShadow === command.shadow
                         : command.op === "font_family"
-                          ? element.fontFamily === command.family.trim()
+                          ? typedTextFormattingMatches(before)
                           : command.op === "font_color"
                             ? element.color === Math.round(command.color)
                             : command.op === "fill_color"
@@ -3940,7 +4078,21 @@ function spellbookDocumentOperation(request) {
     const undoCount = undo.getAllUndoActionTitles().length;
     activateSlide(slideIndex);
     controller.select(shape);
-    if (command.op === "replace_text")
+    if (usesTypedTextFormatting) {
+      const objectPath = command.elementId.split("/").slice(1).join("/");
+      const properties =
+        command.op === "font_size"
+          ? { FontHeightTwips: Math.round(command.size * 20) }
+          : command.op === "font_family"
+            ? { FontFamily: command.family.trim() }
+            : command.op === "bold"
+              ? { Bold: command.bold }
+              : { Italic: command.italic };
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        { [`SetTextProperties.${objectPath}`]: properties },
+      ]);
+    } else if (command.op === "replace_text")
       dispatch(".uno:ExecuteSearch", [
         prop("SearchItem.SearchString", uno.type.string, element.text),
         prop("SearchItem.ReplaceString", uno.type.string, command.text),
@@ -3959,16 +4111,6 @@ function spellbookDocumentOperation(request) {
         prop("TransformWidth", uno.type.long, Math.round(command.width)),
         prop("TransformHeight", uno.type.long, Math.round(command.height)),
       ]);
-    else if (command.op === "font_size")
-      dispatch(".uno:FontHeight", [
-        prop("FontHeight.Height", uno.type.float, command.size),
-      ]);
-    else if (command.op === "bold")
-      dispatch(".uno:Bold", [prop("Bold", uno.type.boolean, command.bold)]);
-    else if (command.op === "italic")
-      dispatch(".uno:Italic", [
-        prop("Italic", uno.type.boolean, command.italic),
-      ]);
     else if (command.op === "underline")
       dispatch(".uno:Underline", [
         prop("Underline", uno.type.boolean, command.underline),
@@ -3980,10 +4122,6 @@ function spellbookDocumentOperation(request) {
     else if (command.op === "text_shadow")
       dispatch(".uno:Shadowed", [
         prop("Shadowed", uno.type.boolean, command.shadow),
-      ]);
-    else if (command.op === "font_family")
-      dispatch(".uno:CharFontName", [
-        prop("CharFontName.FamilyName", uno.type.string, command.family.trim()),
       ]);
     else if (command.op === "font_color")
       dispatch(".uno:Color", [
@@ -4067,7 +4205,7 @@ function spellbookDocumentOperation(request) {
       dispatch(".uno:Paste");
     } else if (command.op === "delete_element") dispatch(".uno:Delete");
 
-    const after = read();
+    const after = usesTypedTextFormatting ? read(slideIndex) : read();
     const target = after.slides[slideIndex].elements.find(
       (candidate) => candidate.elementId === command.elementId,
     );
@@ -4087,11 +4225,11 @@ function spellbookDocumentOperation(request) {
             ? target?.width === Math.round(command.width) &&
               target?.height === Math.round(command.height)
             : command.op === "font_size"
-              ? target?.fontSize === command.size
+              ? typedTextFormattingMatches(after)
               : command.op === "bold"
-                ? target?.fontWeight === (command.bold ? 150 : 100)
+                ? typedTextFormattingMatches(after)
                 : command.op === "italic"
-                  ? italic(target?.fontStyle) === command.italic
+                  ? typedTextFormattingMatches(after)
                   : command.op === "underline"
                     ? underlined(target?.underline) === command.underline
                     : command.op === "strikethrough"
@@ -4099,7 +4237,7 @@ function spellbookDocumentOperation(request) {
                       : command.op === "text_shadow"
                         ? target?.textShadow === command.shadow
                         : command.op === "font_family"
-                          ? target?.fontFamily === command.family.trim()
+                          ? typedTextFormattingMatches(after)
                           : command.op === "font_color"
                             ? target?.color === Math.round(command.color)
                             : command.op === "fill_color"
@@ -4357,6 +4495,13 @@ function spellbookDocumentOperation(request) {
     const expectedTransitions = [];
     const expectedNames = [];
     const expectedVisibility = [];
+    const setFinalExpectedState = (states, next) => {
+      const existingIndex = states.findIndex(({ reference }) =>
+        uno.sameUnoObject(reference, next.reference),
+      );
+      if (existingIndex >= 0) states[existingIndex] = next;
+      else states.push(next);
+    };
     const findVirtualPage = (reference) =>
       virtualPages.findIndex(
         (entry) =>
@@ -4396,29 +4541,49 @@ function spellbookDocumentOperation(request) {
         const [entry] = virtualPages.splice(slideIndex, 1);
         virtualPages.splice(command.targetSlideIndex, 0, entry);
       } else if (command.op === "set_slide_layout") {
+        const selectedMaster = before.masters[command.masterIndex];
         transforms.push(
           { JumpToSlide: slideIndex },
-          { ChangeLayout: command.layout },
+          {
+            ChangeLayout: {
+              MasterIndex: command.masterIndex,
+              Layout: selectedMaster.layout,
+            },
+          },
         );
-        expectedLayouts.push({ reference, layout: command.layout });
+        setFinalExpectedState(expectedLayouts, {
+          reference,
+          layout: selectedMaster.layout,
+          masterIndex: command.masterIndex,
+          masterName: selectedMaster.name,
+        });
       } else if (command.op === "set_speaker_notes") {
         transforms.push(
           { JumpToSlide: slideIndex },
           { SetNotes: command.text },
         );
-        expectedNotes.push({ reference, text: command.text });
+        setFinalExpectedState(expectedNotes, {
+          reference,
+          text: command.text,
+        });
       } else if (command.op === "rename_slide") {
         transforms.push(
           { JumpToSlide: slideIndex },
           { RenameSlide: command.name.trim() },
         );
-        expectedNames.push({ reference, name: command.name.trim() });
+        setFinalExpectedState(expectedNames, {
+          reference,
+          name: command.name.trim(),
+        });
       } else if (command.op === "set_slide_hidden") {
         transforms.push(
           { JumpToSlide: slideIndex },
           { SetSlideVisible: !command.hidden },
         );
-        expectedVisibility.push({ reference, visible: !command.hidden });
+        setFinalExpectedState(expectedVisibility, {
+          reference,
+          visible: !command.hidden,
+        });
       } else if (command.op === "set_slide_transition") {
         const preset = slideTransitionPresets[command.transitionEffect];
         const transition = {
@@ -4437,7 +4602,7 @@ function spellbookDocumentOperation(request) {
             },
           },
         );
-        expectedTransitions.push({ reference, transition });
+        setFinalExpectedState(expectedTransitions, { reference, transition });
       }
     }
     try {
@@ -4454,7 +4619,14 @@ function spellbookDocumentOperation(request) {
           );
         });
       const layoutsApplied = expectedLayouts.every(
-        ({ reference, layout }) => safeProperty(reference, "Layout") === layout,
+        ({ reference, layout, masterIndex, masterName }) => {
+          const slide = after.slides[currentPageIndex(reference)];
+          return (
+            slide?.layout === layout &&
+            slide.masterIndex === masterIndex &&
+            slide.masterName === masterName
+          );
+        },
       );
       const notesApplied = expectedNotes.every(({ reference, text }) => {
         const index = currentPageIndex(reference);
@@ -4464,8 +4636,9 @@ function spellbookDocumentOperation(request) {
         ({ reference, transition }) => {
           const index = currentPageIndex(reference);
           return (
-            stableJson(after.slides[index]?.transition) ===
-            stableJson(transition)
+            stableJson(
+              persistedSlideTransition(after.slides[index]?.transition),
+            ) === stableJson(transition)
           );
         },
       );
@@ -4496,7 +4669,29 @@ function spellbookDocumentOperation(request) {
           !transitionsApplied ||
           !namesApplied ||
           !visibilityApplied
-            ? "native_command_not_applied"
+            ? `native_command_not_applied:${stableJson({
+                orderApplied,
+                layoutsApplied,
+                notesApplied,
+                transitionsApplied,
+                namesApplied,
+                visibilityApplied,
+                expectedTransitions: expectedTransitions.map(
+                  ({ reference, transition }) => ({
+                    slideIndex: currentPageIndex(reference),
+                    transition,
+                  }),
+                ),
+                observedTransitions: expectedTransitions.map(
+                  ({ reference }) => {
+                    const index = currentPageIndex(reference);
+                    return {
+                      slideIndex: index,
+                      transition: after.slides[index]?.transition,
+                    };
+                  },
+                ),
+              })}`
             : "transaction_undo_not_recorded",
         );
       const affectedSlideIndexes = [];

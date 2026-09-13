@@ -53,7 +53,7 @@ try {
     if (!frame) throw new Error("Native extension frame was lost.");
     return frame.evaluate(
       (requestedDirection) =>
-        cool.callRemote(function presentLayoutHistory(value) {
+        cool.callRemote(function spellbookLayoutHistory(value) {
           const undo = uno.idl.com.sun.star.frame.Desktop.create(
             uno.componentContext,
           )
@@ -92,26 +92,29 @@ try {
   const patchLevelMatch = /^undo-v([1-9][0-9]*)$/.exec(
     before.engine?.patchLevel ?? "",
   );
-  if (!patchLevelMatch || Number(patchLevelMatch[1]) < 6)
+  if (!patchLevelMatch || Number(patchLevelMatch[1]) < 12)
     throw new Error("The slide-layout master repair is unavailable.");
   const slideIndex = before.activeSlide;
-  const layout = [20, 19, 0, 1, 32, 3, 12, 15, 14, 16, 18].find(
-    (candidate) => candidate !== before.slides[slideIndex].layout,
+  const targetMaster = before.masters.find(
+    (candidate) =>
+      candidate.masterIndex !== before.slides[slideIndex].masterIndex,
   );
-  if (layout === undefined)
-    throw new Error("No alternate slide layout exists.");
+  if (!targetMaster) throw new Error("No alternate slide layout exists.");
+  const { masterIndex, layout } = targetMaster;
   const historyBefore = await history();
   const after = await call({
     operation: "edit_batch",
     expectedRevision: before.revision,
     expectedSlides: stable(before.slides),
-    commands: [{ op: "set_slide_layout", slideIndex, layout }],
+    commands: [{ op: "set_slide_layout", slideIndex, masterIndex, layout }],
     dryRun: false,
     permission: { mode: "document", slideIndexes: [], elementIds: [] },
   });
   const historyAfter = await history();
   if (
     after.slides[slideIndex].layout !== layout ||
+    after.slides[slideIndex].masterIndex !== masterIndex ||
+    after.slides[slideIndex].masterName !== targetMaster.name ||
     after.revision === before.revision ||
     after.transaction?.status !== "applied" ||
     after.transaction?.commandCount !== 1 ||
@@ -151,6 +154,8 @@ try {
     },
     persistenceExpected: {
       slideIndex,
+      masterIndex,
+      masterName: targetMaster.name,
       layout,
       slides: redone.slides,
       masters: redone.masters,

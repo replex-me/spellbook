@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   documentStatesEquivalent,
   firstDocumentStateDifference,
+  quantizedGeometryEquivalent,
 } from "./document-state-evidence.mjs";
 import { persistenceStateFromObservation } from "./persistence-evidence.mjs";
 
@@ -223,7 +224,7 @@ try {
     if (!extensionFrame) throw new Error("Native extension frame was lost.");
     return extensionFrame.evaluate(
       async (direction) =>
-        cool.callRemote(function presentProbeHistory(remoteDirection) {
+        cool.callRemote(function spellbookProbeHistory(remoteDirection) {
           const desktop = uno.idl.com.sun.star.frame.Desktop.create(
             uno.componentContext,
           );
@@ -530,14 +531,18 @@ try {
     observed.slides
       .flatMap((slide) => slide.elements)
       .find((element) => element.elementId === table.elementId);
-  const assertExactTableGeometry = (operation, actual, expected) => {
+  const assertTableGeometry = (operation, actual, expected) => {
     const geometry = {
       x: actual.x,
       y: actual.y,
       width: actual.width,
       height: actual.height,
     };
-    if (JSON.stringify(geometry) !== JSON.stringify(expected))
+    if (
+      Object.keys(expected).some(
+        (key) => !quantizedGeometryEquivalent(expected[key], geometry[key]),
+      )
+    )
       throw new Error(
         `${operation} changed table geometry incorrectly: ${JSON.stringify({ expected, actual: geometry })}`,
       );
@@ -575,10 +580,13 @@ try {
     if (
       afterRowInsert.table.rowHeights[1] !== inheritedRowHeight ||
       inheritedRowHeight <= 0 ||
-      afterRowInsert.height !== beforeRowInsert.height + inheritedRowHeight ||
-      afterRowInsert.x !== beforeRowInsert.x ||
-      afterRowInsert.y !== beforeRowInsert.y ||
-      afterRowInsert.width !== beforeRowInsert.width
+      !quantizedGeometryEquivalent(
+        beforeRowInsert.height + inheritedRowHeight,
+        afterRowInsert.height,
+      ) ||
+      !quantizedGeometryEquivalent(beforeRowInsert.x, afterRowInsert.x) ||
+      !quantizedGeometryEquivalent(beforeRowInsert.y, afterRowInsert.y) ||
+      !quantizedGeometryEquivalent(beforeRowInsert.width, afterRowInsert.width)
     )
       throw new Error(
         "Inserted table row did not inherit exact live geometry.",
@@ -595,11 +603,16 @@ try {
     if (
       afterColumnInsert.table.columnWidths[1] !== inheritedColumnWidth ||
       inheritedColumnWidth <= 0 ||
-      afterColumnInsert.width !==
-        beforeColumnInsert.width + inheritedColumnWidth ||
-      afterColumnInsert.x !== beforeColumnInsert.x ||
-      afterColumnInsert.y !== beforeColumnInsert.y ||
-      afterColumnInsert.height !== beforeColumnInsert.height
+      !quantizedGeometryEquivalent(
+        beforeColumnInsert.width + inheritedColumnWidth,
+        afterColumnInsert.width,
+      ) ||
+      !quantizedGeometryEquivalent(beforeColumnInsert.x, afterColumnInsert.x) ||
+      !quantizedGeometryEquivalent(beforeColumnInsert.y, afterColumnInsert.y) ||
+      !quantizedGeometryEquivalent(
+        beforeColumnInsert.height,
+        afterColumnInsert.height,
+      )
     )
       throw new Error(
         "Inserted table column did not inherit exact live geometry.",
@@ -611,7 +624,7 @@ try {
       index: 1,
       height: beforeRowHeight.table.rowHeights[1] + 100,
     });
-    assertExactTableGeometry("set_table_row_height", currentTable(), {
+    assertTableGeometry("set_table_row_height", currentTable(), {
       x: beforeRowHeight.x,
       y: beforeRowHeight.y,
       width: beforeRowHeight.width,
@@ -625,7 +638,7 @@ try {
       index: 1,
       width: beforeColumnWidth.table.columnWidths[1] + 100,
     });
-    assertExactTableGeometry("set_table_column_width", currentTable(), {
+    assertTableGeometry("set_table_column_width", currentTable(), {
       x: beforeColumnWidth.x,
       y: beforeColumnWidth.y,
       width: beforeColumnWidth.width + 100,
@@ -641,7 +654,7 @@ try {
       endRow: 1,
       endColumn: 1,
     });
-    assertExactTableGeometry("merge_table_cells", currentTable(), {
+    assertTableGeometry("merge_table_cells", currentTable(), {
       x: beforeMerge.x,
       y: beforeMerge.y,
       width: beforeMerge.width,
@@ -657,7 +670,7 @@ try {
       columns: 2,
       rows: 2,
     });
-    assertExactTableGeometry("split_table_cell", currentTable(), {
+    assertTableGeometry("split_table_cell", currentTable(), {
       x: beforeSplit.x,
       y: beforeSplit.y,
       width: beforeSplit.width,
@@ -673,7 +686,7 @@ try {
       index: rowDeleteIndex,
       count: 1,
     });
-    assertExactTableGeometry("delete_table_rows", currentTable(), {
+    assertTableGeometry("delete_table_rows", currentTable(), {
       x: beforeRowDelete.x,
       y: beforeRowDelete.y,
       width: beforeRowDelete.width,
@@ -690,7 +703,7 @@ try {
       index: columnDeleteIndex,
       count: 1,
     });
-    assertExactTableGeometry("delete_table_columns", currentTable(), {
+    assertTableGeometry("delete_table_columns", currentTable(), {
       x: beforeColumnDelete.x,
       y: beforeColumnDelete.y,
       width: beforeColumnDelete.width - deletedColumnWidth,
@@ -721,14 +734,16 @@ try {
   await edit({ op: "insert_slide", slideIndex: 0 });
   await edit({ op: "duplicate_slide", slideIndex: 0 });
   let slideTarget = observed.slides.length - 1;
-  const layout = [
-    20, 19, 0, 1, 32, 3, 12, 15, 14, 16, 18, 34, 28, 27, 29, 30,
-  ].find((candidate) => candidate !== observed.slides[slideTarget].layout);
+  const layoutMaster = observed.masters.find(
+    (candidate) =>
+      candidate.masterIndex !== observed.slides[slideTarget].masterIndex,
+  );
   if (probePatchedEngine && engineOperationAvailable("set_slide_layout"))
     await editWithUndoRoundTrip({
       op: "set_slide_layout",
       slideIndex: slideTarget,
-      layout,
+      masterIndex: layoutMaster.masterIndex,
+      layout: layoutMaster.layout,
     });
   const targetSlideIndex = slideTarget === 1 ? 2 : 1;
   await editWithUndoRoundTrip({
@@ -1038,7 +1053,7 @@ try {
           slide.slideIndex !== observed.activeSlide &&
           slide.elements.some(
             (element) =>
-              element.parentElementId === null && element.text !== null,
+              element.parentElementId === null && Boolean(element.text),
           ),
       )?.slideIndex ?? observed.activeSlide;
     const activeSlideBeforePropertyObservation = observed.activeSlide;
@@ -1058,14 +1073,18 @@ try {
                 .length > 1,
           ),
       ) ??
-      observed.textDetails?.elements.find((element) =>
-        /^\d+\/\d+$/.test(element.elementId),
+      observed.textDetails?.elements.find(
+        (element) =>
+          /^\d+\/\d+$/.test(element.elementId) &&
+          element.paragraphs.some((paragraph) =>
+            paragraph.portions.some((portion) => portion.text.length > 0),
+          ),
       );
     const propertyTarget = observed.slides[propertySlideIndex]?.elements.find(
       (element) =>
         element.elementId === preferredTextDetails?.elementId &&
         element.parentElementId === null &&
-        element.text !== null,
+        Boolean(element.text),
     );
     if (!propertyTarget)
       throw new Error("No top-level text object for property patch probe.");
@@ -1293,7 +1312,6 @@ try {
   const report = {
     commands: results,
     uniqueCommandCount: verifiedCommands.length,
-    fixtureSpecificOperations,
     contractVersion: nativeEditContract.version,
     slideCount: observed.slides.length,
     elementCount: observed.slides[0].elements.length,

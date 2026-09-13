@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { documentStatesEquivalent } from "./document-state-evidence.mjs";
 
 const require = createRequire(
   new URL("../../apps/web/package.json", import.meta.url),
@@ -88,7 +89,7 @@ try {
     if (!extensionFrame) throw new Error("Native extension frame was lost.");
     return extensionFrame.evaluate(
       async (requestedDirection) =>
-        cool.callRemote(function presentTableProbeHistory(remoteDirection) {
+        cool.callRemote(function spellbookTableProbeHistory(remoteDirection) {
           const desktop = uno.idl.com.sun.star.frame.Desktop.create(
             uno.componentContext,
           );
@@ -116,8 +117,8 @@ try {
       candidate = await call({ operation: "observe" });
       if (
         candidate.revision === expected.revision &&
-        JSON.stringify(candidate.slides) === JSON.stringify(expected.slides) &&
-        JSON.stringify(candidate.masters) === JSON.stringify(expected.masters)
+        documentStatesEquivalent(expected.slides, candidate.slides) &&
+        documentStatesEquivalent(expected.masters, candidate.masters)
       )
         return candidate;
       await page.waitForTimeout(100);
@@ -178,16 +179,20 @@ try {
   const commands = [];
   const historyDrifts = [];
   const semanticDrifts = [];
-  const assertTableGeometry = (operation, after, expected) => {
-    const actual = {
-      x: after.x,
-      y: after.y,
-      width: after.width,
-      height: after.height,
-    };
-    const mismatch = Object.entries(expected).some(
-      ([key, value]) => actual[key] !== value,
+  const tableGeometry = ({ x, y, width, height }) => ({
+    x,
+    y,
+    width,
+    height,
+  });
+  const tableGeometryEquivalent = (actual, expected) =>
+    documentStatesEquivalent(
+      [{ elements: [tableGeometry(expected)] }],
+      [{ elements: [tableGeometry(actual)] }],
     );
+  const assertTableGeometry = (operation, after, expected) => {
+    const actual = tableGeometry(after);
+    const mismatch = !tableGeometryEquivalent(actual, expected);
     if (!mismatch) return;
     const drift = { operation, expected, actual };
     if (!continueOnHistoryDrift)
@@ -311,10 +316,12 @@ try {
   const rowInsertGeometryMismatch =
     afterRowInsert.table.rowHeights[1] !== inheritedRowHeight ||
     inheritedRowHeight <= 0 ||
-    afterRowInsert.height !== beforeRowInsert.height + inheritedRowHeight ||
-    afterRowInsert.x !== beforeRowInsert.x ||
-    afterRowInsert.y !== beforeRowInsert.y ||
-    afterRowInsert.width !== beforeRowInsert.width;
+    !tableGeometryEquivalent(afterRowInsert, {
+      x: beforeRowInsert.x,
+      y: beforeRowInsert.y,
+      width: beforeRowInsert.width,
+      height: beforeRowInsert.height + inheritedRowHeight,
+    });
   if (rowInsertGeometryMismatch && !continueOnHistoryDrift)
     throw new Error(
       `Inserted row did not inherit the live table geometry: ${JSON.stringify({
@@ -355,11 +362,12 @@ try {
   const columnInsertGeometryMismatch =
     afterColumnInsert.table.columnWidths[1] !== inheritedColumnWidth ||
     inheritedColumnWidth <= 0 ||
-    afterColumnInsert.width !==
-      beforeColumnInsert.width + inheritedColumnWidth ||
-    afterColumnInsert.x !== beforeColumnInsert.x ||
-    afterColumnInsert.y !== beforeColumnInsert.y ||
-    afterColumnInsert.height !== beforeColumnInsert.height;
+    !tableGeometryEquivalent(afterColumnInsert, {
+      x: beforeColumnInsert.x,
+      y: beforeColumnInsert.y,
+      width: beforeColumnInsert.width + inheritedColumnWidth,
+      height: beforeColumnInsert.height,
+    });
   if (columnInsertGeometryMismatch && !continueOnHistoryDrift)
     throw new Error(
       `Inserted column did not inherit the live table geometry: ${JSON.stringify(

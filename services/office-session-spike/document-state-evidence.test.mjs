@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   documentStatesEquivalent,
   firstDocumentStateDifference,
+  quantizedGeometryEquivalent,
 } from "./document-state-evidence.mjs";
 
 test("document state treats one hundredth millimetre as the same element outline", () => {
@@ -28,6 +29,8 @@ test("document state treats one hundredth millimetre as the same element outline
   actual.slides[0].elements[0].table.rowHeights[0] = 2_249;
 
   assert.equal(documentStatesEquivalent(expected.slides, actual.slides), true);
+  assert.equal(quantizedGeometryEquivalent(1_000, 999), true);
+  assert.equal(quantizedGeometryEquivalent(1_000, 998), false);
 });
 
 test("document state keeps meaningful geometry and non-geometry values exact", () => {

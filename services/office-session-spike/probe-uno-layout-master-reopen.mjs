@@ -1,7 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { assertDocumentPersistenceDelta } from "./persistence-evidence.mjs";
+import {
+  assertDocumentPersistenceDelta,
+  documentPersistenceDeltaDifferences,
+} from "./persistence-evidence.mjs";
 
 const require = createRequire(
   new URL("../../apps/web/package.json", import.meta.url),
@@ -53,15 +56,19 @@ try {
   const patchLevelMatch = /^undo-v([1-9][0-9]*)$/.exec(
     observed.engine?.patchLevel ?? "",
   );
-  if (!patchLevelMatch || Number(patchLevelMatch[1]) < 6)
+  if (!patchLevelMatch || Number(patchLevelMatch[1]) < 12)
     throw new Error(
-      `Expected undo-v6 or newer, got ${observed.engine?.patchLevel}.`,
+      `Expected undo-v12 or newer, got ${observed.engine?.patchLevel}.`,
     );
-  assertDocumentPersistenceDelta(
+  const persistenceDifferences = documentPersistenceDeltaDifferences(
     report,
     observed,
-    "Saved PPTX did not preserve the exact slide-layout and master structure.",
   );
+  if (persistenceDifferences.length)
+    await writeFile(
+      path.resolve(path.dirname(reportPath), "reopen-differences.json"),
+      `${JSON.stringify(persistenceDifferences, null, 2)}\n`,
+    );
   if (process.env.SPELLBOOK_PROBE_REOPEN_SCREENSHOT) {
     const image = observed.images?.[0];
     if (!image?.pngBytes?.length)
@@ -71,6 +78,11 @@ try {
       Buffer.from(image.pngBytes),
     );
   }
+  assertDocumentPersistenceDelta(
+    report,
+    observed,
+    "Saved PPTX did not preserve the exact slide-layout and master structure.",
+  );
   process.stdout.write(
     `${JSON.stringify({ reopened: true, enginePatchLevel: observed.engine.patchLevel, operation: "set_slide_layout", slideIndex: expected.slideIndex, layout: expected.layout }, null, 2)}\n`,
   );

@@ -1,0 +1,179 @@
+--- a/svx/source/inc/cell.hxx
++++ b/svx/source/inc/cell.hxx
+@@ -94,7 +94,8 @@
+ 
+     SVX_DLLPRIVATE void setMerged();
+ 
+-    SVX_DLLPRIVATE void copyFormatFrom( const CellRef& xSourceCell );
++    SVX_DLLPRIVATE void copyFormatFrom( const CellRef& xSourceCell,
++                                        bool bNotifyModified = true );
+ 
+     // XInterface
+     SVX_DLLPRIVATE virtual cpo::uno::Any SAL_CALL queryInterface( const cpo::uno::Type& Type ) override;
+--- a/svx/source/table/cell.cxx
++++ b/svx/source/table/cell.cxx
+@@ -500,7 +500,7 @@
+ }
+ 
+ 
+-void Cell::copyFormatFrom( const CellRef& xSourceCell )
++void Cell::copyFormatFrom( const CellRef& xSourceCell, bool bNotifyModified )
+ {
+     if( !(xSourceCell.is() && mpProperties) )
+         return;
+@@ -516,7 +516,8 @@
+         SetStyleSheet( nullptr, true );
+     }
+ 
+-    notifyModified();
++    if (bNotifyModified)
++        notifyModified();
+ }
+ 
+ 
+--- a/svx/source/table/tablemodel.cxx
++++ b/svx/source/table/tablemodel.cxx
+@@ -600,6 +600,9 @@
+ {
+     if( !(nCount && mpTableObj) )
+         return;
++
++    sal_Int32 nInsertedIndex = -1;
++    sal_Int32 nFormatSourceColumn = -1;
+ 
+     try
+     {
+@@ -614,6 +617,9 @@
+         const bool bInheritedOptimalWidth
+             = bInheritColumn && maColumns[nSourceColumn]->mbOptimalWidth;
+         nIndex = insert_range<ColumnVector,ColumnVector::iterator,TableColumnRef>( maColumns, nIndex, nCount );
++        nInsertedIndex = nIndex;
++        nFormatSourceColumn
++            = nSourceColumn >= nIndex ? nSourceColumn + nCount : nSourceColumn;
+ 
+         sal_Int32 nRows = getRowCountImpl();
+         while( nRows-- )
+@@ -687,6 +693,22 @@
+     updateColumns();
+     setModified(true);
+     mpTableObj->NbcSyncLogicRectToTableLayout();
++    // XTableColumns::insertByIndex() is the programmatic counterpart of the
++    // Impress UI command. Complete geometry first, then inherit the nearest
++    // original column's cell formatting so both paths keep the same appearance.
++    if (nInsertedIndex >= 0 && nFormatSourceColumn >= 0)
++    {
++        for (sal_Int32 nRow = 0; nRow < getRowCountImpl(); ++nRow)
++        {
++            const CellRef xSourceCell(getCell(nFormatSourceColumn, nRow));
++            for (sal_Int32 nOffset = 0; nOffset < nCount; ++nOffset)
++            {
++                const CellRef xTargetCell(getCell(nInsertedIndex + nOffset, nRow));
++                if (xTargetCell.is() && xSourceCell.is())
++                    xTargetCell->copyFormatFrom(xSourceCell, false);
++            }
++        }
++    }
+ }
+ 
+ 
+@@ -809,6 +831,9 @@
+     if( !(nCount && mpTableObj) )
+         return;
+ 
++    sal_Int32 nInsertedIndex = -1;
++    sal_Int32 nFormatSourceRow = -1;
++
+     SdrModel& rModel(mpTableObj->getSdrModelFromSdrObject());
+     const bool bUndo(mpTableObj->IsInserted() && rModel.IsUndoEnabled());
+ 
+@@ -825,6 +850,8 @@
+             = bInheritRow && maRows[nSourceRow]->mbOptimalHeight;
+ 
+         nIndex = insert_range<RowVector,RowVector::iterator,TableRowRef>( maRows, nIndex, nCount );
++        nInsertedIndex = nIndex;
++        nFormatSourceRow = nSourceRow >= nIndex ? nSourceRow + nCount : nSourceRow;
+ 
+         RowVector aNewRows(nCount);
+         const sal_Int32 nColCount = getColumnCountImpl();
+@@ -879,6 +906,22 @@
+     updateRows();
+     setModified(true);
+     mpTableObj->NbcSyncLogicRectToTableLayout();
++    // Match manual row insertion without marking the partially assembled
++    // table modified before its outer geometry has been synchronized.
++    if (nInsertedIndex >= 0 && nFormatSourceRow >= 0)
++    {
++        const sal_Int32 nColumnCount = getColumnCountImpl();
++        for (sal_Int32 nColumn = 0; nColumn < nColumnCount; ++nColumn)
++        {
++            const CellRef xSourceCell(getCell(nColumn, nFormatSourceRow));
++            for (sal_Int32 nOffset = 0; nOffset < nCount; ++nOffset)
++            {
++                const CellRef xTargetCell(getCell(nColumn, nInsertedIndex + nOffset));
++                if (xTargetCell.is() && xSourceCell.is())
++                    xTargetCell->copyFormatFrom(xSourceCell, false);
++            }
++        }
++    }
+ }
+ 
+ 
+--- a/sd/qa/unit/misc-tests.cxx
++++ b/sd/qa/unit/misc-tests.cxx
+@@ -433,9 +433,14 @@
+     uno::Reference<beans::XPropertySet> xSourceRow(xRows->getByIndex(0), uno::UNO_QUERY_THROW);
+     uno::Reference<beans::XPropertySet> xSourceColumn(xColumns->getByIndex(0),
+                                                       uno::UNO_QUERY_THROW);
++    uno::Reference<beans::XPropertySet> xSourceCell(xTable->getCellByPosition(0, 0),
++                                                    uno::UNO_QUERY_THROW);
+     pXImpressDocument->GetDoc()->EnableUndo(false);
+     xSourceRow->setPropertyValue(u"Height"_ustr, cpo::uno::Any(sal_Int32(2234)));
+     xSourceColumn->setPropertyValue(u"Width"_ustr, cpo::uno::Any(sal_Int32(4567)));
++    xSourceCell->setPropertyValue(u"FillColor"_ustr, cpo::uno::Any(sal_Int32(0x3465A4)));
++    xSourceCell->setPropertyValue(u"CharFontName"_ustr,
++                                  cpo::uno::Any(u"Noto Sans CJK KR"_ustr));
+     pXImpressDocument->GetDoc()->EnableUndo(true);
+     sal_Int32 nExpectedHeight = 0;
+     sal_Int32 nExpectedWidth = 0;
+@@ -505,6 +510,17 @@
+     const sal_Int32 nInheritedRowHeight = nInsertedHeight;
+     CPPUNIT_ASSERT_EQUAL(nOriginalRows + 1, xRows->getCount());
+     CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
++    const auto assertInheritedCellFormat = [&](sal_Int32 nColumn, sal_Int32 nRow) {
++        uno::Reference<beans::XPropertySet> xCell(
++            xTable->getCellByPosition(nColumn, nRow), uno::UNO_QUERY_THROW);
++        sal_Int32 nFillColor = 0;
++        OUString aFontName;
++        xCell->getPropertyValue(u"FillColor"_ustr) >>= nFillColor;
++        xCell->getPropertyValue(u"CharFontName"_ustr) >>= aFontName;
++        CPPUNIT_ASSERT_EQUAL(sal_Int32(0x3465A4), nFillColor);
++        CPPUNIT_ASSERT_EQUAL(u"Noto Sans CJK KR"_ustr, aFontName);
++    };
++    assertInheritedCellFormat(0, 0);
+     assertUnoSizeMatchesTableModel();
+     const tools::Rectangle aInsertedRowRect = pTableObject->GetLogicRect();
+     CPPUNIT_ASSERT_EQUAL(aOriginalRect.getOpenWidth(), aInsertedRowRect.getOpenWidth());
+@@ -516,6 +532,7 @@
+     assertUnoSizeMatchesTableModel();
+     pUndoManager->Redo();
+     CPPUNIT_ASSERT_EQUAL(nOriginalRows + 1, xRows->getCount());
++    assertInheritedCellFormat(0, 0);
+     assertSameUnoGeometry(aInsertedRowRect, pTableObject->GetLogicRect());
+     assertUnoSizeMatchesTableModel();
+     xInsertedRow.set(xRows->getByIndex(0), uno::UNO_QUERY_THROW);
+@@ -545,6 +562,7 @@
+     const sal_Int32 nInheritedColumnWidth = nInsertedWidth;
+     CPPUNIT_ASSERT_EQUAL(nOriginalColumns + 1, xColumns->getCount());
+     CPPUNIT_ASSERT_EQUAL(size_t(3), pUndoManager->GetUndoActionCount());
++    assertInheritedCellFormat(0, 0);
+     assertUnoSizeMatchesTableModel();
+     const tools::Rectangle aInsertedColumnRect = pTableObject->GetLogicRect();
+     CPPUNIT_ASSERT_EQUAL(aOriginalRect.getOpenWidth() + nInheritedColumnWidth,
+@@ -556,6 +574,7 @@
+     assertUnoSizeMatchesTableModel();
+     pUndoManager->Redo();
+     CPPUNIT_ASSERT_EQUAL(nOriginalColumns + 1, xColumns->getCount());
++    assertInheritedCellFormat(0, 0);
+     assertSameUnoGeometry(aInsertedColumnRect, pTableObject->GetLogicRect());
+     assertUnoSizeMatchesTableModel();
+     xInsertedColumn.set(xColumns->getByIndex(0), uno::UNO_QUERY_THROW);

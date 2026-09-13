@@ -11,6 +11,26 @@ const reportPath = process.argv[3] ? path.resolve(process.argv[3]) : null;
 const browser = await chromium.launch({ headless: true });
 
 const stable = (value) => JSON.stringify(value);
+const firstDifference = (expected, observed, currentPath = "document") => {
+  if (Object.is(expected, observed)) return null;
+  if (
+    !expected ||
+    !observed ||
+    typeof expected !== "object" ||
+    typeof observed !== "object"
+  )
+    return { path: currentPath, expected, observed };
+  const keys = new Set([...Object.keys(expected), ...Object.keys(observed)]);
+  for (const key of keys) {
+    const difference = firstDifference(
+      expected[key],
+      observed[key],
+      `${currentPath}.${key}`,
+    );
+    if (difference) return difference;
+  }
+  return null;
+};
 
 try {
   const page = await browser.newPage({
@@ -55,7 +75,7 @@ try {
     if (!frame) throw new Error("Native extension frame was lost.");
     return frame.evaluate(
       (requestedDirection) =>
-        cool.callRemote(function presentTableCellFormatHistory(value) {
+        cool.callRemote(function spellbookTableCellFormatHistory(value) {
           const undo = uno.idl.com.sun.star.frame.Desktop.create(
             uno.componentContext,
           )
@@ -87,7 +107,14 @@ try {
         return observed;
       await page.waitForTimeout(100);
     } while (Date.now() < stop);
-    throw new Error(`${label} did not restore the exact document.`);
+    throw new Error(
+      `${label} did not restore the exact document: ${JSON.stringify(
+        firstDifference(
+          { slides: expected.slides, masters: expected.masters },
+          { slides: observed?.slides, masters: observed?.masters },
+        ),
+      )}`,
+    );
   };
 
   const before = await call({ operation: "observe" });
@@ -96,15 +123,32 @@ try {
   );
   if (!patchLevelMatch || Number(patchLevelMatch[1]) < 6)
     throw new Error("The table-cell-format engine candidate is unavailable.");
-  const target = before.slides
-    .flatMap((slide) => slide.elements)
-    .find(
-      (element) =>
-        element.parentElementId === null &&
-        element.table?.cellDetails?.[0]?.[1],
-    );
-  if (!target) throw new Error("No observable editable table cell was found.");
-  const beforeCell = target.table.cellDetails[0][0];
+  let target = null;
+  let targetRow = -1;
+  let targetColumn = -1;
+  for (const element of before.slides.flatMap((slide) => slide.elements)) {
+    if (element.parentElementId !== null || !element.table?.cellDetails)
+      continue;
+    for (let row = 0; row < element.table.cellDetails.length; row += 1) {
+      const cells = element.table.cellDetails[row];
+      for (let column = 0; column + 1 < cells.length; column += 1) {
+        if (
+          String(element.table.cells?.[row]?.[column] ?? "").trim() &&
+          String(element.table.cells?.[row]?.[column + 1] ?? "").trim()
+        ) {
+          target = element;
+          targetRow = row;
+          targetColumn = column;
+          break;
+        }
+      }
+      if (target) break;
+    }
+    if (target) break;
+  }
+  if (!target)
+    throw new Error("No adjacent non-empty editable table cells were found.");
+  const beforeCell = target.table.cellDetails[targetRow][targetColumn];
   if (
     !beforeCell.borders?.top ||
     !beforeCell.borders?.right ||
@@ -124,10 +168,13 @@ try {
     fillOpacity: beforeCell.fillOpacity === 73 ? 74 : 73,
     fontColor: beforeCell.color === 16711680 ? 255 : 16711680,
     fontSize: beforeCell.fontSize === 22 ? 21 : 22,
+    // Use fonts physically present in the candidate image. Liberation's
+    // PowerPoint compatibility aliases can legitimately serialize as Arial,
+    // which makes it a bad persistence oracle for the actual table mutation.
     fontFamily:
-      beforeCell.fontFamily === "Liberation Sans"
-        ? "Liberation Serif"
-        : "Liberation Sans",
+      beforeCell.fontFamily === "Noto Sans CJK KR"
+        ? "Noto Serif CJK KR"
+        : "Noto Sans CJK KR",
     bold: Number(beforeCell.fontWeight) < 150,
     underline: Number(beforeCell.underline) !== 1,
     strikethrough: Number(beforeCell.strikethrough) !== 1,
@@ -152,8 +199,8 @@ try {
       {
         op: "set_table_cell_format",
         elementId: target.elementId,
-        row: 0,
-        column: 0,
+        row: targetRow,
+        column: targetColumn,
         tableCellFormat: format,
       },
     ],
@@ -163,7 +210,8 @@ try {
   const afterTarget = after.slides
     .flatMap((slide) => slide.elements)
     .find((element) => element.stableId === target.stableId);
-  const afterCell = afterTarget?.table?.cellDetails?.[0]?.[0];
+  const afterCell =
+    afterTarget?.table?.cellDetails?.[targetRow]?.[targetColumn];
   const expectedCell = {
     ...beforeCell,
     fillColor: format.fillColor,
@@ -241,7 +289,8 @@ try {
     borderBottom: null,
     borderLeft: null,
   };
-  const secondBefore = afterTarget.table.cellDetails[0][1];
+  const secondBefore =
+    afterTarget.table.cellDetails[targetRow][targetColumn + 1];
   const firstBatchFormat = {
     ...emptyFormat,
     fontColor: expectedCell.color === 65535 ? 16711935 : 65535,
@@ -259,15 +308,15 @@ try {
       {
         op: "set_table_cell_format",
         elementId: target.elementId,
-        row: 0,
-        column: 0,
+        row: targetRow,
+        column: targetColumn,
         tableCellFormat: firstBatchFormat,
       },
       {
         op: "set_table_cell_format",
         elementId: target.elementId,
-        row: 0,
-        column: 1,
+        row: targetRow,
+        column: targetColumn + 1,
         tableCellFormat: secondBatchFormat,
       },
     ],
@@ -279,13 +328,13 @@ try {
     .find((element) => element.stableId === target.stableId);
   const expectedBatchCells = [
     {
-      row: 0,
-      column: 0,
+      row: targetRow,
+      column: targetColumn,
       cell: { ...expectedCell, color: firstBatchFormat.fontColor },
     },
     {
-      row: 0,
-      column: 1,
+      row: targetRow,
+      column: targetColumn + 1,
       cell: { ...secondBefore, fillColor: secondBatchFormat.fillColor },
     },
   ];

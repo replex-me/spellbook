@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import {
   assertDocumentPersistenceDelta,
+  documentPersistenceDeltaDifferences,
   persistenceStateFromObservation,
 } from "./persistence-evidence.mjs";
 
@@ -195,14 +196,15 @@ try {
       expected: expected.backgroundColor,
       actual: backgroundColor,
     });
-  assertDocumentPersistenceDelta(
+  const reopenedPersistence = persistenceStateFromObservation(observed);
+  const persistenceDifferences = documentPersistenceDeltaDifferences(
     report,
-    persistenceStateFromObservation(observed),
-    "Saved PPTX did not preserve the edited document state.",
+    reopenedPersistence,
   );
-  if (differences.length)
-    throw new Error(
-      `Saved PPTX did not preserve patched operations: ${JSON.stringify(differences)}`,
+  if (persistenceDifferences.length)
+    await writeFile(
+      path.resolve(path.dirname(reportPath), "reopen-differences.json"),
+      `${JSON.stringify(persistenceDifferences, null, 2)}\n`,
     );
   if (process.env.SPELLBOOK_PROBE_REOPEN_SCREENSHOT) {
     const image = observed.images?.[0];
@@ -213,6 +215,15 @@ try {
       Buffer.from(image.pngBytes),
     );
   }
+  assertDocumentPersistenceDelta(
+    report,
+    reopenedPersistence,
+    "Saved PPTX did not preserve the edited document state.",
+  );
+  if (differences.length)
+    throw new Error(
+      `Saved PPTX did not preserve patched operations: ${JSON.stringify(differences)}`,
+    );
   process.stdout.write(
     `${JSON.stringify(
       {

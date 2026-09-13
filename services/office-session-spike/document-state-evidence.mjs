@@ -1,5 +1,15 @@
 const GEOMETRY_QUANTIZATION = 1;
 
+export function quantizedGeometryEquivalent(expected, actual) {
+  return (
+    typeof expected === "number" &&
+    typeof actual === "number" &&
+    Number.isFinite(expected) &&
+    Number.isFinite(actual) &&
+    Math.abs(expected - actual) <= GEOMETRY_QUANTIZATION
+  );
+}
+
 function isQuantizedGeometryPath(path) {
   return (
     /\.elements\[\d+\]\.(?:x|y|width|height)$/.test(path) ||
@@ -21,10 +31,8 @@ export function firstDocumentStateDifference(
 ) {
   if (Object.is(expected, actual)) return null;
   if (
-    typeof expected === "number" &&
-    typeof actual === "number" &&
     isQuantizedGeometryPath(path) &&
-    Math.abs(expected - actual) <= GEOMETRY_QUANTIZATION
+    quantizedGeometryEquivalent(expected, actual)
   )
     return null;
   if (

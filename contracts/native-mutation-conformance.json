@@ -1,9 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.0.0",
-  "enginePatchLevel": 9,
+  "enginePatchLevel": 13,
   "executionOrder": [
-    "general-native-surface",
     "table-structure",
     "layout-master",
     "chart-data",
@@ -11,7 +10,8 @@
     "picture-crop",
     "table-style",
     "slide-transition",
-    "animation-timing"
+    "animation-timing",
+    "general-native-surface"
   ],
   "genericProviders": {
     "change_budget": {
@@ -89,6 +89,12 @@
       "name": "testDocumentStructureTextPropertiesUndoRedo",
       "proves": ["single_undo", "exact_undo_redo"]
     },
+    "text-formatting-all-scripts-history": {
+      "minEnginePatch": 13,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testTypedTextFormattingAppliesToAllScripts",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    },
     "text-shadow-roundtrip": {
       "minEnginePatch": 9,
       "target": "CppunitTest_sd_uiimpress",
@@ -99,6 +105,12 @@
       "minEnginePatch": 6,
       "target": "CppunitTest_sd_uiimpress",
       "name": "testTypedLayoutPreservesImportedMaster",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    },
+    "layout-existing-master-history": {
+      "minEnginePatch": 12,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testTypedLayoutSelectsExistingMaster",
       "proves": ["single_undo", "exact_undo_redo", "structure"]
     },
     "layout-animation-tree-history": {
@@ -146,9 +158,9 @@
   },
   "scenarios": {
     "general-native-surface": {
-      "minEnginePatch": 5,
-      "source": "eval/public/downloads/ox-typical.pptx",
-      "sourceSha256": "9e577e380f7d19f4834639f35eaa0ea40ca3f287b99ea4fff0b697abeb66f034",
+      "minEnginePatch": 13,
+      "source": "eval/public/fixtures/general-native-surface.pptx",
+      "sourceSha256": "9bc86d459f0216802746c51f4a1beebb33ff49e74fde54fcc9134eb415b51cf8",
       "apply": {
         "script": "services/office-session-spike/probe-uno.mjs",
         "env": {
@@ -158,7 +170,7 @@
       "reopen": {
         "script": "services/office-session-spike/probe-uno-reopen.mjs",
         "env": {
-          "SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL": "undo-v9"
+          "SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL": "undo-v13"
         }
       },
       "proves": [
@@ -172,7 +184,7 @@
       ]
     },
     "layout-master": {
-      "minEnginePatch": 6,
+      "minEnginePatch": 12,
       "source": "eval/public/downloads/lo-master-layouts.pptx",
       "sourceSha256": "900ca1955f5c78762f8599740378dfe1cbeced59747a6f59f200d08bf43b0d3a",
       "targetSlideIndexes": [0],
@@ -192,8 +204,8 @@
     },
     "table-structure": {
       "minEnginePatch": 5,
-      "source": "eval/public/downloads/lo-table-borders.pptx",
-      "sourceSha256": "137e3b9c380f965bb2650d6760f7c4d7c32f2b64ec3bc64c8150e9281363386f",
+      "source": "eval/public/downloads/lo-table-list.pptx",
+      "sourceSha256": "f3711fb2c44295c7d93ae92e5a5458af14a49e049ace24cc6fc64a3e3c0018bc",
       "targetSlideIndexes": [0],
       "apply": {
         "script": "services/office-session-spike/probe-uno-table-structure.mjs"
@@ -211,8 +223,8 @@
     },
     "table-style": {
       "minEnginePatch": 6,
-      "source": "eval/public/downloads/lo-table-borders.pptx",
-      "sourceSha256": "137e3b9c380f965bb2650d6760f7c4d7c32f2b64ec3bc64c8150e9281363386f",
+      "source": "eval/public/downloads/ox-table-large.pptx",
+      "sourceSha256": "07aa3b2665961a001e4a05e0de6348babd67080de38387e780768ac5fbb8eb06",
       "targetSlideIndexes": [0],
       "apply": {
         "script": "services/office-session-spike/probe-uno-table-cell-format.mjs"
@@ -268,8 +280,8 @@
     },
     "picture-crop": {
       "minEnginePatch": 6,
-      "source": "eval/public/downloads/lo-picture-crop.pptx",
-      "sourceSha256": "56025c102ed893688356f82207e14549a98e5bb1d394955a59bb805f0df22dd7",
+      "source": "eval/public/downloads/poi-picture-transparency.pptx",
+      "sourceSha256": "0ce76411a6e2fe3a5b8acf42722b973131a91b93cb5c3118a5a9c481b063e386",
       "targetSlideIndexes": [0],
       "apply": {
         "script": "services/office-session-spike/probe-uno-picture-crop-operation.mjs"
