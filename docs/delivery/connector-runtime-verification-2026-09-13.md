@@ -11,12 +11,35 @@ This is evidence from one Apple Silicon development machine and one existing Cha
 5. After pairing, the packaged app reused the existing Codex login cache without copying credentials. `account/status` returned a ChatGPT account and the connector returned five available models.
 6. The same connector/app-server path completed a real structured turn with the connected subscription.
 
+## 2026-09-15 packaged document-loop verification
+
+The current macOS arm64 package was rebuilt from the public source, passed its
+ad-hoc signature check, started its bundled connector and completed the full
+production document loop against the deployed web editor with both supported
+subscription runtimes:
+
+- Codex and Claude Sonnet each read the same live PPTX without saving during a
+  read-only turn.
+- Each provider changed one existing native shape, re-observed the rendered
+  slide, saved the PPTX, and the native Undo restored the original shape color.
+- Each provider then executed the newly exposed `set_background` operation;
+  the saved PPTX contained the requested `F3F4F6` color and reached save
+  revision 3.
+- The uploaded original remained byte-identical. Provider credentials stayed
+  in the local Connector/CLI boundary.
+
+The Claude path uses the user's unmodified, already authenticated Claude Code
+binary. Its isolated MCP server exposed only Spellbook document tools; shell,
+filesystem, browser, plugins and subagents were disabled. Claude native image
+generation remains unavailable, and the shared agent now advertises image
+generation only to providers that implement it.
+
 No credential, session token or provider response body is committed as evidence.
 
 ## Still required for a public installer
 
 - Developer ID Application signing and Apple notarization; the current app uses an ad-hoc development signature.
 - An x64 macOS artifact and a signed Windows artifact.
-- A packaged-app run of the complete document loop: observe, request permission, edit, re-observe, self-review, approve and undo.
 - Upgrade, uninstall, single-instance and visible running-status behavior.
-- Explicit verification for any provider other than Codex.
+- Fresh-install verification outside the development machine, including a
+  normal Finder launch rather than direct binary execution.
