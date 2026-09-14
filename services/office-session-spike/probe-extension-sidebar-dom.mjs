@@ -14,6 +14,13 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   await installNativeBridgeTrace(page);
+  if (process.env.SPELLBOOK_PROBE_HOST_CSS)
+    await page.route("**/spellbook-host.css", (route) =>
+      route.fulfill({
+        body: process.env.SPELLBOOK_PROBE_HOST_CSS,
+        contentType: "text/css",
+      }),
+    );
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !document.body.innerText.includes("편집기 연결 중"),
