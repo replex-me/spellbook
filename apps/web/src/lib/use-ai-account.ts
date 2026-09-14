@@ -122,7 +122,7 @@ export function useAiAccount(config: AiConnectorConfig) {
         const session = await pairLocalConnector(connectorOrigin);
         setLocalSession(session);
         setWaitingForBrowserLogin(true);
-        setMessage("OpenAI 로그인 완료를 기다리고 있습니다.");
+        setMessage("AI 계정 연결 완료를 기다리고 있습니다.");
         await load();
         return;
       }
@@ -143,7 +143,7 @@ export function useAiAccount(config: AiConnectorConfig) {
         connectorOrigin
           ? reason === "local_connector_popup_blocked"
             ? "브라우저에서 연결 승인 창을 허용한 뒤 다시 시도해 주세요."
-            : "이 컴퓨터에서 Spellbook AI Connector를 실행한 뒤 다시 시도해 주세요."
+            : "이 컴퓨터에서 Spellbook AI 연결 앱을 실행한 뒤 다시 시도해 주세요."
           : "OpenAI 연결 상태를 확인하지 못했습니다. 다시 시도해 주세요.",
       );
     } finally {

@@ -248,13 +248,13 @@ export default function Dashboard({
                     <div>
                       <strong>
                         {aiMode === "local"
-                          ? "이 컴퓨터의 AI Connector를 확인합니다"
+                          ? "이 컴퓨터에서 안전하게 연결합니다"
                           : "처음 한 번만 연결을 허용하세요"}
                       </strong>
                       {aiMode === "local" ? (
                         <p>
-                          로컬 Connector가 구독 로그인과 문서 도구를 이
-                          컴퓨터에서 실행합니다.
+                          로그인과 문서 편집 도구는 이 컴퓨터의 연결 앱에서
+                          실행됩니다.
                         </p>
                       ) : (
                         <>
@@ -279,7 +279,7 @@ export default function Dashboard({
                     <div>
                       <strong>
                         {aiMode === "local"
-                          ? "승인 창에서 연결을 허용하세요"
+                          ? "별도 창에서 연결을 허용하세요"
                           : "Spellbook로 돌아와 연결하세요"}
                       </strong>
                       <p>
@@ -302,9 +302,9 @@ export default function Dashboard({
                   disabled={connecting}
                 >
                   {connecting
-                    ? "연결 준비 중…"
-                    : aiMode === "local"
-                      ? "AI Connector 연결"
+                      ? "연결 준비 중…"
+                      : aiMode === "local"
+                      ? "내 AI 구독 연결"
                       : "설정을 켰어요 · 연결 계속"}
                 </button>
               </div>

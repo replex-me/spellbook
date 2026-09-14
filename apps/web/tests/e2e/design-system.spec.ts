@@ -189,7 +189,7 @@ test("AI가 연결되지 않아도 PPT 편집은 열리고 대화 패널에서 �
     ),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "ChatGPT 연결" }).click();
+  await page.getByRole("button", { name: "내 AI 구독 연결" }).click();
   await expect(
     page.getByRole("heading", { name: "OpenAI에서 연결을 승인하세요" }),
   ).toBeVisible();

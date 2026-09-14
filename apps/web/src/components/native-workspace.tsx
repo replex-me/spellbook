@@ -743,7 +743,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                       disabled={ai.connecting}
                       onClick={() => void ai.connect()}
                     >
-                      {ai.connecting ? "연결 준비 중…" : "AI Connector 연결"}
+                      {ai.connecting ? "연결 준비 중…" : "내 AI 구독 연결"}
                     </button>
                     <a
                       className="native-security-link"
