@@ -1,3 +1,404 @@
+--- a/include/oox/export/shapes.hxx
++++ b/include/oox/export/shapes.hxx
+@@ -93,6 +93,9 @@
+     css::awt::Size MapSize( const css::awt::Size& ) const;
+     void WriteShapeLocks(const css::uno::Reference<css::drawing::XShape>& xShape,
+                          sal_Int32 nLockToken);
++    void WriteShapeClickAction(
++        const css::uno::Reference<css::beans::XPropertySet>& xShapeProperties,
++        bool bMediaClickAction = false);
+
+     ShapeHashMap maShapeMap;
+     ShapeHashMap* mpShapeMap;
+--- a/oox/source/export/shapes.cxx
++++ b/oox/source/export/shapes.cxx
+@@ -472,6 +472,7 @@
+         pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+                               XML_id, OString::number(GetNewShapeID(xShape)),
+                               XML_name, GetShapeName(xShape));
++        WriteShapeClickAction(xProps);
+         AddExtLst(pFS, xProps);
+         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+     }
+@@ -541,6 +542,7 @@
+         pFS->startElementNS(mnXmlNamespace, XML_cNvPr, XML_id,
+                             OString::number(GetNewShapeID(xShape)), XML_name, GetShapeName(xShape),
+                             XML_hidden, sax_fastparser::UseIf("1", !isVisible));
++        WriteShapeClickAction(xShapeProps);
+         AddExtLst(pFS, xShapeProps);
+         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+         pFS->startElementNS(mnXmlNamespace, XML_cNvGrpSpPr);
+@@ -805,7 +807,84 @@
+
+     return sTarget;
+ }
++
++void ShapeExport::WriteShapeClickAction(
++    const Reference<XPropertySet>& xShapeProperties, bool bMediaClickAction)
++{
++    if (GetDocumentType() != DOCUMENT_PPTX || !xShapeProperties.is())
++        return;
++
++    FSHelperPtr pFS = GetFS();
++    presentation::ClickAction eClickAction = presentation::ClickAction_NONE;
++    OUString sURL;
++    OUString sBookmark;
++    OUString sPPAction;
++    if (GetProperty(xShapeProperties, u"URL"_ustr))
++        mAny >>= sURL;
++    if (GetProperty(xShapeProperties, u"Bookmark"_ustr))
++        mAny >>= sBookmark;
++    if (GetProperty(xShapeProperties, u"OnClick"_ustr))
++        mAny >>= eClickAction;
++
++    switch (eClickAction)
++    {
++        case presentation::ClickAction_STOPPRESENTATION:
++            sPPAction = u"ppaction://hlinkshowjump?jump=endshow"_ustr;
++            break;
++        case presentation::ClickAction_NEXTPAGE:
++            sPPAction = u"ppaction://hlinkshowjump?jump=nextslide"_ustr;
++            break;
++        case presentation::ClickAction_LASTPAGE:
++            sPPAction = u"ppaction://hlinkshowjump?jump=lastslide"_ustr;
++            break;
++        case presentation::ClickAction_PREVPAGE:
++            sPPAction = u"ppaction://hlinkshowjump?jump=previousslide"_ustr;
++            break;
++        case presentation::ClickAction_FIRSTPAGE:
++            sPPAction = u"ppaction://hlinkshowjump?jump=firstslide"_ustr;
++            break;
++        case presentation::ClickAction_BOOKMARK:
++            sBookmark = "#" + sBookmark;
++            break;
++        default:
++            break;
++    }
+
++    if (bMediaClickAction || !sPPAction.isEmpty())
++        pFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), "", XML_action,
++                             bMediaClickAction ? u"ppaction://media"_ustr : sPPAction);
++
++    if (!sURL.isEmpty())
++    {
++        OUString sRelId = mpFB->addRelation(
++            mpFS->getOutputStream(), oox::getRelationship(Relationship::HYPERLINK),
++            mpURLTransformer->getTransformedString(sURL),
++            mpURLTransformer->isExternalURL(sURL));
++        mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
++    }
++
++    if (sBookmark.isEmpty())
++        return;
++
++    bool bExternal = URLTransformer().isExternalURL(sBookmark);
++    sBookmark = bExternal ? sBookmark : lcl_GetTarget(GetFB()->getModel(), sBookmark);
++    OUString sRelId;
++    if (!sBookmark.isEmpty())
++    {
++        sRelId = mpFB->addRelation(
++            mpFS->getOutputStream(),
++            bExternal ? oox::getRelationship(Relationship::HYPERLINK)
++                      : oox::getRelationship(Relationship::SLIDE),
++            sBookmark, bExternal);
++    }
++    if (bExternal)
++        mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
++    else
++        mpFS->singleElementNS(
++            XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId, XML_action,
++            sBookmark.isEmpty() ? "ppaction://noaction" : "ppaction://hlinksldjump");
++}
++
+ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
+ {
+     SAL_INFO("oox.shape", "write custom shape");
+@@ -996,100 +1075,7 @@
+             XML_descr, sax_fastparser::UseIf(sDescr, !sDescr.isEmpty()), XML_title,
+             sax_fastparser::UseIf(sTitle, !sTitle.isEmpty()));
+
+-        rtl::Reference<sax_fastparser::FastAttributeList> pAttrListHlinkClick
+-            = sax_fastparser::FastSerializerHelper::createAttrList();
+-
+-        for (auto const& it : aGrabBagProps)
+-        {
+-            // export tooltip attribute of <hlinkClick> element
+-            if (it.Name == u"mso-hlinkClick-tooltip"_ustr)
+-            {
+-                OUString sTooltip;
+-                it.Value >>= sTooltip;
+-
+-                if (!sTooltip.isEmpty())
+-                    pAttrListHlinkClick->add(XML_tooltip, sTooltip);
+-            }
+-        }
+-
+-        if( GetProperty(rXPropSet, u"URL"_ustr) )
+-        {
+-            OUString sURL;
+-            mAny >>= sURL;
+-            if( !sURL.isEmpty() )
+-            {
+-                OUString sRelId = mpFB->addRelation( mpFS->getOutputStream(),
+-                        oox::getRelationship(Relationship::HYPERLINK),
+-                        mpURLTransformer->getTransformedString(sURL),
+-                        mpURLTransformer->isExternalURL(sURL));
+-
+-                mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
+-                // pAttrListHlinkClick->add(FSNS(XML_r, XML_id), sRelId);
+-            }
+-        }
+-
+-        // // export <hlinkClick> element
+-        // mpFS->singleElementNS(XML_a, XML_hlinkClick, pAttrListHlinkClick);
+-
+-        OUString sBookmark;
+-        if (GetProperty(rXPropSet, u"Bookmark"_ustr))
+-            mAny >>= sBookmark;
+-
+-        if (GetProperty(rXPropSet, u"OnClick"_ustr))
+-        {
+-            OUString sPPAction;
+-            presentation::ClickAction eClickAction = presentation::ClickAction_NONE;
+-            mAny >>= eClickAction;
+-            if (eClickAction != presentation::ClickAction_NONE)
+-            {
+-                switch (eClickAction)
+-                {
+-                    case presentation::ClickAction_STOPPRESENTATION:
+-                        sPPAction = u"ppaction://hlinkshowjump?jump=endshow"_ustr;
+-                        break;
+-                    case presentation::ClickAction_NEXTPAGE:
+-                        sPPAction = u"ppaction://hlinkshowjump?jump=nextslide"_ustr;
+-                        break;
+-                    case presentation::ClickAction_LASTPAGE:
+-                        sPPAction = u"ppaction://hlinkshowjump?jump=lastslide"_ustr;
+-                        break;
+-                    case presentation::ClickAction_PREVPAGE:
+-                        sPPAction = u"ppaction://hlinkshowjump?jump=previousslide"_ustr;
+-                        break;
+-                    case presentation::ClickAction_FIRSTPAGE:
+-                        sPPAction = u"ppaction://hlinkshowjump?jump=firstslide"_ustr;
+-                        break;
+-                    case presentation::ClickAction_BOOKMARK:
+-                        sBookmark = "#" + sBookmark;
+-                        break;
+-                    default:
+-                        break;
+-                }
+-            }
+-            if (!sPPAction.isEmpty())
+-                pFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), "", XML_action,
+-                                     sPPAction);
+-        }
+-        if (!sBookmark.isEmpty())
+-        {
+-            bool bExtURL = URLTransformer().isExternalURL(sBookmark);
+-            sBookmark = bExtURL ? sBookmark : lcl_GetTarget(GetFB()->getModel(), sBookmark);
+-
+-            OUString sRelId;
+-            if (!sBookmark.isEmpty())
+-            {
+-                sRelId = mpFB->addRelation(mpFS->getOutputStream(),
+-                                           bExtURL ? oox::getRelationship(Relationship::HYPERLINK)
+-                                                   : oox::getRelationship(Relationship::SLIDE),
+-                                           sBookmark, bExtURL);
+-            }
+-            if (bExtURL)
+-                mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
+-            else
+-                mpFS->singleElementNS(
+-                    XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId, XML_action,
+-                    sBookmark.isEmpty() ? "ppaction://noaction" : "ppaction://hlinksldjump");
+-        }
++        WriteShapeClickAction(rXPropSet);
+         AddExtLst(pFS, rXPropSet);
+         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+         pFS->startElementNS(mnXmlNamespace, XML_cNvSpPr);
+@@ -1359,6 +1345,7 @@
+         pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+                 XML_id, OString::number(GetNewShapeID(xShape)),
+                 XML_name, GetShapeName(xShape));
++        WriteShapeClickAction(xProps);
+         AddExtLst(pFS, xProps);
+         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+         pFS->startElementNS(mnXmlNamespace, XML_cNvSpPr);
+@@ -1498,20 +1485,13 @@
+
+     pFS->startElementNS(mnXmlNamespace, XML_nvPicPr);
+
+-    presentation::ClickAction eClickAction = presentation::ClickAction_NONE;
+-    OUString sDescr, sURL, sBookmark, sPPAction;
++    OUString sDescr;
+     bool bVisible = true;
+
+     if ( GetProperty( xShapeProps, u"Description"_ustr ) )
+         mAny >>= sDescr;
+-    if ( GetProperty( xShapeProps, u"URL"_ustr ) )
+-        mAny >>= sURL;
+     if ( GetProperty( xShapeProps, u"Visible"_ustr ) )
+         mAny >>= bVisible;
+-    if (GetProperty(xShapeProps, u"Bookmark"_ustr))
+-        mAny >>= sBookmark;
+-    if (GetProperty(xShapeProps, u"OnClick"_ustr))
+-        mAny >>= eClickAction;
+
+     sal_Int32 nShapeId = GetShapeID(xShape) == -1 ? GetNewShapeID(xShape) : GetTmpShapeID();
+
+@@ -1520,67 +1500,8 @@
+                         sax_fastparser::UseIf(sDescr, !sDescr.isEmpty()), XML_hidden,
+                         sax_fastparser::UseIf("1", !bVisible));
+
+-    if (eClickAction != presentation::ClickAction_NONE)
+-    {
+-        switch (eClickAction)
+-        {
+-            case presentation::ClickAction_STOPPRESENTATION:
+-                sPPAction = u"ppaction://hlinkshowjump?jump=endshow"_ustr;
+-                break;
+-            case presentation::ClickAction_NEXTPAGE:
+-                sPPAction = u"ppaction://hlinkshowjump?jump=nextslide"_ustr;
+-                break;
+-            case presentation::ClickAction_LASTPAGE:
+-                sPPAction = u"ppaction://hlinkshowjump?jump=lastslide"_ustr;
+-                break;
+-            case presentation::ClickAction_PREVPAGE:
+-                sPPAction = u"ppaction://hlinkshowjump?jump=previousslide"_ustr;
+-                break;
+-            case presentation::ClickAction_FIRSTPAGE:
+-                sPPAction = u"ppaction://hlinkshowjump?jump=firstslide"_ustr;
+-                break;
+-            case presentation::ClickAction_BOOKMARK:
+-                sBookmark = "#" + sBookmark;
+-                break;
+-            default:
+-                break;
+-        }
+-    }
+-
+     // OOXTODO: //cNvPr children: XML_extLst, XML_hlinkHover
+-    if (bHasMediaURL || !sPPAction.isEmpty())
+-        pFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), "", XML_action,
+-                             bHasMediaURL ? u"ppaction://media"_ustr : sPPAction);
+-    if( !sURL.isEmpty() )
+-    {
+-        OUString sRelId = mpFB->addRelation( mpFS->getOutputStream(),
+-                oox::getRelationship(Relationship::HYPERLINK),
+-                mpURLTransformer->getTransformedString(sURL),
+-                mpURLTransformer->isExternalURL(sURL));
+-
+-        mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
+-    }
+-
+-    if (!sBookmark.isEmpty())
+-    {
+-        bool bExtURL = URLTransformer().isExternalURL(sBookmark);
+-        sBookmark = bExtURL ? sBookmark : lcl_GetTarget(GetFB()->getModel(), sBookmark);
+-
+-        OUString sRelId;
+-        if (!sBookmark.isEmpty())
+-        {
+-            sRelId = mpFB->addRelation(mpFS->getOutputStream(),
+-                                       bExtURL ? oox::getRelationship(Relationship::HYPERLINK)
+-                                               : oox::getRelationship(Relationship::SLIDE),
+-                                       sBookmark, bExtURL);
+-        }
+-        if (bExtURL)
+-            mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
+-        else
+-            mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId, XML_action,
+-                                  sBookmark.isEmpty() ? "ppaction://noaction"
+-                                                      : "ppaction://hlinksldjump");
+-    }
++    WriteShapeClickAction(xShapeProps, bHasMediaURL);
+     AddExtLst(pFS, xShapeProps);
+     pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+
+@@ -2060,6 +1981,7 @@
+         pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+             XML_id, OString::number(GetNewShapeID(xShape)),
+             XML_name, GetShapeName(xShape));
++        WriteShapeClickAction(rXPropSet);
+         AddExtLst(pFS, rXPropSet);
+         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+         // non visual connector shape drawing properties
+@@ -2127,6 +2049,7 @@
+         pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+                               XML_id, OString::number(GetNewShapeID(xShape)),
+                               XML_name, GetShapeName(xShape));
++        WriteShapeClickAction(xShapeProps);
+         AddExtLst(pFS, xShapeProps);
+         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+     }
+@@ -2168,6 +2091,7 @@
+     pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+                               XML_id, OString::number(GetNewShapeID(xShape)),
+                               XML_name, pName );
++    WriteShapeClickAction(xShapeProps);
+     AddExtLst(pFS, xShapeProps);
+     pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+
+@@ -2210,6 +2134,7 @@
+     pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+                           XML_id, OString::number(GetNewShapeID(xShape)),
+                           XML_name, GetShapeName(xShape));
++    WriteShapeClickAction(xShapeProps);
+     AddExtLst(pFS, xShapeProps);
+     pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+     pFS->startElementNS(mnXmlNamespace, XML_cNvSpPr);
+@@ -2749,6 +2674,7 @@
+     pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+                           XML_id, OString::number(GetNewShapeID(xShape)),
+                           XML_name,   GetShapeName(xShape));
++    WriteShapeClickAction(xShapeProps);
+     AddExtLst(pFS, xShapeProps);
+     pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+
+@@ -2782,19 +2708,7 @@
+         pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+                               XML_id, OString::number(GetNewShapeID(xShape)),
+                               XML_name, GetShapeName(xShape));
+-        OUString sURL;
+-        if (GetProperty(xShapeProps, u"URL"_ustr))
+-            mAny >>= sURL;
+-
+-        if (!sURL.isEmpty())
+-        {
+-            OUString sRelId = mpFB->addRelation(mpFS->getOutputStream(),
+-                    oox::getRelationship(Relationship::HYPERLINK),
+-                    mpURLTransformer->getTransformedString(sURL),
+-                    mpURLTransformer->isExternalURL(sURL));
+-
+-            mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
+-        }
++        WriteShapeClickAction(xShapeProps);
+         AddExtLst(pFS, xShapeProps);
+         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+     }
+@@ -2848,6 +2762,7 @@
+     mpFS->startElementNS(mnXmlNamespace, XML_sp);
+     mpFS->startElementNS(mnXmlNamespace, XML_nvSpPr);
+     mpFS->startElementNS(mnXmlNamespace, XML_cNvPr, XML_id, cNvPr_id, XML_name, shapeName);
++    WriteShapeClickAction(xPropSet);
+     AddExtLst(mpFS, xPropSet);
+     mpFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+     mpFS->startElementNS(mnXmlNamespace, XML_cNvSpPr, XML_txBox, "1");
+@@ -2888,6 +2803,7 @@
+             mpFS->startElementNS(mnXmlNamespace, XML_sp);
+             mpFS->startElementNS(mnXmlNamespace, XML_nvSpPr);
+             mpFS->startElementNS(mnXmlNamespace, XML_cNvPr, XML_id, cNvPr_id, XML_name, shapeName);
++            WriteShapeClickAction(xPropSet);
+             AddExtLst(mpFS, xPropSet);
+             mpFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+             mpFS->startElementNS(mnXmlNamespace, XML_cNvSpPr, XML_txBox, "1");
+@@ -3113,6 +3029,7 @@
+     mpFS->startElementNS(mnXmlNamespace, XML_cNvPr,
+                            XML_id,     OString::number(GetNewShapeID(xShape)),
+                            XML_name,   GetShapeName(xShape));
++    WriteShapeClickAction(xPropSet);
+     AddExtLst(mpFS, xPropSet);
+     mpFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
 @@ -47,6 +47,7 @@
@@ -9,25 +410,27 @@
  #include <com/sun/star/text/GraphicCrop.hpp>
  #include <model/SlideSorterModel.hxx>
 @@ -125,6 +126,7 @@
- 
+
  #include <comphelper/diagnose_ex.hxx>
  #include <tools/json_writer.hxx>
 +#include <tools/urlobj.hxx>
  #include <tools/UnitConversion.hxx>
- 
+
  #include <o3tl/string_view.hxx>
 @@ -165,6 +167,7 @@
  #include <strings.hrc>
- 
+
  #include <AnimationChildWindow.hxx>
 +#include <anminfo.hxx>
  #include <CustomAnimationEffect.hxx>
  #include <DesignTemplates.hxx>
  #include <DrawDocShell.hxx>
-@@ -1040,6 +1043,64 @@
+@@ -1038,8 +1041,66 @@
+             throw lang::IllegalArgumentException(u"Object path is not a group"_ustr, nullptr, 0);
+         nPathOffset = nSeparator + 1;
      }
- }
- 
++}
++
 +void lcl_SetObjectInteraction(SdrObject& rObject,
 +                              presentation::ClickAction eAction,
 +                              const OUString& rBookmark)
@@ -37,7 +440,7 @@
 +    pInfo->SetBookmark(rBookmark);
 +    rObject.SetChanged();
 +    rObject.BroadcastObjectChange();
-+}
+ }
 +
 +// Interaction data lives in SdAnimationInfo rather than the ordinary drawing
 +// item set, so generic attribute Undo cannot restore it. Keep this action
@@ -59,7 +462,7 @@
 +        , maNewBookmark(rNewBookmark)
 +    {
 +    }
-+
+
 +    void Undo() override
 +    {
 +        if (mbHadOldInfo)
@@ -89,10 +492,13 @@
  // Owns the native history boundary of one document transform. Command
  // handlers only contribute typed Undo actions; this guard is the sole owner of
  // list-action lifetime, commit and failure rollback.
-@@ -1889,6 +1950,106 @@
-     rCtx.touch(pPage);
- }
- 
+@@ -1886,6 +1947,106 @@
+     }
+     for (const auto& [rName, rValueAny] : aValues)
+         xProperties->setPropertyValue(rName, rValueAny);
++    rCtx.touch(pPage);
++}
++
 +void handleSetObjectInteraction(SlideCommandContext& rCtx, const std::string& rKey,
 +                                const boost::property_tree::ptree& rValue)
 +{
@@ -190,12 +596,9 @@
 +        *rCtx.mpDoc, *pObject, bHadOldInfo, eOldAction, aOldBookmark,
 +        eNewAction, aNewBookmark));
 +    lcl_SetObjectInteraction(*pObject, eNewAction, aNewBookmark);
-+    rCtx.touch(pPage);
-+}
-+
- void handleDuplicateObject(SlideCommandContext& rCtx, const std::string& rKey,
-                            const boost::property_tree::ptree& rValue)
- {
+     rCtx.touch(pPage);
+ }
+
 @@ -2552,6 +2713,7 @@
      { "SetSlideIntent", false, false, &handleSetSlideIntent },
      { "SetNotes", false, false, &handleSetNotes },
@@ -216,13 +619,13 @@
  #include <com/sun/star/drawing/LineStyle.hpp>
 @@ -112,6 +113,7 @@
  #include <docmodel/color/ComplexColorJSON.hxx>
- 
+
  #include <drawdoc.hxx>
 +#include <anminfo.hxx>
  #include <CustomAnimationEffect.hxx>
  #include <DrawDocShell.hxx>
  #include <DesignTemplates.hxx>
-@@ -631,6 +633,81 @@
+@@ -631,8 +633,83 @@
      CPPUNIT_ASSERT_EQUAL(sal_Int32(321), nLeft);
      CPPUNIT_ASSERT(bShadow);
      CPPUNIT_ASSERT(bMoveProtect);
@@ -256,13 +659,13 @@
 +            }}
 +        ]
 +    }
-+}
+ }
 +)json"_ustr;
 +    auto* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
 +    const size_t nUndoBefore = pUndoManager->GetUndoActionCount();
 +    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
 +                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
-+
+
 +    auto getInteraction = [&]() {
 +        SdAnimationInfo* pInfo = SdDrawDocument::GetShapeUserData(*pObject, false);
 +        return std::pair(
@@ -301,6 +704,8 @@
 +    std::tie(eAction, aBookmark) = getInteraction();
 +    CPPUNIT_ASSERT_EQUAL(presentation::ClickAction_DOCUMENT, eAction);
 +    CPPUNIT_ASSERT_EQUAL(u"https://example.invalid/presentation"_ustr, aBookmark);
- }
- 
++}
++
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRedo)
+ {
+     createSdImpressDoc();

@@ -12,8 +12,8 @@
   "patchLevel": "undo-v18",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "130e03edf5bbcf5aa165dcf6744d03a82c1251e4874d85ffb38172b87ccf6a8c",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v18-r2-candidate",
+  "patchSeriesSha256": "eb0c9c74a0ee0de69f097f58117c4b9a85935a105dcfa160f56fe6be7c4a8c7c",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v18-r3-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
