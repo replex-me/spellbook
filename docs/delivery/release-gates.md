@@ -2,6 +2,10 @@
 
 The existence of code, a passing unit suite or a successful image build is not a public beta by itself. A release is usable only when every required evidence layer is green.
 
+## Completion accounting
+
+Release completion uses the nine fixed gates G0 through G8 as its only denominator. A gate counts as complete only when every item in its required-evidence column has current passing evidence; partial evidence never counts as a fraction of a gate. The percentage is therefore `complete gates / 9`, changes only in 11.1 percentage-point steps, and must not be mixed with task, command or feature counts.
+
 | Gate                      | Required evidence                                                                    | Current repository state                                                                                                                                                    |
 | ------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | G0 Public boundary        | clean-history extraction, forbidden-pattern scan, license/notice inventory           | Clean-history extraction published; boundary and REUSE checks passed in public CI run `34597476608`                                                                         |

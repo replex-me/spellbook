@@ -48,11 +48,23 @@ test("engine patch selection removes unavailable operations without hand-maintai
   const stock = buildConformancePlan(capabilities, conformance, {
     enginePatchLevel: 0,
   });
+  const stockOperations = Object.entries(
+    capabilities.mutationModel.operations,
+  ).filter(
+    ([, operation]) =>
+      operation.availability !== "format_excluded" &&
+      operation.minEnginePatch === 0,
+  );
 
-  assert.equal(stock.summary.operations, 31);
+  assert.equal(stock.summary.operations, stockOperations.length);
   assert.ok(stock.families.chart_model.operations.includes("set_chart_data"));
   assert.ok(!stock.families.object_text.operations.includes("font_size"));
   assert.ok(!stock.families.object_text.operations.includes("font_family"));
+  assert.ok(!stock.families.object_creation.operations.includes("add_text_box"));
+  assert.ok(!stock.families.object_creation.operations.includes("add_shape"));
+  assert.ok(
+    !stock.families.object_creation.operations.includes("duplicate_element"),
+  );
   assert.equal(stock.families.animation, undefined);
   assert.equal(stock.families.slide_transition, undefined);
 });

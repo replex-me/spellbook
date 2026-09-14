@@ -730,6 +730,18 @@
   },
   "knownUnsafeOperations": [
     {
+      "op": "add_text_box",
+      "reason": "Stock XShapes.add inserts the text shape without registering a native creation Undo action. The undo-v14 engine patch records creation at the common SdDrawPage boundary and the adapter assigns text only after insertion; integrated browser, save/reopen, visual and PowerPoint verification remains required before promotion."
+    },
+    {
+      "op": "add_shape",
+      "reason": "Stock XShapes.add inserts the shape without registering a native creation Undo action. The undo-v14 engine patch records creation at the common SdDrawPage boundary; integrated browser, save/reopen, visual and PowerPoint verification remains required before promotion."
+    },
+    {
+      "op": "duplicate_element",
+      "reason": "The stock browser path has no identity-safe duplicate operation and clipboard duplication can alter document state. The undo-v14 typed command clones the live Sdr object immediately above its source and registers native creation Undo; integrated browser, save/reopen, visual and PowerPoint verification remains required before promotion."
+    },
+    {
       "op": "font_size",
       "reason": "The stock editor applies only the western-script height consistently. The undo-v14 typed command synchronizes western, Asian and complex-script heights with a point-based wire contract and observable browser readback, and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
     },

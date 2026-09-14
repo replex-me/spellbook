@@ -127,8 +127,6 @@ describe("shared open document agent", () => {
       );
       expect(schema.properties.op.enum).toEqual(
         expect.arrayContaining([
-          "add_text_box",
-          "add_shape",
           "add_table",
           "align",
           "distribute",
@@ -439,13 +437,16 @@ describe("shared open document agent", () => {
           await o.onTool(
             "native_edit",
             {
-              op: "add_text_box",
+              op: "add_table",
               slideIndex: 0,
-              text: "새 상자",
               x: 100,
               y: 100,
               width: 1000,
               height: 500,
+              cells: [
+                ["항목", "값"],
+                ["A", "1"],
+              ],
             },
             "2",
             create.signal,
