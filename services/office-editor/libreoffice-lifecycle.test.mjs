@@ -19,6 +19,9 @@ test("source build admission and candidate promotion are separate evidence state
   assert.equal(typeof manifest.sourceCandidateReady, "boolean");
   assert.match(sourceBuild, /get sourcePatchSeriesReady/u);
   assert.doesNotMatch(sourceBuild, /get sourceCandidateReady/u);
+  assert.match(sourceBuild, /\$EUID/u);
+  assert.match(sourceBuild, /docker info/u);
+  assert.match(sourceBuild, /refuses root compilation/u);
   assert.match(candidateWrapper, /manifest\.sourceCandidateReady/u);
   assert.doesNotMatch(candidateWrapper, /sourcePatchSeriesReady/u);
 });

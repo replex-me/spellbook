@@ -5,6 +5,14 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   echo "The official host-driven Collabora source build requires Linux." >&2
   exit 1
 fi
+if [[ "$EUID" -eq 0 ]]; then
+  echo "LibreOffice refuses root compilation. Run this script as a regular user with Docker socket access." >&2
+  exit 1
+fi
+if ! docker info >/dev/null 2>&1; then
+  echo "The build user cannot reach the Docker daemon. Grant that user Docker socket access without running the compiler as root." >&2
+  exit 1
+fi
 
 # Release-candidate boundary only. Patch development belongs in
 # A failed source candidate must return to a persistent incremental worktree;
