@@ -136,7 +136,7 @@ test("delta comparison applies OOXML millisecond canonicalization only to raw an
   });
 });
 
-test("delta comparison accepts one model unit only on persisted geometry", () => {
+test("delta comparison accepts only two-edge quantization on persisted geometry", () => {
   const compareAt = (path, observed = 1001) =>
     firstPersistenceDeltaDifference(900, 1000, 900, observed, path);
   assert.equal(compareAt("$.slides[0].elements[0].height"), null);
@@ -144,10 +144,11 @@ test("delta comparison accepts one model unit only on persisted geometry", () =>
     compareAt("$.slides[0].elements[0].table.rowHeights[1]", 999),
     null,
   );
-  assert.deepEqual(compareAt("$.slides[0].elements[0].height", 1002), {
+  assert.equal(compareAt("$.slides[0].elements[0].height", 1002), null);
+  assert.deepEqual(compareAt("$.slides[0].elements[0].height", 1003), {
     path: "$.slides[0].elements[0].height",
     expected: 1000,
-    observed: 1002,
+    observed: 1003,
     invariant: "intended-change",
   });
   assert.deepEqual(compareAt("$.slides[0].elements[0].fillColor"), {
@@ -270,6 +271,111 @@ test("document persistence excludes regenerated observation diagnostics but not 
         "Persistence failed.",
       ),
     /fillColor/,
+  );
+});
+
+test("document persistence compares authored properties and ignores recalculated defaults", () => {
+  const state = (fill, lineColor, fillState, lineState) => ({
+    masters: [],
+    slides: [
+      {
+        elements: [
+          {
+            elementId: "0/0",
+            kind: "com.sun.star.drawing.RectangleShape",
+            geometryType: "rect",
+            objectName: "Rectangle 1",
+            name: "Rectangle 1",
+            text: "",
+            fill,
+            lineColor,
+            propertyStates: {
+              fill: fillState,
+              lineColor: lineState,
+            },
+          },
+        ],
+      },
+    ],
+  });
+  const expected = state(
+    0xff9900,
+    0x123456,
+    "com.sun.star.beans.PropertyState.DIRECT_VALUE",
+    "com.sun.star.beans.PropertyState.DEFAULT_VALUE",
+  );
+  const reopened = state(
+    0xff9900,
+    0x654321,
+    "com.sun.star.beans.PropertyState.DIRECT_VALUE",
+    "com.sun.star.beans.PropertyState.DIRECT_VALUE",
+  );
+  assert.deepEqual(
+    normalizeDocumentPersistenceState(reopened, { authoredBy: expected }),
+    normalizeDocumentPersistenceState(expected),
+  );
+
+  reopened.slides[0].elements[0].fill = 0;
+  assert.notDeepEqual(
+    normalizeDocumentPersistenceState(reopened, { authoredBy: expected }),
+    normalizeDocumentPersistenceState(expected),
+  );
+});
+
+test("document persistence ignores a dormant color while preserving its active style", () => {
+  const state = (fill) => ({
+    masters: [],
+    slides: [
+      {
+        elements: [
+          {
+            elementId: "0/0",
+            kind: "com.sun.star.drawing.TextShape",
+            geometryType: "rect",
+            name: "Text Box 1",
+            objectName: "Text Box 1",
+            text: "Text",
+            fillStyle: "com.sun.star.drawing.FillStyle.NONE",
+            fill,
+            propertyStates: {
+              fillStyle: "com.sun.star.beans.PropertyState.DEFAULT_VALUE",
+              fill: "com.sun.star.beans.PropertyState.DIRECT_VALUE",
+            },
+          },
+        ],
+      },
+    ],
+  });
+  const expected = state(0xffffff);
+  const reopened = state(0x3465a4);
+  assert.deepEqual(
+    normalizeDocumentPersistenceState(reopened, { authoredBy: expected }),
+    normalizeDocumentPersistenceState(expected),
+  );
+});
+
+test("document persistence canonicalizes editable drawing shape services by geometry", () => {
+  const normalize = (kind) =>
+    normalizeDocumentPersistenceState({
+      masters: [],
+      slides: [
+        {
+          elements: [
+            {
+              elementId: "0/0",
+              kind,
+              geometryType: "ellipse",
+              objectName: "Oval 1",
+              name: "Oval 1",
+              text: "",
+            },
+          ],
+        },
+      ],
+    });
+  assert.deepEqual(
+    normalize("com.sun.star.drawing.EllipseShape"),
+    normalize("com.sun.star.drawing.CustomShape"),
   );
 });
 

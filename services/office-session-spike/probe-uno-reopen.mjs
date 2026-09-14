@@ -6,6 +6,10 @@ import {
   documentPersistenceDeltaDifferences,
   persistenceStateFromObservation,
 } from "./persistence-evidence.mjs";
+import {
+  activeTextFontEvidence,
+  normalizeActiveTextFormatting,
+} from "./text-format-evidence.mjs";
 
 const require = createRequire(
   new URL("../../apps/web/package.json", import.meta.url),
@@ -137,14 +141,35 @@ try {
           ]),
         )
       : null;
+    const expectedActiveFormatting = normalizeActiveTextFormatting(
+      expected.textRange.formatting,
+      expected.textRange.portionText,
+    );
+    const reopenedActiveFormatting = normalizeActiveTextFormatting(
+      reopenedFormatting,
+      textRangePortion?.text,
+    );
     if (
-      JSON.stringify(reopenedFormatting) !==
-      JSON.stringify(expected.textRange.formatting)
+      JSON.stringify(reopenedActiveFormatting) !==
+      JSON.stringify(expectedActiveFormatting)
     )
       differences.push({
         path: "textRange.formatting",
-        expected: expected.textRange.formatting,
-        actual: reopenedFormatting,
+        expected: expectedActiveFormatting,
+        actual: reopenedActiveFormatting,
+      });
+    const reopenedTextDetails = observed.textDetails?.elements?.find(
+      (element) => element.elementId === propertyObject.elementId,
+    );
+    const reopenedActiveTextFonts = activeTextFontEvidence(reopenedTextDetails);
+    if (
+      JSON.stringify(reopenedActiveTextFonts) !==
+      JSON.stringify(expected.activeTextFonts)
+    )
+      differences.push({
+        path: "activeTextFonts",
+        expected: expected.activeTextFonts,
+        actual: reopenedActiveTextFonts,
       });
   }
   if (tableCell !== expected.tableCell)

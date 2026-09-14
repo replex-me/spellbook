@@ -25,8 +25,73 @@ const OBSERVATION_ONLY_FIELDS = new Set([
   "alignedWith",
   "layoutIssues",
   "overlapsWith",
+  "propertyStates",
   "stableId",
+  "wholeTextFormatting",
 ]);
+
+function isDirectPropertyState(state) {
+  return (
+    state === 0 || state === "0" || String(state ?? "").endsWith("DIRECT_VALUE")
+  );
+}
+
+function deleteNestedProperty(value, path) {
+  const parts = path.split(".");
+  const parents = [];
+  let current = value;
+  for (const part of parts.slice(0, -1)) {
+    if (current === null || typeof current !== "object") return;
+    parents.push([current, part]);
+    current = current[part];
+  }
+  if (current === null || typeof current !== "object") return;
+  delete current[parts.at(-1)];
+  for (let index = parents.length - 1; index >= 0; index--) {
+    const [parent, key] = parents[index];
+    const child = parent[key];
+    if (
+      child !== null &&
+      typeof child === "object" &&
+      !Array.isArray(child) &&
+      Object.keys(child).length === 0
+    )
+      delete parent[key];
+    else break;
+  }
+}
+
+/**
+ * UNO exposes both authored values and values calculated from a style/theme.
+ * Calculated defaults can legitimately resolve to a different raw value after
+ * OOXML reload even when rendering and editability are unchanged. Persisted
+ * integrity therefore compares only properties authored in the matching live
+ * state; operation-specific checks separately prove every requested edit.
+ * The live state is deliberately used as the mask for the reopened state:
+ * OOXML import can turn an inherited default into a direct UNO value, and
+ * independently filtering both sides would mistake that recalculation for a
+ * document change.
+ */
+function withoutComputedPropertyValues(value, authoredBy = value) {
+  if (Array.isArray(value)) {
+    value.forEach((candidate, index) =>
+      withoutComputedPropertyValues(candidate, authoredBy?.[index]),
+    );
+    return value;
+  }
+  if (value === null || typeof value !== "object") return value;
+  if (
+    authoredBy?.propertyStates &&
+    typeof authoredBy.propertyStates === "object"
+  ) {
+    for (const [path, state] of Object.entries(authoredBy.propertyStates))
+      if (!isDirectPropertyState(state)) deleteNestedProperty(value, path);
+  }
+  delete value.propertyStates;
+  for (const [key, candidate] of Object.entries(value))
+    withoutComputedPropertyValues(candidate, authoredBy?.[key]);
+  return value;
+}
 
 function withoutObservationOnlyFields(value) {
   if (Array.isArray(value)) return value.map(withoutObservationOnlyFields);
@@ -109,6 +174,54 @@ function withoutTransientEmptyPlaceholderDefaults(slides) {
   return slides;
 }
 
+function withCanonicalShapeIdentity(slides) {
+  for (const slide of slides) {
+    for (const element of slide.elements ?? []) {
+      if (
+        element.geometryType &&
+        /^com\.sun\.star\.drawing\.(?:Text|Rectangle|Ellipse|Custom|Line)Shape$/u.test(
+          element.kind ?? "",
+        )
+      )
+        element.kind = "com.sun.star.drawing.CustomShape";
+      if (
+        !element.objectName &&
+        /^unnamed-com\.sun\.star\.[A-Za-z.]+Shape$/u.test(element.name ?? "")
+      )
+        delete element.name;
+    }
+  }
+  return slides;
+}
+
+function withoutInactiveStyleValues(slides, authoredSlides = slides) {
+  for (const [slideIndex, slide] of slides.entries()) {
+    for (const [elementIndex, element] of (slide.elements ?? []).entries()) {
+      const authoredElement =
+        authoredSlides?.[slideIndex]?.elements?.[elementIndex] ?? element;
+      if (String(authoredElement.fillStyle ?? "").endsWith(".NONE")) {
+        delete element.fill;
+        delete element.fillOpacity;
+      }
+      if (String(authoredElement.lineStyle ?? "").endsWith(".NONE")) {
+        for (const field of [
+          "lineColor",
+          "lineWidth",
+          "lineDashName",
+          "lineStartName",
+          "lineEndName",
+          "lineOpacity",
+        ])
+          delete element[field];
+      }
+      if (authoredElement.shadow?.enabled !== true) {
+        if (element.shadow) element.shadow = { enabled: false };
+      }
+    }
+  }
+  return slides;
+}
+
 /**
  * Captures the persisted slide/master model while using the detailed UNO text
  * enumeration as the source of truth for the requested slide. The compact
@@ -146,7 +259,10 @@ export function persistenceStateFromObservation(observation) {
  * masterName, while every semantic master field is compared as a sorted
  * multiset so extra, missing or modified masters still fail the gate.
  */
-export function normalizeDocumentPersistenceState(state) {
+export function normalizeDocumentPersistenceState(
+  state,
+  { authoredBy = state } = {},
+) {
   const masters = (state?.masters ?? [])
     .map(({ masterIndex: _masterIndex, ...master }) =>
       withoutObservationOnlyFields(structuredClone(master)),
@@ -156,21 +272,35 @@ export function normalizeDocumentPersistenceState(state) {
       const rightIdentity = `${right.name ?? ""}\u0000${right.layout ?? ""}\u0000${stableJson(right)}`;
       return leftIdentity.localeCompare(rightIdentity, "en");
     });
-  const slides = withoutTransientEmptyPlaceholderDefaults(
-    withoutMergedContinuationFormatting(
-      (state?.slides ?? []).map(({ masterIndex: _masterIndex, ...slide }) => {
-        const normalized = withoutObservationOnlyFields(structuredClone(slide));
-        if (normalized.transition) {
-          const {
-            effect: _effect,
-            speed: _speed,
-            ...persistedTransition
-          } = normalized.transition;
-          normalized.transition = persistedTransition;
-        }
-        return normalized;
-      }),
+  const slides = withoutInactiveStyleValues(
+    withCanonicalShapeIdentity(
+      withoutTransientEmptyPlaceholderDefaults(
+        withoutMergedContinuationFormatting(
+          (state?.slides ?? []).map(
+            ({ masterIndex: _masterIndex, ...slide }, index) => {
+              const { masterIndex: _authoredMasterIndex, ...authoredSlide } =
+                authoredBy?.slides?.[index] ?? {};
+              const normalized = withoutObservationOnlyFields(
+                withoutComputedPropertyValues(
+                  structuredClone(slide),
+                  authoredSlide,
+                ),
+              );
+              if (normalized.transition) {
+                const {
+                  effect: _effect,
+                  speed: _speed,
+                  ...persistedTransition
+                } = normalized.transition;
+                normalized.transition = persistedTransition;
+              }
+              return normalized;
+            },
+          ),
+        ),
+      ),
     ),
+    authoredBy?.slides,
   );
   return { slides, masters };
 }
@@ -585,8 +715,12 @@ export function documentPersistenceDeltaDifferences(report, observed, options) {
     {
       before: normalizeDocumentPersistenceState(before),
       expected: normalizeDocumentPersistenceState(expected),
-      baseline: normalizeDocumentPersistenceState(baseline),
-      observed: normalizeDocumentPersistenceState(observed),
+      baseline: normalizeDocumentPersistenceState(baseline, {
+        authoredBy: before,
+      }),
+      observed: normalizeDocumentPersistenceState(observed, {
+        authoredBy: expected,
+      }),
     },
     options,
   );

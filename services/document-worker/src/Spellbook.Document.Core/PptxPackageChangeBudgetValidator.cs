@@ -13,6 +13,8 @@ public sealed class PptxPackageChangeBudgetValidator
 {
     private static readonly XNamespace DrawingNamespace =
         "http://schemas.openxmlformats.org/drawingml/2006/main";
+    private static readonly XNamespace PresentationNamespace =
+        "http://schemas.openxmlformats.org/presentationml/2006/main";
     private static readonly XNamespace CorePropertiesNamespace =
         "http://schemas.openxmlformats.org/package/2006/metadata/core-properties";
     private static readonly XNamespace DublinCoreTermsNamespace =
@@ -197,8 +199,25 @@ public sealed class PptxPackageChangeBudgetValidator
             return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(stream));
 
         var document = XDocument.Load(stream, LoadOptions.PreserveWhitespace);
+        // Office regenerates DrawingML field GUIDs on save. Their document
+        // order, type and contents are persisted semantics; the GUID itself is
+        // not. Ordinal normalization still detects added, removed, reordered
+        // or otherwise modified fields.
+        var fieldIndex = 0;
         foreach (var field in document.Descendants(DrawingNamespace + "fld"))
-            field.SetAttributeValue("id", "{00000000-0000-0000-0000-000000000000}");
+            field.SetAttributeValue("id", $"{{00000000-0000-0000-0000-{++fieldIndex:D12}}}");
+
+        // LibreOffice can deterministically renumber non-visual object ids in
+        // slide-layout parts while preserving the complete layout tree. Scope
+        // this normalization to layouts: slide ids can be animation targets
+        // and therefore remain exact. All other object attributes, ordering,
+        // placeholder data and cross-references continue to affect the hash.
+        if (part.StartsWith("ppt/slideLayouts/", StringComparison.Ordinal))
+        {
+            var objectIndex = 0;
+            foreach (var nonVisualProperties in document.Descendants(PresentationNamespace + "cNvPr"))
+                nonVisualProperties.SetAttributeValue("id", (++objectIndex).ToString());
+        }
 
         if (part == "docProps/core.xml")
         {

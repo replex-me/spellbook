@@ -145,11 +145,17 @@ export function buildChangeBudget(
       (family) => capabilities.mutationModel.families[family].changeBudget,
     ),
   );
-  const allowPartCreationOrDeletion = operations.some((operation) =>
-    ["create", "delete"].includes(
-      capabilities.mutationModel.operations[operation].identityEffect,
-    ),
-  );
+  const allowPartCreationOrDeletion =
+    families.some(
+      (family) =>
+        capabilities.mutationModel.families[family]
+          .allowPartCreationOrDeletion === true,
+    ) ||
+    operations.some((operation) =>
+      ["create", "delete"].includes(
+        capabilities.mutationModel.operations[operation].identityEffect,
+      ),
+    );
   return {
     contractVersion: "1.0",
     allowedCategories,

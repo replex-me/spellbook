@@ -111,6 +111,10 @@ try {
     permission: { mode: "document", slideIndexes: [], elementIds: [] },
   });
   const historyAfter = await history();
+  if (stable(after.masters) !== stable(before.masters))
+    throw new Error(
+      "Slide-local layout selection changed the reusable master collection.",
+    );
   if (
     after.slides[slideIndex].layout !== layout ||
     after.slides[slideIndex].masterIndex !== masterIndex ||

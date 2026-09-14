@@ -131,6 +131,13 @@ function spellbookDocumentOperation(request) {
       return null;
     }
   };
+  const safePropertyState = (value, name) => {
+    try {
+      return enumName(value.getPropertyState(name));
+    } catch (_) {
+      return null;
+    }
+  };
   const safeMember = (value, name) => {
     try {
       return value[name];
@@ -145,12 +152,144 @@ function spellbookDocumentOperation(request) {
       return fallback;
     }
   };
+  const shapeGeometryType = (shape, kind) => {
+    const serviceKind = String(kind ?? "");
+    if (serviceKind.endsWith("LineShape")) return "line";
+    if (serviceKind.endsWith("EllipseShape")) return "ellipse";
+    if (
+      serviceKind.endsWith("RectangleShape") ||
+      serviceKind.endsWith("TextShape")
+    )
+      return "rect";
+    let geometry;
+    try {
+      geometry = Array.from(safeProperty(shape, "CustomShapeGeometry") ?? []);
+    } catch (_) {
+      return null;
+    }
+    const type = geometry.find((entry) => safeMember(entry, "Name") === "Type");
+    const value = String(safeMember(type, "Value") ?? "")
+      .toLowerCase()
+      .replace(/^ooxml-/u, "");
+    return (
+      {
+        rectangle: "rect",
+        rect: "rect",
+        ellipse: "ellipse",
+        line: "line",
+      }[value] ??
+      (value || null)
+    );
+  };
   const safeTextProperty = (shape, name) => {
     try {
       return shape.createTextCursor().getPropertyValue(name);
     } catch (_) {
       return safeProperty(shape, name);
     }
+  };
+  const collectPropertyStates = (value, mappings) => {
+    const propertyNames = [
+      ...new Set(mappings.map(([, property]) => property)),
+    ];
+    try {
+      const states = Array.from(value.getPropertyStates(propertyNames));
+      if (states.length === propertyNames.length) {
+        const byProperty = new Map(
+          propertyNames.map((property, index) => [
+            property,
+            enumName(states[index]),
+          ]),
+        );
+        return Object.fromEntries(
+          mappings.map(([field, property]) => [
+            field,
+            byProperty.get(property),
+          ]),
+        );
+      }
+    } catch (_) {}
+    return Object.fromEntries(
+      mappings
+        .map(([field, property]) => [field, safePropertyState(value, property)])
+        .filter(([, state]) => state !== null),
+    );
+  };
+  const shapePropertyStates = (shape, text) => {
+    const states = collectPropertyStates(shape, [
+      ["fillStyle", "FillStyle"],
+      ["fill", "FillColor"],
+      ["lineColor", "LineColor"],
+      ["lineWidth", "LineWidth"],
+      ["textVerticalAlignment", "TextVerticalAdjust"],
+      ["textAutoGrowHeight", "TextAutoGrowHeight"],
+      ["textAutoGrowWidth", "TextAutoGrowWidth"],
+      ["textFitToSize", "TextFitToSize"],
+      ["textWordWrap", "TextWordWrap"],
+      ["textMargins.left", "TextLeftDistance"],
+      ["textMargins.right", "TextRightDistance"],
+      ["textMargins.top", "TextUpperDistance"],
+      ["textMargins.bottom", "TextLowerDistance"],
+      ["title", "Title"],
+      ["description", "Description"],
+      ["decorative", "Decorative"],
+      ["hyperlink", "Hyperlink"],
+      ["clickAction", "OnClick"],
+      ["presentationOrder", "PresentationOrder"],
+      ["moveProtected", "MoveProtect"],
+      ["sizeProtected", "SizeProtect"],
+      ["printable", "Printable"],
+      ["shadow.enabled", "Shadow"],
+      ["shadow.color", "ShadowColor"],
+      ["shadow.transparency", "ShadowTransparence"],
+      ["shadow.offsetX", "ShadowXDistance"],
+      ["shadow.offsetY", "ShadowYDistance"],
+      ["shadow.blur", "ShadowBlur"],
+      ["lineStyle", "LineStyle"],
+      ["lineDashName", "LineDashName"],
+      ["lineStartName", "LineStartName"],
+      ["lineEndName", "LineEndName"],
+      ["graphicCrop", "GraphicCrop"],
+      ["fillOpacity", "FillTransparence"],
+      ["lineOpacity", "LineTransparence"],
+      ["mirroredX", "MirroredX"],
+      ["mirroredY", "MirroredY"],
+    ]);
+    if (text === null) return states;
+    try {
+      const cursor = shape.createTextCursor();
+      cursor.gotoEnd(true);
+      Object.assign(
+        states,
+        collectPropertyStates(cursor, [
+          ["fontFamily", "CharFontName"],
+          ["wholeTextFormatting.fontFamily", "CharFontName"],
+          ["wholeTextFormatting.fontFamilyAsian", "CharFontNameAsian"],
+          ["wholeTextFormatting.fontFamilyComplex", "CharFontNameComplex"],
+          ["fontSize", "CharHeight"],
+          ["wholeTextFormatting.fontSize", "CharHeight"],
+          ["wholeTextFormatting.fontSizeAsian", "CharHeightAsian"],
+          ["wholeTextFormatting.fontSizeComplex", "CharHeightComplex"],
+          ["fontWeight", "CharWeight"],
+          ["wholeTextFormatting.fontWeight", "CharWeight"],
+          ["wholeTextFormatting.fontWeightAsian", "CharWeightAsian"],
+          ["wholeTextFormatting.fontWeightComplex", "CharWeightComplex"],
+          ["fontStyle", "CharPosture"],
+          ["wholeTextFormatting.fontStyle", "CharPosture"],
+          ["wholeTextFormatting.fontStyleAsian", "CharPostureAsian"],
+          ["wholeTextFormatting.fontStyleComplex", "CharPostureComplex"],
+          ["underline", "CharUnderline"],
+          ["strikethrough", "CharStrikeout"],
+          ["textShadow", "CharShadowed"],
+          ["color", "CharColor"],
+          ["paragraphAlignment", "ParaAdjust"],
+          ["characterSpacing", "CharKerning"],
+          ["scriptPosition.escapement", "CharEscapement"],
+          ["scriptPosition.relativeHeight", "CharEscapementHeight"],
+        ]),
+      );
+    } catch (_) {}
+    return states;
   };
   const wholeTextFormatting = (shape, text) => {
     if (text === null) return null;
@@ -328,6 +467,28 @@ function spellbookDocumentOperation(request) {
               bottom: borderDetails(cell, "BottomBorder"),
               left: borderDetails(cell, "LeftBorder"),
             },
+            propertyStates: collectPropertyStates(cell, [
+              ["fillColor", "FillColor"],
+              ["fillOpacity", "FillTransparence"],
+              ["fontFamily", "CharFontName"],
+              ["fontSize", "CharHeight"],
+              ["fontWeight", "CharWeight"],
+              ["fontStyle", "CharPosture"],
+              ["underline", "CharUnderline"],
+              ["strikethrough", "CharStrikeout"],
+              ["textShadow", "CharShadowed"],
+              ["color", "CharColor"],
+              ["characterSpacing", "CharKerning"],
+              ["paragraphAlignment", "ParaAdjust"],
+              ["textMargins.left", "TextLeftDistance"],
+              ["textMargins.right", "TextRightDistance"],
+              ["textMargins.top", "TextUpperDistance"],
+              ["textMargins.bottom", "TextLowerDistance"],
+              ["borders.top", "TopBorder"],
+              ["borders.right", "RightBorder"],
+              ["borders.bottom", "BottomBorder"],
+              ["borders.left", "LeftBorder"],
+            ]),
           };
         }),
       );
@@ -920,6 +1081,8 @@ function spellbookDocumentOperation(request) {
             name: shapeName,
             objectName,
             kind: shapeKind,
+            geometryType: shapeGeometryType(shape, shapeKind),
+            propertyStates: shapePropertyStates(shape, text),
             text,
             wholeTextFormatting: wholeTextFormatting(shape, text),
             x: position.X,
@@ -927,6 +1090,7 @@ function spellbookDocumentOperation(request) {
             width: size.Width,
             height: size.Height,
             rotation: safeProperty(shape, "RotateAngle"),
+            fillStyle: enumName(safeProperty(shape, "FillStyle")),
             fill: safeProperty(shape, "FillColor"),
             lineColor: safeProperty(shape, "LineColor"),
             lineWidth: safeProperty(shape, "LineWidth"),
@@ -1680,6 +1844,25 @@ function spellbookDocumentOperation(request) {
         throw new Error("invalid_table");
       if (request.dryRun) return result(before, before.activeSlide);
       const page = pages.getByIndex(slideIndex);
+      const objectNameStem =
+        command.op === "add_text_box"
+          ? "Text Box"
+          : command.op === "add_table"
+            ? "Table"
+            : {
+                rectangle: "Rectangle",
+                ellipse: "Oval",
+                line: "Line",
+              }[command.geometry];
+      const existingObjectNames = new Set(
+        before.slides[slideIndex].elements
+          .map((element) => element.objectName)
+          .filter(Boolean),
+      );
+      let objectNameIndex = 1;
+      while (existingObjectNames.has(`${objectNameStem} ${objectNameIndex}`))
+        objectNameIndex++;
+      const generatedObjectName = `${objectNameStem} ${objectNameIndex}`;
       if (command.op === "add_table") {
         const undo = model.getUndoManager();
         const undoCount = undo.getAllUndoActionTitles().length;
@@ -1709,6 +1892,7 @@ function spellbookDocumentOperation(request) {
           );
           if (!tableElement) throw new Error("native_command_not_applied");
           const tableShape = resolveShape(tableElement.elementId);
+          tableShape.setName(generatedObjectName);
           tableShape.setPosition(
             new uno.idl.com.sun.star.awt.Point({
               X: Math.round(command.x),
@@ -1872,6 +2056,7 @@ function spellbookDocumentOperation(request) {
           // creation action. Text must be assigned after insertion because an
           // unattached UNO TextShape does not retain its text model.
           page.add(shape);
+          shape.setName(generatedObjectName);
           if (command.op === "add_text_box") shape.setString(command.text);
         } else {
           page.add(shape);
@@ -1883,6 +2068,13 @@ function spellbookDocumentOperation(request) {
           dispatch(".uno:Copy");
           page.remove(shape);
           dispatch(".uno:Paste");
+          const pasted = read().slides[slideIndex].elements.find(
+            (element) =>
+              element.parentElementId === null &&
+              !beforeStableIds.has(element.stableId),
+          );
+          if (!pasted) throw new Error("native_command_not_applied");
+          resolveShape(pasted.elementId).setName(generatedObjectName);
         }
         if (undoContextOpen) {
           undo.leaveUndoContext();

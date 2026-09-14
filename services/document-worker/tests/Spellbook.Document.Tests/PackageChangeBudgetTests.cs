@@ -144,6 +144,109 @@ public sealed class PackageChangeBudgetTests : IDisposable
         Assert.Equal("slide_parts", Assert.Single(semanticChange.Changes).Category);
     }
 
+    [Fact]
+    public void IgnoresSlideLayoutObjectRenumberingButNotPlaceholderChanges()
+    {
+        var source = TestPresentationFactory.Create(directory);
+        var baseline = Path.Combine(directory, "layout-id-baseline.pptx");
+        var candidate = Path.Combine(directory, "layout-id-candidate.pptx");
+        File.Copy(source, baseline);
+        File.Copy(source, candidate);
+        AddSlideLayoutFixture(baseline);
+        AddSlideLayoutFixture(candidate);
+        RenumberNonVisualObjectIds(baseline, "ppt/slideLayouts/", 100);
+        RenumberNonVisualObjectIds(candidate, "ppt/slideLayouts/", 900);
+
+        var ignored = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(ContractVersions.Current, []));
+        Assert.True(ignored.Valid, string.Join("\n", ignored.Errors));
+        Assert.Empty(ignored.Changes);
+
+        using (var archive = ZipFile.Open(candidate, ZipArchiveMode.Update))
+        {
+            var part = FirstXmlPart(archive, "ppt/slideLayouts/");
+            var layout = ReadXml(archive, part);
+            XNamespace presentation = "http://schemas.openxmlformats.org/presentationml/2006/main";
+            XNamespace drawing = "http://schemas.openxmlformats.org/drawingml/2006/main";
+            var shapeTree = layout.Descendants(presentation + "spTree").Single();
+            shapeTree.Add(
+                new XElement(
+                    presentation + "sp",
+                    new XElement(
+                        presentation + "nvSpPr",
+                        new XElement(
+                            presentation + "cNvPr",
+                            new XAttribute("id", "9999"),
+                            new XAttribute("name", "Added body placeholder")),
+                        new XElement(presentation + "cNvSpPr"),
+                        new XElement(
+                            presentation + "nvPr",
+                            new XElement(presentation + "ph", new XAttribute("type", "body")))),
+                    new XElement(presentation + "spPr"),
+                    new XElement(
+                        presentation + "txBody",
+                        new XElement(drawing + "bodyPr"),
+                        new XElement(drawing + "lstStyle"),
+                        new XElement(drawing + "p"))));
+            Replace(archive, part, layout);
+        }
+
+        var semanticChange = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(ContractVersions.Current, []));
+        Assert.False(semanticChange.Valid);
+        Assert.Equal("slide_layout_parts", Assert.Single(semanticChange.Changes).Category);
+    }
+
+    [Fact]
+    public void KeepsSlideObjectIdsExactBecauseAnimationsCanTargetThem()
+    {
+        var baseline = TestPresentationFactory.Create(directory);
+        var candidate = Path.Combine(directory, "slide-object-id-candidate.pptx");
+        File.Copy(baseline, candidate);
+        RenumberNonVisualObjectIds(candidate, "ppt/slides/", 900);
+
+        var report = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(ContractVersions.Current, []));
+
+        Assert.False(report.Valid);
+        Assert.Equal("slide_parts", Assert.Single(report.Changes).Category);
+    }
+
+    [Fact]
+    public void PartCreationRequiresBothAnAllowedCategoryAndExplicitAuthority()
+    {
+        var baseline = TestPresentationFactory.Create(directory);
+        var candidate = Path.Combine(directory, "notes-master-candidate.pptx");
+        File.Copy(baseline, candidate);
+        using (var archive = ZipFile.Open(candidate, ZipArchiveMode.Update))
+        {
+            using var output = archive.CreateEntry("ppt/notesMasters/notesMaster1.xml").Open();
+            output.Write("<p:notesMaster xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"/>"u8);
+        }
+
+        var denied = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(ContractVersions.Current, ["notes_master_parts"]));
+        var accepted = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(
+                ContractVersions.Current,
+                ["notes_master_parts"],
+                AllowPartCreationOrDeletion: true));
+
+        Assert.False(denied.Valid);
+        Assert.Contains(denied.Errors, error => error.Contains("without creation/deletion authority"));
+        Assert.True(accepted.Valid, string.Join("\n", accepted.Errors));
+    }
+
     [Theory]
     [InlineData("[Content_Types].xml", "package_manifest")]
     [InlineData("ppt/_rels/presentation.xml.rels", "presentation_relationships")]
@@ -202,6 +305,74 @@ public sealed class PackageChangeBudgetTests : IDisposable
         using var stream = entry.Open();
         document.Save(stream, SaveOptions.DisableFormatting);
     }
+
+    private static void RenumberNonVisualObjectIds(string path, string partPrefix, int start)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        var part = FirstXmlPart(archive, partPrefix);
+        var document = ReadXml(archive, part);
+        XNamespace presentation = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        var properties = document.Descendants(presentation + "cNvPr").ToArray();
+        Assert.NotEmpty(properties);
+        for (var index = 0; index < properties.Length; index++)
+            properties[index].SetAttributeValue("id", (start + index).ToString());
+        Replace(archive, part, document);
+    }
+
+    private static void AddSlideLayoutFixture(string path)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        XNamespace presentation = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        XNamespace drawing = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        Replace(
+            archive,
+            "ppt/slideLayouts/slideLayout1.xml",
+            new XDocument(
+                new XElement(
+                    presentation + "sldLayout",
+                    new XElement(
+                        presentation + "cSld",
+                        new XElement(
+                            presentation + "spTree",
+                            new XElement(
+                                presentation + "nvGrpSpPr",
+                                new XElement(
+                                    presentation + "cNvPr",
+                                    new XAttribute("id", "1"),
+                                    new XAttribute("name", string.Empty)),
+                                new XElement(presentation + "cNvGrpSpPr"),
+                                new XElement(presentation + "nvPr")),
+                            new XElement(
+                                presentation + "grpSpPr",
+                                new XElement(drawing + "xfrm")),
+                            new XElement(
+                                presentation + "sp",
+                                new XElement(
+                                    presentation + "nvSpPr",
+                                    new XElement(
+                                        presentation + "cNvPr",
+                                        new XAttribute("id", "2"),
+                                        new XAttribute("name", "Title 1")),
+                                    new XElement(presentation + "cNvSpPr"),
+                                    new XElement(
+                                        presentation + "nvPr",
+                                        new XElement(presentation + "ph", new XAttribute("type", "title")))),
+                                new XElement(presentation + "spPr"),
+                                new XElement(
+                                    presentation + "txBody",
+                                    new XElement(drawing + "bodyPr"),
+                                    new XElement(drawing + "lstStyle"),
+                                    new XElement(drawing + "p"))))))));
+    }
+
+    private static string FirstXmlPart(ZipArchive archive, string prefix) => archive.Entries
+        .Where(entry =>
+            entry.FullName.StartsWith(prefix, StringComparison.Ordinal)
+            && entry.FullName.EndsWith(".xml", StringComparison.Ordinal)
+            && !entry.FullName.Contains("/_rels/", StringComparison.Ordinal))
+        .Select(entry => entry.FullName)
+        .Order()
+        .First();
 
     private static XDocument ReadXml(ZipArchive archive, string part)
     {

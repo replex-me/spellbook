@@ -7,6 +7,7 @@ import {
   quantizedGeometryEquivalent,
 } from "./document-state-evidence.mjs";
 import { persistenceStateFromObservation } from "./persistence-evidence.mjs";
+import { activeTextFontEvidence } from "./text-format-evidence.mjs";
 
 const require = createRequire(
   new URL("../../apps/web/package.json", import.meta.url),
@@ -726,25 +727,46 @@ try {
       color: nextBackground,
     });
   }
+  const reusableMastersBeforeStructureEdits = structuredClone(observed.masters);
+  const assertReusableMastersUnchanged = (operation) => {
+    if (
+      JSON.stringify(observed.masters) !==
+      JSON.stringify(reusableMastersBeforeStructureEdits)
+    )
+      throw new Error(
+        `${operation} changed reusable masters: ${JSON.stringify({ before: reusableMastersBeforeStructureEdits.map(({ masterIndex, name, shapeCount }) => ({ masterIndex, name, shapeCount })), after: observed.masters.map(({ masterIndex, name, shapeCount }) => ({ masterIndex, name, shapeCount })) })}`,
+      );
+  };
   await editWithUndoRoundTrip({
     op: "set_speaker_notes",
     slideIndex: 0,
     text: "AI와 사용자가 함께 확인하는 발표자 노트",
   });
+  assertReusableMastersUnchanged("set_speaker_notes");
   await edit({ op: "insert_slide", slideIndex: 0 });
+  assertReusableMastersUnchanged("insert_slide");
   await edit({ op: "duplicate_slide", slideIndex: 0 });
+  assertReusableMastersUnchanged("duplicate_slide");
   let slideTarget = observed.slides.length - 1;
   const layoutMaster = observed.masters.find(
     (candidate) =>
       candidate.masterIndex !== observed.slides[slideTarget].masterIndex,
   );
-  if (probePatchedEngine && engineOperationAvailable("set_slide_layout"))
+  if (probePatchedEngine && engineOperationAvailable("set_slide_layout")) {
+    const mastersBeforeLayout = structuredClone(observed.masters);
     await editWithUndoRoundTrip({
       op: "set_slide_layout",
       slideIndex: slideTarget,
       masterIndex: layoutMaster.masterIndex,
       layout: layoutMaster.layout,
     });
+    if (
+      JSON.stringify(observed.masters) !== JSON.stringify(mastersBeforeLayout)
+    )
+      throw new Error(
+        `Slide-local layout selection changed reusable masters: ${JSON.stringify({ before: mastersBeforeLayout.map(({ masterIndex, name, shapeCount }) => ({ masterIndex, name, shapeCount })), after: observed.masters.map(({ masterIndex, name, shapeCount }) => ({ masterIndex, name, shapeCount })) })}`,
+      );
+  }
   const targetSlideIndex = slideTarget === 1 ? 2 : 1;
   await editWithUndoRoundTrip({
     op: "move_slide",
@@ -1214,6 +1236,7 @@ try {
         paragraphIndex: paragraph.paragraphIndex,
         text: nextParagraph.text,
         rangeStart,
+        portionText: formattedPortion.text,
         formatting: formattingAfter,
       };
     }
@@ -1247,6 +1270,12 @@ try {
       `Native capability drift: expected ${JSON.stringify(expectedCommands)}, verified ${JSON.stringify(verifiedCommands)}`,
     );
   }
+  const propertyObject = observed.slides
+    .flatMap((slide) => slide.elements)
+    .find((element) => element.objectName === "AI verified object");
+  const propertyTextDetails = observed.textDetails?.elements?.find(
+    (element) => element.elementId === propertyObject?.elementId,
+  );
   const verificationExpected = probePatchedEngine
     ? {
         backgroundColor: observed.slides[0].backgroundColor,
@@ -1280,9 +1309,8 @@ try {
         namedSlide: observed.slides.find(
           (slide) => slide.name === "AI 검증 슬라이드",
         ),
-        propertyObject: observed.slides
-          .flatMap((slide) => slide.elements)
-          .find((element) => element.objectName === "AI verified object"),
+        propertyObject,
+        activeTextFonts: activeTextFontEvidence(propertyTextDetails),
         textRange: textRangePersistence,
       }
     : null;

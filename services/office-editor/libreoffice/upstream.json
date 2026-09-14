@@ -9,10 +9,10 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v15",
+  "patchLevel": "undo-v16",
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "3f90a42a7977c2ad08de8f5f8b41fb740b6c5e34c1c5bb4781066624e151f75c",
-  "engineImageTag": "26.04.3.3-spellbook-undo-v15-r1-candidate",
+  "patchSeriesSha256": "ee5218115c00d87adc5c3c8f96c6265e90987c21288d351d30a9e42f1fe6e6d3",
+  "engineImageTag": "26.04.3.3-spellbook-undo-v16-r1-candidate",
   "impressUiUnoCommandCount": 804,
   "impressUiUnoCommandsSha256": "cafedc6b8c621afbb8399d76fc498c1e86273c2c290bb914e41298df0b203cd1",
   "patches": [
@@ -46,7 +46,8 @@
     "patches/0030-text-formatting-all-scripts.patch",
     "patches/0031-observable-text-and-layout-identity.patch",
     "patches/0032-native-object-lifecycle.patch",
-    "patches/0033-text-layout-cache-invalidation.patch"
+    "patches/0033-text-layout-cache-invalidation.patch",
+    "patches/0034-insert-slide-preserves-sparse-master.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
@@ -55,6 +56,7 @@
   "focusedCppunitTests": [
     "CppunitTest_sd_uiimpress:testStrictDocumentMutationRollsBackPartialFailure",
     "CppunitTest_sd_uiimpress:testDocumentStructureInsertSlideInheritsMasterLayout",
+    "CppunitTest_sd_uiimpress:testDocumentStructureInsertSlidePreservesSparseMaster",
     "CppunitTest_sd_uiimpress:testDocumentStructureMultiMovePreservesObjectNames",
     "CppunitTest_sd_uiimpress:testDocumentStructureObjectPropertiesUndoRedo",
     "CppunitTest_sd_uiimpress:testRenameSlideUndoRestoresUnnamedState",

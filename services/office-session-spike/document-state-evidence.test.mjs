@@ -7,7 +7,7 @@ import {
   quantizedGeometryEquivalent,
 } from "./document-state-evidence.mjs";
 
-test("document state treats one hundredth millimetre as the same element outline", () => {
+test("document state treats two edge-quantization units as the same element outline", () => {
   const expected = {
     slides: [
       {
@@ -25,21 +25,22 @@ test("document state treats one hundredth millimetre as the same element outline
   };
   const actual = structuredClone(expected);
   actual.slides[0].elements[0].width = 8_999;
-  actual.slides[0].elements[0].height = 4_499;
-  actual.slides[0].elements[0].table.rowHeights[0] = 2_249;
+  actual.slides[0].elements[0].height = 4_498;
+  actual.slides[0].elements[0].table.rowHeights[0] = 2_248;
 
   assert.equal(documentStatesEquivalent(expected.slides, actual.slides), true);
   assert.equal(quantizedGeometryEquivalent(1_000, 999), true);
-  assert.equal(quantizedGeometryEquivalent(1_000, 998), false);
+  assert.equal(quantizedGeometryEquivalent(1_000, 998), true);
+  assert.equal(quantizedGeometryEquivalent(1_000, 997), false);
 });
 
 test("document state keeps meaningful geometry and non-geometry values exact", () => {
   assert.deepEqual(
     firstDocumentStateDifference(
       [{ elements: [{ width: 9_000, text: "before" }] }],
-      [{ elements: [{ width: 8_998, text: "before" }] }],
+      [{ elements: [{ width: 8_997, text: "before" }] }],
     ),
-    { path: "slides[0].elements[0].width", expected: 9_000, actual: 8_998 },
+    { path: "slides[0].elements[0].width", expected: 9_000, actual: 8_997 },
   );
   assert.deepEqual(
     firstDocumentStateDifference(

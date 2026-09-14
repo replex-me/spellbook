@@ -1,4 +1,9 @@
-const GEOMETRY_QUANTIZATION = 1;
+// A persisted size is derived from two quantized edges. Each edge may move by
+// one 1/100 mm model unit while converting OOXML EMUs through Impress, so the
+// maximum serialization-only outline drift is two units (0.02 mm). At the
+// 1280 px verification export this is roughly a tenth of a pixel; three units
+// or any non-geometry difference remains a failure.
+const GEOMETRY_QUANTIZATION = 2;
 
 export function quantizedGeometryEquivalent(expected, actual) {
   return (
@@ -20,8 +25,9 @@ function isQuantizedGeometryPath(path) {
 /**
  * Finds the first user-visible document-state difference. LibreOffice stores
  * shape and table geometry in hundredths of a millimetre, and some native
- * model round trips quantize a calculated value by one unit. That 0.01 mm is
- * below a screen pixel and is treated as the same outline; every structural,
+ * model round trips quantize the two edges of a calculated extent by at most
+ * two units. That 0.02 mm is below a verification pixel and is treated as the
+ * same outline; every structural,
  * textual and formatting value remains exact.
  */
 export function firstDocumentStateDifference(

@@ -65,8 +65,20 @@ for patch_path in "${patch_paths[@]}"; do
 done
 git -C "$verification_source" diff --check
 expected_uno_count="$(node "$upstream_reader" get impressUiUnoCommandCount)"
+if command -v rg >/dev/null 2>&1; then
+  uno_command_inventory=(
+    rg --only-matching --no-filename '\.uno:[A-Za-z0-9_]+'
+  )
+else
+  # A clean Linux builder need not install ripgrep solely to inventory static
+  # UI XML/JavaScript. GNU grep provides the same bounded extraction here.
+  uno_command_inventory=(
+    grep --recursive --only-matching --no-filename --extended-regexp
+    '\.uno:[A-Za-z0-9_]+'
+  )
+fi
 observed_uno_count="$(
-  rg --only-matching --no-filename '\.uno:[A-Za-z0-9_]+' \
+  "${uno_command_inventory[@]}" \
     "$provided_source/engine/sd/uiconfig/simpress" \
     "$provided_source/browser/src/control/Control.NotebookbarImpress.js" \
     | sort --unique \

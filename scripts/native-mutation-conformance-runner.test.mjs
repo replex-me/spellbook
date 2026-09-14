@@ -111,11 +111,25 @@ test("change budgets are derived from executed operation families and identity e
   assert.ok(budget.allowedCategories.includes("presentation"));
   assert.ok(budget.allowedCategories.includes("notes_parts"));
   assert.ok(!budget.allowedCategories.includes("unknown"));
+  assert.ok(budget.allowedCategories.includes("notes_master_parts"));
+  assert.ok(budget.allowedCategories.includes("theme_parts"));
   assert.ok(
     capabilities.mutationModel.families.slide_properties.changeBudget.includes(
       "slide_relationships",
     ),
   );
+});
+
+test("a notes-only mutation may create the package infrastructure required by OOXML", () => {
+  const budget = buildChangeBudget(capabilities, ["set_speaker_notes"], [0]);
+
+  assert.equal(budget.allowPartCreationOrDeletion, true);
+  assert.deepEqual(budget.targetSlideIndexes, [0]);
+  assert.ok(budget.allowedCategories.includes("package_manifest"));
+  assert.ok(budget.allowedCategories.includes("presentation_relationships"));
+  assert.ok(budget.allowedCategories.includes("notes_master_parts"));
+  assert.ok(budget.allowedCategories.includes("notes_master_relationships"));
+  assert.ok(budget.allowedCategories.includes("theme_parts"));
 });
 
 test("the public document tool implements the change-budget contract used by the runner", () => {

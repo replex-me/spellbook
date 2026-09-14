@@ -65,6 +65,7 @@
         "undoProvider": "page_model_action",
         "fixture": "slide-structure",
         "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "allowPartCreationOrDeletion": true,
         "changeBudget": [
           "package_manifest",
           "presentation",
@@ -72,7 +73,10 @@
           "slide_parts",
           "slide_relationships",
           "notes_parts",
-          "notes_relationships"
+          "notes_relationships",
+          "notes_master_parts",
+          "notes_master_relationships",
+          "theme_parts"
         ]
       },
       "slide_properties": {
@@ -87,7 +91,17 @@
         "undoProvider": "notes_text_action",
         "fixture": "speaker-notes",
         "verification": ["structure", "save_reopen", "change_budget"],
-        "changeBudget": ["notes_parts", "notes_relationships"]
+        "allowPartCreationOrDeletion": true,
+        "changeBudget": [
+          "package_manifest",
+          "presentation",
+          "presentation_relationships",
+          "notes_parts",
+          "notes_relationships",
+          "notes_master_parts",
+          "notes_master_relationships",
+          "theme_parts"
+        ]
       },
       "object_creation": {
         "domain": "editor",
