@@ -82,6 +82,8 @@ services:
       - FOWNER
       - MKNOD
       - SYS_CHROOT
+    volumes:
+      - ${SPELLBOOK_WOPI_PROOF_KEY_PATH:-./.spellbook/secrets/wopi-proof-key.pem}:/etc/coolwsd/proof_key:ro
     ports:
       - "9980:9980"
     healthcheck:
@@ -115,6 +117,7 @@ services:
       SPELLBOOK_INTERNAL_TOKEN: ${SPELLBOOK_INTERNAL_TOKEN}
       SPELLBOOK_SESSION_SECRET: ${SPELLBOOK_SESSION_SECRET}
       SPELLBOOK_WOPI_SECRET: ${SPELLBOOK_WOPI_SECRET}
+      SPELLBOOK_WOPI_PROOF_MODE: ${SPELLBOOK_WOPI_PROOF_MODE:-required}
       SPELLBOOK_LOCAL_EMAIL: ${SPELLBOOK_LOCAL_EMAIL}
       SPELLBOOK_LOCAL_PASSWORD_HASH: ${SPELLBOOK_LOCAL_PASSWORD_HASH}
     volumes:

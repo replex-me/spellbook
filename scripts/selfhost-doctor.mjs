@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 
 const required = [
   "SPELLBOOK_LOCAL_EMAIL",
@@ -22,6 +23,27 @@ for (const key of required) {
         : Boolean(value && value.length >= 32);
   result.push({ check: key, ok: valid });
 }
+
+const proofMode = environment.SPELLBOOK_WOPI_PROOF_MODE || "required";
+result.push({
+  check: "WOPI proof verification required",
+  ok: proofMode === "required",
+});
+const proofKeyPath = path.resolve(
+  environment.SPELLBOOK_WOPI_PROOF_KEY_PATH ||
+    ".spellbook/secrets/wopi-proof-key.pem",
+);
+let proofKeyValid = false;
+try {
+  const stat = fs.statSync(proofKeyPath);
+  proofKeyValid =
+    stat.isFile() &&
+    (stat.mode & 0o077) === 0 &&
+    fs.readFileSync(proofKeyPath, "utf8").includes("BEGIN RSA PRIVATE KEY");
+} catch {
+  proofKeyValid = false;
+}
+result.push({ check: "persistent WOPI proof key", ok: proofKeyValid });
 
 try {
   execFileSync("docker", ["compose", "config", "--quiet"], {

@@ -18,6 +18,12 @@ import {
   aiConnectorConfig,
   type AiConnectorConfig,
 } from "./ai-connector-config";
+import {
+  parseWopiProofKeys,
+  rawQueryParameter,
+  verifyWopiProof,
+  type WopiProofKeys,
+} from "./wopi-proof";
 
 const SESSION_MS = 6 * 60 * 60 * 1000;
 const OFFICE_DISCOVERY_TIMEOUT_MS = 75_000;
@@ -53,15 +59,28 @@ function officeInternalBase(): string {
   );
 }
 
-export function createOfficeDiscoveryResolver(
+interface OfficeDiscovery {
+  actionUrl: string;
+  proofKeys: WopiProofKeys | null;
+}
+
+export function createOfficeDiscoveryClient(
   fetcher: typeof fetch = fetch,
   timeoutMs = OFFICE_DISCOVERY_TIMEOUT_MS,
 ) {
-  let cache: { base: string; expiresAt: number; url: string } | null = null;
-  let pending: { base: string; promise: Promise<string> } | null = null;
+  let cache: {
+    base: string;
+    expiresAt: number;
+    discovery: OfficeDiscovery;
+  } | null = null;
+  let pending: {
+    base: string;
+    promise: Promise<OfficeDiscovery>;
+  } | null = null;
 
-  return async (base: string): Promise<string> => {
-    if (cache?.base === base && cache.expiresAt > Date.now()) return cache.url;
+  const resolve = async (base: string): Promise<OfficeDiscovery> => {
+    if (cache?.base === base && cache.expiresAt > Date.now())
+      return cache.discovery;
     if (pending?.base === base) return pending.promise;
 
     const promise = (async () => {
@@ -83,11 +102,19 @@ export function createOfficeDiscoveryResolver(
         throw new Error(`office_discovery_failed:${response.status}`);
       }
       const xml = await response.text();
-      const url = parsePptxEditorActionUrl(xml);
-      if (new URL(url).origin !== new URL(base).origin)
+      const actionUrl = parsePptxEditorActionUrl(xml);
+      if (new URL(actionUrl).origin !== new URL(base).origin)
         throw new Error("office_discovery_origin_mismatch");
-      cache = { base, expiresAt: Date.now() + OFFICE_DISCOVERY_CACHE_MS, url };
-      return url;
+      const proofKeys = /<proof-key\b/i.test(xml)
+        ? parseWopiProofKeys(xml)
+        : null;
+      const discovery = { actionUrl, proofKeys };
+      cache = {
+        base,
+        expiresAt: Date.now() + OFFICE_DISCOVERY_CACHE_MS,
+        discovery,
+      };
+      return discovery;
     })();
 
     pending = { base, promise };
@@ -97,16 +124,33 @@ export function createOfficeDiscoveryResolver(
       if (pending?.promise === promise) pending = null;
     }
   };
+
+  return {
+    resolve,
+    invalidate(base: string) {
+      if (cache?.base === base) cache = null;
+    },
+  };
 }
 
-const resolveOfficeEditorActionUrl = createOfficeDiscoveryResolver();
+export function createOfficeDiscoveryResolver(
+  fetcher: typeof fetch = fetch,
+  timeoutMs = OFFICE_DISCOVERY_TIMEOUT_MS,
+) {
+  const client = createOfficeDiscoveryClient(fetcher, timeoutMs);
+  return async (base: string): Promise<string> =>
+    (await client.resolve(base)).actionUrl;
+}
+
+const officeDiscoveryClient = createOfficeDiscoveryClient();
 
 async function editorActionUrl(): Promise<string> {
   const publicBase = officeBase();
   const configured = process.env.SPELLBOOK_OFFICE_EDITOR_ACTION_URL?.trim();
   if (configured) return validateOfficeEditorActionUrl(configured, publicBase);
   const internalBase = officeInternalBase();
-  const discovered = await resolveOfficeEditorActionUrl(internalBase);
+  const discovered = (await officeDiscoveryClient.resolve(internalBase))
+    .actionUrl;
   const parsed = new URL(discovered);
   const publicOrigin = new URL(publicBase);
   parsed.protocol = publicOrigin.protocol;
@@ -285,6 +329,7 @@ export async function requireWopi(
   } catch {
     throw new HttpError(401, "invalid_wopi_token");
   }
+  await requireValidWopiProof(request);
   await ensureSchema();
   const [row] = await db()`
     select s.id, s.wopi_lock, s.working_version_id, d.file_name,
@@ -306,6 +351,53 @@ export async function requireWopi(
     versionId: row.version_id,
     lock: row.wopi_lock,
   };
+}
+
+async function requireValidWopiProof(request: Request): Promise<void> {
+  const configured =
+    process.env.SPELLBOOK_WOPI_PROOF_MODE?.trim().toLowerCase();
+  const mode =
+    configured ||
+    (process.env.NODE_ENV === "production" ? "required" : "disabled");
+  if (mode === "disabled") return;
+  if (mode !== "required") throw new HttpError(500, "invalid_wopi_proof_mode");
+
+  const accessToken = rawQueryParameter(request.url, "access_token") ?? "";
+  const receivedUrl = new URL(request.url);
+  const signedUrl = new URL(internalAppBaseUrl());
+  signedUrl.pathname = receivedUrl.pathname;
+  signedUrl.search = receivedUrl.search;
+  const input = {
+    accessToken,
+    requestUrl: signedUrl.toString(),
+    timestamp: request.headers.get("x-wopi-timestamp") ?? "",
+    proof: request.headers.get("x-wopi-proof") ?? "",
+    oldProof: request.headers.get("x-wopi-proofold") ?? "",
+  };
+  const base = officeInternalBase();
+  let discovery: OfficeDiscovery;
+  try {
+    discovery = await officeDiscoveryClient.resolve(base);
+  } catch {
+    throw new HttpError(500, "wopi_proof_discovery_unavailable");
+  }
+  let match = discovery.proofKeys
+    ? verifyWopiProof(input, discovery.proofKeys)
+    : null;
+  if (!match) {
+    officeDiscoveryClient.invalidate(base);
+    try {
+      discovery = await officeDiscoveryClient.resolve(base);
+    } catch {
+      throw new HttpError(500, "wopi_proof_discovery_unavailable");
+    }
+    match = discovery.proofKeys
+      ? verifyWopiProof(input, discovery.proofKeys)
+      : null;
+  }
+  if (!match) throw new HttpError(500, "invalid_wopi_proof");
+  if (match !== "current-proof-current-key")
+    officeDiscoveryClient.invalidate(base);
 }
 
 export async function wopiCheckFileInfo(request: Request, documentId: string) {

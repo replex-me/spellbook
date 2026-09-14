@@ -18,7 +18,7 @@ docker compose up --build -d
 pnpm selfhost:doctor
 ```
 
-The setup command creates `.env` with mode `0600`, generates independent secrets and prints the initial password once. Open `http://localhost:3000`, log in, then connect Codex from the AI panel if AI editing is needed.
+The setup command creates `.env` with mode `0600`, generates independent secrets, creates a persistent 4096-bit Collabora WOPI proof key under the ignored `.spellbook/secrets/` directory and prints the initial password once. Re-running setup preserves both `.env` and the proof key. Open `http://localhost:3000`, log in, then connect Codex from the AI panel if AI editing is needed.
 
 The default `internal` mode keeps the connector in the private Compose network. To exercise the same user-device boundary used by a hosted Spellbook service, set `SPELLBOOK_AI_CONNECTOR_MODE=local` in `.env`, recreate only the web container, and start the loopback connector on the user's computer:
 
@@ -39,7 +39,7 @@ The build bundles the connector, the pinned official Node runtime and the matchi
 
 ## Data and backup
 
-`database-data` holds metadata and version lineage. `document-data` holds uploaded documents, derived renders and job receipts. `ai-auth-data` is mounted only into the AI connector and holds its provider runtime home. A usable document backup requires a consistent copy of the database and document volumes; back up the AI volume separately if reconnecting the provider is not acceptable.
+`database-data` holds metadata and version lineage. `document-data` holds uploaded documents, derived renders and job receipts. `ai-auth-data` is mounted only into the AI connector and holds its provider runtime home. `.spellbook/secrets/wopi-proof-key.pem` is the stable identity that lets the host authenticate Collabora requests across restarts. A usable document backup requires a consistent copy of the database and document volumes plus this proof key; back up the AI volume separately if reconnecting the provider is not acceptable.
 
 The original upload is immutable. Deleting the Compose stack with `docker compose down` keeps volumes. Adding `--volumes` destroys document and database data and must not be used as a routine reset.
 
@@ -47,7 +47,7 @@ The original upload is immutable. Deleting the Compose stack with `docker compos
 
 Only the web application and Collabora browser endpoint are published by the local profile. Worker ports stay on the private Compose network and require an internal token. For internet exposure, terminate TLS at a reverse proxy, set the two public URLs to their HTTPS origins, restrict frame ancestors, and do not publish PostgreSQL or worker ports.
 
-WOPI access tokens are scoped to one document session and use a secret distinct from service-to-service authentication. A production deployment must additionally validate Collabora's WOPI proof signatures and run the official WOPI validator before public exposure; the local beta profile does not yet satisfy that release gate.
+WOPI access tokens are scoped to one document session and use a secret distinct from service-to-service authentication. Collabora signs each WOPI request with the stable installation key advertised in discovery. The host verifies the three rotation-safe proof combinations defined by WOPI, rejects timestamps outside a 20-minute window and refreshes cached discovery keys after a mismatch or old-key match. Keep `SPELLBOOK_WOPI_PROOF_MODE=required`; disabling it is only for isolated development tests. Internet exposure still requires TLS termination and an applicable WOPI conformance run against the deployed HTTPS origin.
 
 ## Fonts and fidelity
 
