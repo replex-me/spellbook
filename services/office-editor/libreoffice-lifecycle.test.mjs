@@ -25,6 +25,11 @@ test("source build admission and candidate promotion are separate evidence state
   assert.match(sourceBuild, /build_completed=false/u);
   assert.match(sourceBuild, /Integrated build failed; preserving/u);
   assert.match(sourceBuild, /build_completed=true/u);
+  assert.match(sourceBuild, /for cppunit_target in/u);
+  assert.doesNotMatch(
+    sourceBuild,
+    /make -C "\$engine_build_root" "\$\{cppunit_targets\[@\]\}"/u,
+  );
   assert.match(candidateWrapper, /manifest\.sourceCandidateReady/u);
   assert.doesNotMatch(candidateWrapper, /sourcePatchSeriesReady/u);
 });

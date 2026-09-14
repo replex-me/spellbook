@@ -114,7 +114,13 @@ bash "$source_root/docker/from-source/build.sh"
 # every patched Undo/identity path pass in the exact tree used for packaging.
 # Run these after the full build so all shared test dependencies already exist.
 engine_build_root="$source_root/docker/from-source/builddir/online/engine"
-make -C "$engine_build_root" "${cppunit_targets[@]}"
+# The LibreOffice toplevel delegates named targets to recursive makes. Passing
+# multiple CppunitTest targets together lets those submakes race while creating
+# the same generated RDB and dependency files. Run suites sequentially while
+# each suite still uses its own normal internal parallelism.
+for cppunit_target in "${cppunit_targets[@]}"; do
+  make -C "$engine_build_root" "$cppunit_target"
+done
 
 docker image inspect "$image_repository:$image_tag" >/dev/null
 build_completed=true

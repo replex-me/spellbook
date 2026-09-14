@@ -31,7 +31,7 @@ index be2252dfeadeeee1f08d3432e786527607d18d2e..505925d36abe67e8abe63cebb3468270
  #include <vcl/scheduler.hxx>
  #include <docmodel/uno/UnoComplexColor.hxx>
  #include <comphelper/propertyvalue.hxx>
-@@ -706,6 +713,115 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
+@@ -706,6 +713,114 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
      CPPUNIT_ASSERT(aChanged == *pTextObject->GetOutlinerParaObject());
  }
  
@@ -40,17 +40,16 @@ index be2252dfeadeeee1f08d3432e786527607d18d2e..505925d36abe67e8abe63cebb3468270
 +    createSdImpressDoc();
 +    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
 +    CPPUNIT_ASSERT(pImpressDocument);
-+    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
-+    SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
-+    CPPUNIT_ASSERT(pDoc && pPage);
-+
-+    while (pPage->GetObjCount())
-+        pPage->RemoveObject(0);
-+
 +    uno::Reference<drawing::XDrawPagesSupplier> xPagesSupplier(mxComponent,
 +                                                                uno::UNO_QUERY_THROW);
 +    uno::Reference<drawing::XDrawPage> xPage(
 +        xPagesSupplier->getDrawPages()->getByIndex(0), uno::UNO_QUERY_THROW);
++    while (xPage->getCount())
++    {
++        uno::Reference<drawing::XShape> xShape(xPage->getByIndex(0),
++                                                uno::UNO_QUERY_THROW);
++        xPage->remove(xShape);
++    }
 +    uno::Reference<beans::XPropertySet> xPageProperties(xPage, uno::UNO_QUERY_THROW);
 +    sal_Int32 nPageWidth = 0;
 +    sal_Int32 nPageHeight = 0;
@@ -148,9 +147,16 @@ index be2252dfeadeeee1f08d3432e786527607d18d2e..505925d36abe67e8abe63cebb3468270
  {
      createSdImpressDoc();
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index 0ecfec67d98c9d78da3f4ec473fd0ae0462e7a6b..282f7f0042088c317415cd98a08d677c4824da3a 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
+@@ -95,6 +95,7 @@
+ #include <svx/fontworkbar.hxx>
+ #include <svx/graphichelper.hxx>
+ #include <svx/hlnkitem.hxx>
++#include <svx/sdr/contact/viewcontact.hxx>
+ #include <svx/imapdlg.hxx>
+ #include <svx/sdtagitm.hxx>
+ #include <svx/svdetc.hxx>
 @@ -2044,6 +2044,10 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
      for (sal_Int32 nParagraph = 0; nParagraph < pOutliner->GetParagraphCount(); ++nParagraph)
          pOutliner->SetCharAttribs(nParagraph, aTextAttributes);

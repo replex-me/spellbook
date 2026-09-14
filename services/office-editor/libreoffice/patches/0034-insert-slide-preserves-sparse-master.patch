@@ -16,7 +16,7 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 index 505925d36abe67e8abe63cebb34682706a286ede..a6607165a2391a75312335e5e397a8f626a824cf 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -1567,6 +1567,67 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertSlideInheritsSo
+@@ -1567,6 +1567,76 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertSlideInheritsSo
      CPPUNIT_ASSERT_EQUAL(nMasterObjectCount, pMaster->GetObjCount());
  }
  
@@ -31,6 +31,11 @@ index 505925d36abe67e8abe63cebb34682706a286ede..a6607165a2391a75312335e5e397a8f6
 +    CPPUNIT_ASSERT(pSource);
 +    SdPage* pMaster = static_cast<SdPage*>(&pSource->TRG_GetMasterPage());
 +    CPPUNIT_ASSERT(pMaster);
++    uno::Reference<drawing::XMasterPagesSupplier> xMasterPagesSupplier(
++        mxComponent, uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XDrawPage> xMasterPage(
++        xMasterPagesSupplier->getMasterPages()->getByIndex(0),
++        uno::UNO_QUERY_THROW);
 +
 +    // Imported blank layouts can intentionally omit title and body
 +    // placeholders. Creating a slide with a concrete layout must add the
@@ -39,7 +44,11 @@ index 505925d36abe67e8abe63cebb34682706a286ede..a6607165a2391a75312335e5e397a8f6
 +                              PresObjKind::Text })
 +    {
 +        while (SdrObject* pObject = pMaster->GetPresObj(eKind))
-+            pMaster->RemoveObject(pObject->GetOrdNum());
++        {
++            uno::Reference<drawing::XShape> xShape = pObject->getUnoShape();
++            CPPUNIT_ASSERT(xShape.is());
++            xMasterPage->remove(xShape);
++        }
 +    }
 +    pMaster->SetAutoLayout(AUTOLAYOUT_NONE, false, false, true);
 +    pSource->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true, false, true);
