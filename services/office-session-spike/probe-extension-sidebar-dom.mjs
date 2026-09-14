@@ -21,6 +21,13 @@ try {
         contentType: "text/css",
       }),
     );
+  if (process.env.SPELLBOOK_PROBE_HOST_JS)
+    await page.route("**/spellbook-host.js", (route) =>
+      route.fulfill({
+        body: process.env.SPELLBOOK_PROBE_HOST_JS,
+        contentType: "text/javascript",
+      }),
+    );
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !document.body.innerText.includes("편집기 연결 중"),
