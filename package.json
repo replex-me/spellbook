@@ -44,6 +44,8 @@
     "verify": "pnpm test && pnpm typecheck && pnpm build",
     "selfhost:doctor": "node scripts/selfhost-doctor.mjs",
     "selfhost:setup": "node scripts/selfhost-setup.mjs",
+    "selfhost:backup": "node scripts/selfhost-backup.mjs",
+    "selfhost:restore": "node scripts/selfhost-restore.mjs",
     "selfhost:up": "docker compose up --build",
     "selfhost:down": "docker compose down"
   },

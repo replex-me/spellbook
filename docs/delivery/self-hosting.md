@@ -41,6 +41,24 @@ The build bundles the connector, the pinned official Node runtime and the matchi
 
 `database-data` holds metadata and version lineage. `document-data` holds uploaded documents, derived renders and job receipts. `ai-auth-data` is mounted only into the AI connector and holds its provider runtime home. `.spellbook/secrets/wopi-proof-key.pem` is the stable identity that lets the host authenticate Collabora requests across restarts. A usable document backup requires a consistent copy of the database and document volumes plus this proof key; back up the AI volume separately if reconnecting the provider is not acceptable.
 
+Create one consistent backup with:
+
+```bash
+pnpm selfhost:backup
+```
+
+The command pauses only the services that can write state, makes a PostgreSQL custom-format dump, archives both persistent application volumes, copies `.env` and the stable WOPI proof key, then writes a manifest containing byte lengths and SHA-256 digests. Services that were running before the backup are resumed even if the backup fails. The default destination is an ignored, mode-`0700` directory under `.spellbook/backups/`; use `--output=/encrypted/path/name` to place it elsewhere.
+
+Restore replaces the named Compose project's database and application volumes, so it requires an exact project-name confirmation:
+
+```bash
+pnpm selfhost:restore -- --backup=.spellbook/backups/<name> --confirm=spellbook
+```
+
+Add `--restore-config` only for disaster recovery when `.env` and the proof key must also be restored. Add `--start` when restoring into a new project that had no running services. The command verifies every declared file before it stops or replaces target data. If restore fails after replacement begins, it intentionally leaves application services stopped instead of exposing a partial restore; correct the cause and rerun the same verified backup.
+
+Backup archives contain the database, documents, AI provider login state, application secrets and the WOPI private key in plaintext. Store them only on access-controlled encrypted storage, never commit them, and restore only an archive obtained from a trusted operator. SHA-256 detects accidental corruption; it does not make an untrusted backup safe or prove who created it. Run `pnpm selfhost:doctor` and one real open/edit/save/download smoke test after restoration.
+
 The original upload is immutable. Deleting the Compose stack with `docker compose down` keeps volumes. Adding `--volumes` destroys document and database data and must not be used as a routine reset.
 
 ## Network and TLS
