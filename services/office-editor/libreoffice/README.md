@@ -80,6 +80,27 @@ node services/office-editor/libreoffice/write-runtime-release.mjs \
   <40-character-public-commit>
 ```
 
+That file pins runtime identity; it does not claim that named tests ran. Create
+a separate validation receipt from the actual native-suite logs, browser
+conformance report and visual review:
+
+```bash
+pnpm office:runtime:validate -- \
+  --release /secure/path/spellbook-office-runtime.release.json \
+  --native-directory /secure/path/native-cppunit-evidence \
+  --browser-report /secure/path/conformance-report.json \
+  --visual-review /secure/path/visual-review.json \
+  --output /secure/path/spellbook-office-runtime.validation.json
+```
+
+The result remains `candidate` when review is agent-only or PowerPoint
+evidence is absent. Add `--powerpoint-evidence` only for a recorded real
+PowerPoint open/edit/save result. `release_verified` therefore means that the
+same receipt has passing native suites, full browser execution, save/reopen and
+change-budget checks, human visual review, and PowerPoint validation; image
+existence or a list of required target names can no longer stand in for those
+outcomes.
+
 The candidate wrapper records the public source revision, Collabora source
 commit, engine digest and patch-series hash as OCI labels. The receipt is the
 only artifact a managed downstream needs to lock; it must not copy this patch
