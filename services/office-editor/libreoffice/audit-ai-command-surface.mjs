@@ -2,8 +2,29 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
+import {
+  securityExcludedCommandPattern,
+  semanticFamilyForCommand,
+} from "./impress-command-policy.mjs";
 import { upstreamManifest } from "./upstream.mjs";
+
+const directory = path.dirname(fileURLToPath(import.meta.url));
+const capabilityMatrix = JSON.parse(
+  readFileSync(
+    path.resolve(
+      directory,
+      "../../../contracts/impress-ai-capability-matrix.json",
+    ),
+    "utf8",
+  ),
+);
+const knownSemanticFamilies = new Set(
+  capabilityMatrix.semanticFamilies.map((family) => family.id),
+);
+const rawUiCommandRoutingContract =
+  capabilityMatrix.operationCoverage.rawUiCommandRouting;
 
 const args = process.argv.slice(2);
 const sourceIndex = args.indexOf("--source");
@@ -174,8 +195,7 @@ const patternRules = [
     // Match dangerous command families at the command-name boundary. A loose
     // substring match misclassified ordinary document commands such as
     // BasicShapes, SubScript, SuperScript and ObjectTitleDescription.
-    pattern:
-      /^\.uno:(?:BasicIDE|Macro|RunMacro|ScriptOrganizer|AddressBook|Twain|Scanner|ExternalEdit|ManageLinks)/i,
+    pattern: securityExcludedCommandPattern,
     rationale:
       "Name indicates executable, device or external automation authority.",
   },
@@ -204,30 +224,44 @@ const patternRules = [
 const commands = [...origins.keys()].sort();
 const entries = commands.map((command) => {
   const exactRule = exactRules.find((rule) => rule.commands.has(command));
-  if (exactRule)
-    return {
+  if (exactRule) {
+    const entry = {
       command,
       category: exactRule.category,
       review: "individually_reviewed",
       rationale: exactRule.rationale,
       origins: [...origins.get(command)].sort(),
     };
-  const patternRule = patternRules.find((rule) => rule.pattern.test(command));
-  if (patternRule)
     return {
+      ...entry,
+      semanticFamily: semanticFamilyForCommand(command, entry.category),
+    };
+  }
+  const patternRule = patternRules.find((rule) => rule.pattern.test(command));
+  if (patternRule) {
+    const entry = {
       command,
       category: patternRule.category,
       review: "rule_classified_requires_review",
       rationale: patternRule.rationale,
       origins: [...origins.get(command)].sort(),
     };
-  return {
+    return {
+      ...entry,
+      semanticFamily: semanticFamilyForCommand(command, entry.category),
+    };
+  }
+  const entry = {
     command,
     category: "document_mutation_candidate",
     review: "requires_individual_review",
     rationale:
       "Conservative default: determine target structure, arguments, permission, Undo and save/reopen behavior before exposure.",
     origins: [...origins.get(command)].sort(),
+  };
+  return {
+    ...entry,
+    semanticFamily: semanticFamilyForCommand(command, entry.category),
   };
 });
 const inventory = `${commands.join("\n")}\n`;
@@ -236,10 +270,52 @@ const counts = entries.reduce(
     result.byCategory[entry.category] =
       (result.byCategory[entry.category] ?? 0) + 1;
     result.byReview[entry.review] = (result.byReview[entry.review] ?? 0) + 1;
+    const semanticFamily = entry.semanticFamily ?? "unmapped";
+    result.bySemanticFamily[semanticFamily] =
+      (result.bySemanticFamily[semanticFamily] ?? 0) + 1;
     return result;
   },
-  { byCategory: {}, byReview: {} },
+  { byCategory: {}, byReview: {}, bySemanticFamily: {} },
 );
+const unmappedCommands = entries
+  .filter((entry) => !entry.semanticFamily)
+  .map((entry) => entry.command);
+const unknownSemanticFamilies = [
+  ...new Set(
+    entries
+      .map((entry) => entry.semanticFamily)
+      .filter((family) => family && !knownSemanticFamilies.has(family)),
+  ),
+].sort();
+const routedSemanticFamilies = Object.keys(counts.bySemanticFamily).sort();
+const familiesWithoutRawUiCommands = [...knownSemanticFamilies]
+  .filter((family) => !counts.bySemanticFamily[family])
+  .sort();
+const contractMismatches = [];
+if (commands.length !== rawUiCommandRoutingContract.count)
+  contractMismatches.push(
+    `count: expected ${rawUiCommandRoutingContract.count}, observed ${commands.length}`,
+  );
+if (unmappedCommands.length !== rawUiCommandRoutingContract.unmapped)
+  contractMismatches.push(
+    `unmapped: expected ${rawUiCommandRoutingContract.unmapped}, observed ${unmappedCommands.length}`,
+  );
+if (
+  routedSemanticFamilies.length !==
+  rawUiCommandRoutingContract.routedFamilyCount
+)
+  contractMismatches.push(
+    `routedFamilyCount: expected ${rawUiCommandRoutingContract.routedFamilyCount}, observed ${routedSemanticFamilies.length}`,
+  );
+if (
+  JSON.stringify(familiesWithoutRawUiCommands) !==
+  JSON.stringify(
+    [...rawUiCommandRoutingContract.familiesWithoutRawUiCommands].sort(),
+  )
+)
+  contractMismatches.push(
+    `familiesWithoutRawUiCommands: expected ${JSON.stringify(rawUiCommandRoutingContract.familiesWithoutRawUiCommands)}, observed ${JSON.stringify(familiesWithoutRawUiCommands)}`,
+  );
 const report = {
   source: {
     ref: upstreamManifest.source.ref,
@@ -256,9 +332,21 @@ const report = {
         upstreamManifest.impressUiUnoCommandsSha256,
   },
   counts,
+  semanticRouting: {
+    complete:
+      unmappedCommands.length === 0 &&
+      unknownSemanticFamilies.length === 0 &&
+      contractMismatches.length === 0,
+    unmappedCommands,
+    unknownSemanticFamilies,
+    routedSemanticFamilies,
+    familiesWithoutRawUiCommands,
+    contractMismatches,
+  },
   warning:
     "Rule-classified and requires-review entries are not completed capability decisions. Only individually_reviewed entries have a manual policy decision, and no entry is an AI feature until the typed runtime contract gates pass.",
   entries,
 };
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 if (!report.inventory.exact) process.exitCode = 2;
+else if (!report.semanticRouting.complete) process.exitCode = 3;

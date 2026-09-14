@@ -30,6 +30,14 @@
     "security_excluded": "Intentionally unavailable to document AI because it expands authority beyond the document contract."
   },
   "operationCoverage": {
+    "rawUiCommandRouting": {
+      "count": 725,
+      "unmapped": 0,
+      "routedFamilyCount": 19,
+      "familiesWithoutRawUiCommands": ["smartart_diagrams"],
+      "source": "services/office-editor/libreoffice/audit-ai-command-surface.mjs",
+      "policy": "Every observed Impress UI command is routed to a product semantic family. Routing proves inventory coverage only; it does not make a raw UNO command an AI tool or satisfy that family's runtime release gates."
+    },
     "aiToolExposure": {
       "count": 63,
       "source": "native-edit-capabilities.json#toolInputSchema.properties.op.enum",

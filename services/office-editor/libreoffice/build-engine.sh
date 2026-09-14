@@ -109,6 +109,9 @@ for patch_path in "${patch_paths[@]}"; do
     --directory=engine "$patch_path"
 done
 git -C "$source_root" diff --check
+command_audit_report="$build_root/impress-command-surface.json"
+node "$spellbook_repo_root/services/office-editor/libreoffice/audit-ai-command-surface.mjs" \
+  --source "$source_root" > "$command_audit_report"
 git -C "$source_root" -c user.name=Spellbook -c user.email=build@invalid.example \
   commit --quiet --all --message="Apply Spellbook Impress compatibility patch series"
 git -C "$source_root" branch "spellbook-$patch_level"
@@ -132,6 +135,7 @@ engine_build_root="$source_root/docker/from-source/builddir/online/engine"
 native_evidence_dir="${SPELLBOOK_NATIVE_EVIDENCE_DIR:-}"
 if [[ -n "$native_evidence_dir" ]]; then
   mkdir -p "$native_evidence_dir"
+  cp "$command_audit_report" "$native_evidence_dir/impress-command-surface.json"
 fi
 for cppunit_target in "${cppunit_targets[@]}"; do
   if [[ -z "$native_evidence_dir" ]]; then

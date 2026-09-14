@@ -92,4 +92,12 @@ if [[ "$observed_uno_count" != "$expected_uno_count" ]]; then
   echo "Expected $expected_uno_count unique Impress UI UNO commands, got $observed_uno_count." >&2
   exit 1
 fi
-echo "Patch series $actual_patch_series_sha256 applies exactly to Collabora $source_ref ($source_commit); $observed_uno_count UI UNO commands inventoried."
+command_audit_report="$verification_root/impress-command-surface.json"
+node "$spellbook_repo_root/services/office-editor/libreoffice/audit-ai-command-surface.mjs" \
+  --source "$provided_source" > "$command_audit_report"
+semantic_family_count="$(node -e '
+  const report = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  if (!report.semanticRouting.complete) process.exit(1);
+  process.stdout.write(String(Object.keys(report.counts.bySemanticFamily).length));
+' "$command_audit_report")"
+echo "Patch series $actual_patch_series_sha256 applies exactly to Collabora $source_ref ($source_commit); $observed_uno_count UI UNO commands routed across $semantic_family_count product families."

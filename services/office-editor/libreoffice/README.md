@@ -13,6 +13,15 @@ Spellbook uses Collabora Online for the shared browser editor. Collabora embeds 
 
 The patches add bounded document commands and exact native Undo/Redo behavior. They do not expose raw UNO, macros, external processes or arbitrary file/network access to the AI. A patch is kept only while the pinned upstream lacks equivalent behavior.
 
+`audit-ai-command-surface.mjs` reads the complete Impress UI command inventory
+from the pinned source and routes every command through
+`impress-command-policy.mjs` into the product semantic families declared in
+`contracts/impress-ai-capability-matrix.json`. An unmapped command fails the
+audit. This routing is an inventory guarantee, not an execution shortcut: only
+the bounded operations in `native-edit-capabilities.json` can reach the AI, and
+each still needs its declared observation, permission, Undo, save/reopen,
+visual and PowerPoint evidence.
+
 ## Upgrade flow
 
 Check upstream and cumulative patch application without changing a manifest or deployment:

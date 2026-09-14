@@ -69,6 +69,21 @@ test("engine admission and build fetch the immutable source commit", () => {
   }
 });
 
+test("engine admission and release build require complete semantic command routing", () => {
+  for (const script of [
+    "services/office-editor/libreoffice/build-engine.sh",
+    "services/office-editor/libreoffice/verify-patch.sh",
+  ]) {
+    const source = readFileSync(script, "utf8");
+    assert.match(source, /audit-ai-command-surface\.mjs/u, script);
+  }
+  const verifier = readFileSync(
+    "services/office-editor/libreoffice/verify-patch.sh",
+    "utf8",
+  );
+  assert.match(verifier, /semanticRouting\.complete/u);
+});
+
 test("Collabora release refs use numeric ordering", () => {
   assert.ok(compareCollaboraRefs("cp-26.04.10-1", "cp-26.04.9-9") > 0);
   assert.equal(
