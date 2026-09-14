@@ -101,4 +101,4 @@ After uploading a PPTX, copy its UUID from the document URL and run:
 SPELLBOOK_SELFHOST_DOCUMENT_ID=<uuid> pnpm test:selfhost
 ```
 
-The test uses the local session cookie created during manual login. It opens the real Collabora canvas, waits for the Spellbook extension bridge, changes an actual slide text object, saves it through WOPI, downloads the resulting PPTX, validates the ZIP package and checks the changed slide XML. It writes screenshots and the downloaded test file only under the ignored `.tmp-runtime/evidence/` directory.
+The test reuses an unexpired local session cookie when one exists. For a loopback self-host target only, it can instead derive a short-lived session in memory from the local `.env`; remote targets still require an explicit unexpired cookie. It opens the real Collabora canvas, waits for the Spellbook extension bridge, changes an actual slide text object, saves it through WOPI, downloads the resulting PPTX, validates the ZIP package and checks the changed slide XML. It writes screenshots and the downloaded test file only under the ignored `.tmp-runtime/evidence/` directory.
