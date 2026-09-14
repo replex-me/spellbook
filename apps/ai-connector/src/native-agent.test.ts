@@ -9,6 +9,7 @@ import { nativeEditContract } from "./native-edit-contract.js";
 
 const state: NativeObservation = {
   unit: "1/100mm",
+  engine: { patchLevel: "undo-v17" },
   revision: "v2-test",
   activeSlide: 0,
   selectedElementIds: ["0/0"],
@@ -40,8 +41,9 @@ function fixture(
   work: (options: AgentTurnOptions) => Promise<void>,
   scope = permission,
   mutationState: NativeObservation = changedState,
+  initialState: NativeObservation = state,
 ) {
-  let current = structuredClone(state);
+  let current = structuredClone(initialState);
   const call = vi.fn(
     async (request: Record<string, unknown>, _signal: AbortSignal) => {
       if (request.operation !== "observe" && !request.dryRun)
@@ -112,7 +114,7 @@ describe("shared open document agent", () => {
     expect(prompt).toContain("User request: 아까 요청을 다시 해줘");
   });
 
-  it("publishes every verified native operation from the shared contract", async () => {
+  it("publishes every bounded native operation from the shared contract", async () => {
     const f = fixture(async (o) => {
       const schema = o.tools.find((tool) => tool.name === "native_edit")
         ?.inputSchema as {
@@ -127,6 +129,9 @@ describe("shared open document agent", () => {
       );
       expect(schema.properties.op.enum).toEqual(
         expect.arrayContaining([
+          "insert_slide",
+          "add_text_box",
+          "add_shape",
           "add_table",
           "align",
           "distribute",
@@ -138,12 +143,16 @@ describe("shared open document agent", () => {
           "set_speaker_notes",
           "set_chart_data",
           "set_chart_type",
+          "set_background",
+          "set_table_cell",
+          "set_slide_layout",
+          "text_shadow",
+          "crop_image",
+          "set_slide_transition",
+          "set_animation_timing",
         ]),
       );
-      expect(schema.properties.op.enum).not.toContain("set_background");
-      expect(schema.properties.op.enum).not.toContain("set_table_cell");
-      expect(schema.properties.op.enum).not.toContain("set_slide_layout");
-      expect(schema.properties.op.enum).not.toContain("text_shadow");
+      expect(schema.properties.op.enum).toHaveLength(62);
       expect(schema.properties.op.enum).not.toContain("set_printable");
       expect(schema.properties.row.type).toContain("number");
       expect(schema.properties.column.type).toContain("number");
@@ -154,6 +163,76 @@ describe("shared open document agent", () => {
         o.tools.find((tool) => tool.name === "native_edit")?.description,
       ).toContain("column/line/area/pie/scatter/radar");
     });
+    await f.run();
+  });
+
+  it("authorizes all 62 bounded operations on the verified undo-v17 engine", async () => {
+    const f = fixture(async (o) => {
+      await o.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "observe",
+        f.signal,
+      );
+      for (const operation of nativeEditContract.toolInputSchema.properties.op
+        .enum) {
+        const command = nativeEditContract.operationGroups.slide.includes(
+          operation,
+        )
+          ? { op: operation, slideIndex: 0 }
+          : nativeEditContract.operationGroups.create.includes(operation)
+            ? { op: operation, slideIndex: 0 }
+            : nativeEditContract.operationGroups.multiElement.includes(
+                  operation,
+                )
+              ? { op: operation, elementIds: ["0/0", "0/1"] }
+              : { op: operation, elementId: "0/0" };
+        expect(
+          (
+            await o.onTool(
+              "native_edit",
+              command,
+              `edit-${operation}`,
+              f.signal,
+            )
+          ).success,
+          operation,
+        ).toBe(true);
+      }
+    });
+    await f.run();
+    expect(f.call).toHaveBeenCalledTimes(63);
+  });
+
+  it("rejects a patched operation when the live editor is below its required patch", async () => {
+    const stockState: NativeObservation = {
+      ...structuredClone(state),
+      engine: { patchLevel: "stock" },
+    };
+    const f = fixture(
+      async (o) => {
+        await o.onTool(
+          "native_observe",
+          { detailSlideIndex: null },
+          "1",
+          f.signal,
+        );
+        const result = await o.onTool(
+          "native_edit",
+          { op: "set_background", slideIndex: 0, color: 0xffffff },
+          "2",
+          f.signal,
+        );
+        expect(result.success).toBe(false);
+        expect(result.contentItems[0]).toMatchObject({
+          type: "inputText",
+          text: expect.stringContaining("undo-v2"),
+        });
+      },
+      permission,
+      changedState,
+      stockState,
+    );
     await f.run();
   });
 

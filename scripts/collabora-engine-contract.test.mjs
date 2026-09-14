@@ -109,8 +109,32 @@ test("runtime mutation contracts are generated from the public capability model"
     "runtime_validation_required",
   );
   assert.equal(operations.insert_slide.minEnginePatch, 9);
-  for (const operation of capabilities.toolInputSchema.properties.op.enum)
-    assert.equal(operations[operation].availability, "runtime_verified");
+  const exposedOperations = capabilities.toolInputSchema.properties.op.enum;
+  assert.equal(exposedOperations.length, 62);
+  assert.equal(new Set(exposedOperations).size, exposedOperations.length);
+  assert.deepEqual(
+    exposedOperations.slice().sort(),
+    Object.entries(operations)
+      .filter(([, operation]) => operation.availability !== "format_excluded")
+      .map(([operation]) => operation)
+      .sort(),
+  );
+  assert.equal(capabilities.aiExposure.operationCount, exposedOperations.length);
+  const operationGroups = capabilities.operationGroups;
+  for (const operation of operationGroups.slide)
+    assert.equal(operations[operation].target, "slide");
+  for (const operation of operationGroups.create) {
+    assert.equal(operations[operation].target, "slide");
+    assert.equal(operations[operation].family, "object_creation");
+  }
+  for (const operation of operationGroups.multiElement)
+    assert.equal(operations[operation].target, "elements");
+  for (const operation of operationGroups.element)
+    assert.ok(
+      ["element", "table_cell", "table_range", "animation_effect"].includes(
+        operations[operation].target,
+      ),
+    );
   const generated = readFileSync(
     "services/office-editor/extension/mutation-contract.generated.js",
     "utf8",

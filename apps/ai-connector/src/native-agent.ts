@@ -51,6 +51,10 @@ export interface NativeObservation {
     pngBytes?: number[];
     pngBase64?: string;
   }>;
+  engine?: {
+    patchLevel?: string;
+    [key: string]: unknown;
+  };
   changedSlideIndexes: number[];
   visualEvidenceComplete: boolean;
   layoutAudit?: {
@@ -193,13 +197,26 @@ export async function runNativeTurn(
     state: NativeObservation,
   ): number => {
     const operation = command.op ?? "";
+    const operationContract = nativeEditContract.mutationModel.operations[operation];
     if (
-      !nativeSlideOperations.has(operation) &&
-      !nativeCreateOperations.has(operation) &&
-      !nativeMultiElementOperations.has(operation) &&
-      !nativeElementOperations.has(operation)
+      !operationContract ||
+      operationContract.availability === "format_excluded" ||
+      (!nativeSlideOperations.has(operation) &&
+        !nativeCreateOperations.has(operation) &&
+        !nativeMultiElementOperations.has(operation) &&
+        !nativeElementOperations.has(operation))
     )
       throw new Error("Unsupported native edit operation.");
+    const patchMatch = /^undo-v(?<version>[1-9][0-9]*)$/u.exec(
+      state.engine?.patchLevel ?? "",
+    );
+    const patchLevel = patchMatch?.groups?.version
+      ? Number(patchMatch.groups.version)
+      : 0;
+    if (operationContract.minEnginePatch > patchLevel)
+      throw new Error(
+        `${operation}에는 undo-v${operationContract.minEnginePatch} 이상의 편집 엔진이 필요합니다.`,
+      );
     const slideOperation = nativeSlideOperations.has(operation);
     const createOperation = nativeCreateOperations.has(operation);
     const multiElementOperation = nativeMultiElementOperations.has(operation);
@@ -309,7 +326,7 @@ export async function runNativeTurn(
             type: "function",
             name: "native_edit",
             description:
-              "Change one observed object or slide in the SAME open editor with native undo. Supports text and paragraph formatting, geometry, line/fill, rotation/flip/stacking, align/distribute/group, object duplication/deletion, new text boxes/basic shapes/tables, fixed-size numeric values plus category and series labels for observed internal-data charts, chart-family changes among column/line/area/pie/scatter/radar, and slide insertion/duplication/deletion/reorder/speaker notes. For set_chart_data, send any changed fields among data, rowDescriptions (category labels), and columnDescriptions (series labels); keep their observed dimensions. For set_chart_type, use the observed chart element and one named chartType; this identity-replacing operation must be isolated in its own edit. New tables accept their initial cell matrix. Existing table-cell text, chart style, linked or embedded-workbook chart data, slide layout/background, slide rename, exact non-active slide visibility, and candidate object-property operations remain excluded until their engine and round-trip gates pass. Observe after stale state. Do not send executable code.",
+              "Change one observed object or slide in the SAME open editor with native undo. The schema includes all 62 bounded PPTX operations implemented by Spellbook: slide creation/reorder/layout/background/visibility/transition, speaker notes and animation timing; object creation/duplication/deletion/topology/geometry/style/text/range formatting/locking/cropping; table content/structure/style; and fixed-size internal chart data plus column/line/area/pie/scatter/radar chart-family changes. Operations that need a patched engine are rejected unless the live observation reports the required undo-v level. For set_chart_data, keep the observed dimensions when changing data, rowDescriptions (category labels), or columnDescriptions (series labels). An identity-replacing chart operation must be isolated in its own edit. Linked or external-workbook chart mutation and arbitrary master/theme authoring are outside this bounded schema. Observe after stale state. Do not send executable code.",
             inputSchema: nativeEditContract.toolInputSchema,
           },
           {

@@ -76,14 +76,18 @@ export const nativeEditContract = JSON.parse(
 const grouped = Object.values(nativeEditContract.operationGroups).flat();
 const declared = nativeEditContract.toolInputSchema.properties.op.enum;
 const mutationOperations = nativeEditContract.mutationModel.operations;
+const executable = Object.entries(mutationOperations)
+  .filter(([, operation]) => operation.availability !== "format_excluded")
+  .map(([operation]) => operation);
 if (
   !nativeEditContract.nativeUndoRequired ||
   new Set(grouped).size !== grouped.length ||
-  grouped.length !== declared.length ||
+  new Set(declared).size !== declared.length ||
+  grouped.length !== executable.length ||
+  declared.length !== executable.length ||
   grouped.some((operation) => !declared.includes(operation)) ||
-  declared.some(
-    (operation) =>
-      mutationOperations[operation]?.availability !== "runtime_verified",
+  executable.some(
+    (operation) => !grouped.includes(operation) || !declared.includes(operation),
   )
 )
   throw new Error("Invalid native edit capability contract.");
@@ -104,7 +108,7 @@ export const nativeIdentityReplacingOperations = new Set(
   Object.entries(mutationOperations)
     .filter(
       ([, contract]) =>
-        contract.availability === "runtime_verified" &&
+        contract.availability !== "format_excluded" &&
         contract.identityEffect === "replace",
     )
     .map(([operation]) => operation),
