@@ -266,12 +266,25 @@ export function summarizeEditorCorpus(decks) {
   };
 }
 
+export function selectCorpusDecks(decks, deckIds = []) {
+  if (!deckIds.length) return decks;
+  const requested = new Set(deckIds);
+  const selected = decks.filter((deck) => requested.has(deck.id));
+  const missing = [...requested].filter(
+    (id) => !selected.some((deck) => deck.id === id),
+  );
+  if (missing.length)
+    throw new Error(`Corpus deck ids were not found: ${missing.join(", ")}`);
+  return selected;
+}
+
 export async function evaluateOfficeEditorCorpus({
   root = ".",
   manifestPath,
   outputPath,
   editorOrigin,
   expectedPatchLevel,
+  deckIds = [],
 }) {
   const absoluteRoot = path.resolve(root);
   const absoluteManifest = path.resolve(manifestPath);
@@ -279,6 +292,7 @@ export async function evaluateOfficeEditorCorpus({
   const manifest = JSON.parse(await fs.readFile(absoluteManifest, "utf8"));
   if (manifest.contractVersion !== "1.0" || !Array.isArray(manifest.decks))
     throw new Error("A corpus 1.0 manifest with decks is required.");
+  const selectedDecks = selectCorpusDecks(manifest.decks, deckIds);
   if (!/^undo-v[1-9][0-9]*$/u.test(expectedPatchLevel))
     throw new Error("An undo-vN expected patch level is required.");
   const imageMagick = detectImageMagick();
@@ -294,7 +308,7 @@ export async function evaluateOfficeEditorCorpus({
   await fs.mkdir(absoluteOutput, { recursive: true, mode: 0o700 });
 
   const decks = [];
-  for (const [index, deck] of manifest.decks.entries()) {
+  for (const [index, deck] of selectedDecks.entries()) {
     const started = Date.now();
     const source = path.resolve(manifestDirectory, deck.source);
     const deckDirectory = path.join(absoluteOutput, safeName(deck.id));
@@ -468,7 +482,7 @@ export async function evaluateOfficeEditorCorpus({
     result.durationMs = Date.now() - started;
     decks.push(result);
     process.stdout.write(
-      `[editor-corpus] ${index + 1}/${manifest.decks.length} ${deck.id}: ${result.status}\n`,
+      `[editor-corpus] ${index + 1}/${selectedDecks.length} ${deck.id}: ${result.status}\n`,
     );
   }
 
@@ -499,11 +513,12 @@ export async function evaluateOfficeEditorCorpus({
 }
 
 function parseArguments(argv) {
-  const parsed = { root: "." };
+  const parsed = { root: ".", deck_ids: [] };
   for (let index = 0; index < argv.length; index++) {
     const value = argv[index];
     if (value === "--") continue;
-    if (
+    if (value === "--deck-id") parsed.deck_ids.push(argv[++index]);
+    else if (
       [
         "--root",
         "--manifest",
@@ -530,6 +545,7 @@ function parseArguments(argv) {
     outputPath: parsed.output,
     editorOrigin: parsed.editor_origin,
     expectedPatchLevel: parsed.expected_patch_level,
+    deckIds: parsed.deck_ids,
   };
 }
 

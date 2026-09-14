@@ -4,9 +4,19 @@ import test from "node:test";
 import {
   classifyScaledDimensionComparison,
   isTransientCorpusProbeFailure,
+  selectCorpusDecks,
   stableSlideSemantics,
   summarizeEditorCorpus,
 } from "./evaluate-office-editor-corpus.mjs";
+
+test("editor corpus can rerun an exact failed-deck subset", () => {
+  const decks = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  assert.deepEqual(selectCorpusDecks(decks, ["c", "a"]), [decks[0], decks[2]]);
+  assert.throws(
+    () => selectCorpusDecks(decks, ["missing"]),
+    /were not found: missing/,
+  );
+});
 
 test("editor corpus comparison permits resolution scaling only at the same aspect ratio", () => {
   assert.deepEqual(
