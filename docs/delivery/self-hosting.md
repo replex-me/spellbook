@@ -73,7 +73,7 @@ The default image installs redistributable metric-compatible and Korean fallback
 
 ## Scaling boundary
 
-The default dispatcher accepts work over the private HTTP network and workers persist completion receipts. It is sufficient for one-node self-hosting but does not provide a crash-durable queue. Internet-scale hosting must supply a durable queue adapter, retry policy, leases, rate limits and storage concurrency controls downstream without changing the document adapter contract.
+The default dispatcher accepts work over the private HTTP network and workers persist completion receipts. Accepted but unfinished jobs become eligible for redelivery after `SPELLBOOK_JOB_REDELIVERY_SECONDS` (15 seconds by default). A running worker deduplicates repeat deliveries in memory; after a restart it either resumes from the durable receipt or safely reruns the version-isolated job. This is sufficient for one-worker Compose recovery, but it is not a distributed queue. Multi-node hosting must supply a durable queue adapter, shared leases, rate limits and storage concurrency controls downstream without changing the document adapter contract.
 
 ## Live smoke test
 

@@ -47,6 +47,7 @@ import {
   currentPresentationFormat,
 } from "./document-formats";
 import { internalAppBaseUrl } from "./runtime-urls";
+import { jobRedeliverySeconds } from "./job-delivery";
 
 const Ajv2020Constructor = Ajv2020 as unknown as typeof import("ajv").default;
 const validateEditBatch = new Ajv2020Constructor({
@@ -1613,9 +1614,12 @@ async function dispatchOrFail(
 }
 
 async function dispatchPendingJobs(documentId: string): Promise<void> {
+  const retryAfterSeconds = jobRedeliverySeconds();
   const jobs =
     await db()`select * from spellbook_jobs where document_id = ${documentId}
-    and status = 'queued' and dispatched_at is null order by created_at limit 4`;
+    and status = 'queued'
+    and (dispatched_at is null or dispatched_at < now() - ${retryAfterSeconds} * interval '1 second')
+    order by created_at limit 4`;
   for (const job of jobs) {
     const isDocument =
       job.job_type === "scan_render" || job.job_type === "patch_render";

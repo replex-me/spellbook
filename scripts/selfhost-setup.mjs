@@ -54,6 +54,7 @@ const values = {
   SPELLBOOK_INTERNAL_TOKEN: secret(),
   SPELLBOOK_POSTGRES_PASSWORD: secret(),
   SPELLBOOK_DB_POOL_MAX: "4",
+  SPELLBOOK_JOB_REDELIVERY_SECONDS: "15",
 };
 const content = `${Object.entries(values)
   .map(([key, value]) => `${key}=${value}`)

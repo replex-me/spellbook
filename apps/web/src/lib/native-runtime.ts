@@ -19,6 +19,7 @@ import {
 } from "./native-conversation";
 import { signNativeConnectorToken } from "./native-connector-token";
 import { aiConnectorConfig } from "./ai-connector-config";
+import { jobRedeliverySeconds } from "./job-delivery";
 
 type PermissionMode = "read_only" | "selection" | "slides" | "document";
 
@@ -171,8 +172,10 @@ export async function pollNativeSession(
   const native = await ownedSession(session, documentId, undefined, true);
   if (!Number.isSafeInteger(after) || after < 0)
     throw new HttpError(400, "invalid_event_cursor");
+  const retryAfterSeconds = jobRedeliverySeconds();
   const pending = await db()`select id,job_type,payload from spellbook_jobs
-    where document_id=${documentId} and status='queued' and dispatched_at is null
+    where document_id=${documentId} and status='queued'
+      and (dispatched_at is null or dispatched_at < now() - ${retryAfterSeconds} * interval '1 second')
       and job_type in ('native_turn','scan_render')
       and (job_type <> 'native_turn' or payload->>'execution' is distinct from 'local')
     order by created_at limit 2`;
@@ -185,7 +188,8 @@ export async function pollNativeSession(
     try {
       await enqueueWorkerJob(job.id, target, path, job.payload);
       await db()`update spellbook_jobs set dispatched_at=now(),error=null,updated_at=now()
-        where id=${job.id} and status='queued' and dispatched_at is null`;
+        where id=${job.id} and status='queued'
+          and (dispatched_at is null or dispatched_at < now() - ${retryAfterSeconds} * interval '1 second')`;
     } catch (error) {
       await db()`update spellbook_jobs set error=${error instanceof Error ? error.message : "dispatch_failed"},updated_at=now()
         where id=${job.id} and status='queued'`;

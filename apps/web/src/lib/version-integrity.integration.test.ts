@@ -9,6 +9,7 @@ import {
   vi,
 } from "vitest";
 import type { Session } from "./models";
+import postgres from "postgres";
 
 const storage = vi.hoisted(() => ({ getJsonObject: vi.fn() }));
 vi.mock("./storage", () => ({
@@ -69,11 +70,18 @@ const graph = {
 beforeAll(async () => {
   if (!enabled) return;
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://spellbook.integration.invalid");
-  // This process owns its one-connection client and a fresh schema. Production
-  // tables and their schema are never migrated or used by these tests.
-  await db().unsafe(
-    `create schema "${testSchema}"; set search_path to "${testSchema}"`,
-  );
+  // Create the isolated schema before the application pool starts, then make
+  // PostgreSQL set that search_path on every pool connection. A one-session
+  // SET leaks concurrent tests into the default schema as soon as the pool
+  // opens a second connection.
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is required.");
+  const administrator = postgres(databaseUrl, { max: 1, prepare: false });
+  await administrator.unsafe(`create schema "${testSchema}"`);
+  await administrator.end();
+  const isolatedUrl = new URL(databaseUrl);
+  isolatedUrl.searchParams.set("options", `-csearch_path=${testSchema}`);
+  vi.stubEnv("DATABASE_URL", isolatedUrl.toString());
   const actual = await vi.importActual<typeof import("./db")>("./db");
   await actual.ensureSchema();
 });
@@ -779,6 +787,40 @@ describe.skipIf(!enabled)(
       const [recovered] =
         await db()`select dispatched_at from spellbook_jobs where id = ${job.id}`;
       expect(recovered.dispatched_at).not.toBeNull();
+    });
+
+    it("redelivers an accepted job whose local worker lease expired", async () => {
+      const f = await fixture("ready");
+      const result = await createEdit(session, f.doc, {
+        requestText: "test",
+        selectedElementIds: ["shape-1"],
+        selectedSlideIndexes: [],
+      });
+      const [job] =
+        await db()`select * from spellbook_jobs where edit_request_id = ${result.editRequestId}`;
+      const firstDispatch = job.dispatched_at;
+      expect(firstDispatch).not.toBeNull();
+      vi.mocked(enqueueWorkerJob).mockClear();
+      await db()`update spellbook_jobs set dispatched_at = now() - interval '10 minutes' where id = ${job.id}`;
+      await documentDetail(session, f.doc);
+      expect(enqueueWorkerJob).toHaveBeenCalledOnce();
+      const [recovered] =
+        await db()`select dispatched_at from spellbook_jobs where id = ${job.id}`;
+      expect(recovered.dispatched_at.getTime()).toBeGreaterThan(
+        firstDispatch.getTime(),
+      );
+    });
+
+    it("does not duplicate a job while its local worker lease is current", async () => {
+      const f = await fixture("ready");
+      await createEdit(session, f.doc, {
+        requestText: "test",
+        selectedElementIds: ["shape-1"],
+        selectedSlideIndexes: [],
+      });
+      vi.mocked(enqueueWorkerJob).mockClear();
+      await documentDetail(session, f.doc);
+      expect(enqueueWorkerJob).not.toHaveBeenCalled();
     });
 
     it("unchanged document polling skips all graph object reads", async () => {
