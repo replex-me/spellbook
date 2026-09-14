@@ -2,6 +2,10 @@ import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { documentStatesEquivalent } from "./document-state-evidence.mjs";
+import {
+  installNativeBridgeTrace,
+  waitForNativeBridge,
+} from "./native-bridge-probe.mjs";
 
 const require = createRequire(
   new URL("../../apps/web/package.json", import.meta.url),
@@ -50,6 +54,7 @@ try {
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
   });
+  await installNativeBridgeTrace(page);
   await page.goto(url, { waitUntil: "domcontentloaded" });
   const extensionDeadline = Date.now() + 60_000;
   while (
@@ -63,6 +68,7 @@ try {
       throw new Error("Native editor extension did not connect.");
     await page.waitForTimeout(250);
   }
+  await waitForNativeBridge(page);
 
   const call = (request) =>
     page.evaluate(async (input) => {

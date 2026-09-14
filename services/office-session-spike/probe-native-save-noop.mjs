@@ -1,4 +1,8 @@
 import { createRequire } from "node:module";
+import {
+  installNativeBridgeTrace,
+  waitForNativeBridge,
+} from "./native-bridge-probe.mjs";
 
 const require = createRequire(
   new URL("../../apps/web/package.json", import.meta.url),
@@ -11,22 +15,7 @@ try {
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
   });
-  await page.addInitScript(() => {
-    globalThis.__spellbookBridgeTrace = [];
-    window.addEventListener("message", (event) => {
-      const data = event.data;
-      if (!data || typeof data !== "object") return;
-      const type = data.type;
-      if (typeof type !== "string" || !type.startsWith("spellbook.")) return;
-      globalThis.__spellbookBridgeTrace.push({
-        href: window.location.href,
-        origin: event.origin,
-        type,
-        bridgeSessionId: data.bridgeSessionId ?? null,
-        transferredPorts: event.ports.length,
-      });
-    });
-  });
+  await installNativeBridgeTrace(page);
   const browserErrors = [];
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => {
@@ -56,23 +45,7 @@ try {
     }
     await page.waitForTimeout(250);
   }
-  const bridgeDeadline = Date.now() + 20_000;
-  while ((await page.locator("body").innerText()).includes("편집기 연결 중")) {
-    if (Date.now() >= bridgeDeadline) {
-      const trace = await Promise.all(
-        page.frames().map(async (frame) => ({
-          url: frame.url(),
-          events: await frame
-            .evaluate(() => globalThis.__spellbookBridgeTrace ?? [])
-            .catch(() => []),
-        })),
-      );
-      throw new Error(
-        `Native editor bridge did not connect: ${JSON.stringify(trace)}`,
-      );
-    }
-    await page.waitForTimeout(100);
-  }
+  await waitForNativeBridge(page);
   await page.getByRole("button", { name: "저장", exact: true }).click();
   await page.getByRole("status").filter({ hasText: "저장 확인 중…" }).waitFor({
     timeout: 20_000,
