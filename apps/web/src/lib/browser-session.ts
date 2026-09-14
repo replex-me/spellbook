@@ -52,6 +52,14 @@ export async function createBrowserDocumentLaunch(
     if (!current.document_sha256)
       throw new HttpError(409, "document_context_not_ready");
 
+    await sql`
+      update spellbook_native_sessions set
+        wopi_lock=null,lock_updated_at=null,lock_expires_at=null,updated_at=now()
+      where document_id=${documentId} and account_id=${session.accountId}
+        and wopi_lock is not null
+        and coalesce(lock_expires_at,lock_updated_at + interval '30 minutes') <= now()
+    `;
+
     const [existing] = await sql`
       select * from spellbook_native_sessions
       where document_id=${documentId} and account_id=${session.accountId}
@@ -67,7 +75,7 @@ export async function createBrowserDocumentLaunch(
           account_email=${session.email}, editor_mode='browser',
           working_version_id=${current.current_version_id},
           working_sha256=${current.document_sha256}, status='active',
-          wopi_lock=null, lock_updated_at=null, last_error=null,
+          wopi_lock=null, lock_updated_at=null, lock_expires_at=null, last_error=null,
           expires_at=${new Date(expiresAt)}, last_seen_at=now(), updated_at=now()
         where id=${existing.id}
       `;

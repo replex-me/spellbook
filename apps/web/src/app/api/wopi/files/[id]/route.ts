@@ -32,7 +32,8 @@ export async function POST(
     const result = await wopiLock(request, (await context.params).id);
     return new Response(null, {
       status: result.status,
-      headers: result.lock ? { "x-wopi-lock": result.lock } : undefined,
+      headers:
+        result.lock !== undefined ? { "x-wopi-lock": result.lock } : undefined,
     });
   } catch (error) {
     if (error instanceof WopiLockConflict)

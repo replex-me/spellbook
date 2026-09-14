@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { Sql, TransactionSql } from "postgres";
 
 import { db, ensureSchema } from "./db";
 import { HttpError } from "./http";
@@ -282,6 +283,7 @@ export async function createNativeLaunch(
           status=${reusable ? existing.status : "active"},
           wopi_lock=${reusable ? existing.wopi_lock : null},
           lock_updated_at=${reusable ? existing.lock_updated_at : null},
+          lock_expires_at=${reusable ? existing.lock_expires_at : null},
           expires_at=${new Date(expiresAt)}, last_seen_at=now(), updated_at=now(),
           last_error=${reusable ? existing.last_error : null}
         where id=${existing.id}
@@ -338,6 +340,7 @@ export async function requireWopi(
   }
   await requireValidWopiProof(request);
   await ensureSchema();
+  await expireWopiLock(claims.sessionId);
   const [row] = await db()`
     select s.id, s.wopi_lock, s.working_version_id, d.file_name,
       coalesce(working.document_object,current.document_object) as document_object,
@@ -426,6 +429,7 @@ export async function wopiCheckFileInfo(request: Request, documentId: string) {
     ReadOnly: false,
     SupportsLocks: true,
     SupportsGetLock: true,
+    SupportsExtendedLockLength: true,
     SupportsUpdate: true,
     PostMessageOrigin: base,
   };
@@ -467,23 +471,63 @@ export async function wopiLock(
     !["LOCK", "REFRESH_LOCK", "UNLOCK", "GET_LOCK"].includes(operation)
   )
     throw new HttpError(400, "unsupported_wopi_operation");
+  if (operation !== "GET_LOCK" && !validWopiLock(given))
+    throw new HttpError(400, "invalid_wopi_lock");
+  const oldLock = request.headers.get("x-wopi-oldlock");
+  if (oldLock !== null && !validWopiLock(oldLock))
+    throw new HttpError(400, "invalid_wopi_old_lock");
+  const changesLock = operation === "LOCK" || operation === "REFRESH_LOCK";
+  const lockSeconds = changesLock ? wopiLockSeconds(request) : null;
   return db().begin(async (sql) => {
+    await expireWopiLock(context.sessionId, sql);
     const [session] =
       await sql`select wopi_lock from spellbook_native_sessions where id=${context.sessionId} for update`;
     const current = session?.wopi_lock as string | null;
-    if (operation === "GET_LOCK")
-      return { status: 200, ...(current ? { lock: current } : {}) };
-    if (!given) return { status: 400 };
+    if (operation === "GET_LOCK") return { status: 200, lock: current ?? "" };
     if (operation === "UNLOCK") {
-      if (current !== given)
-        return { status: 409, ...(current ? { lock: current } : {}) };
-      await sql`update spellbook_native_sessions set wopi_lock=null, lock_updated_at=null, updated_at=now() where id=${context.sessionId}`;
+      if (current !== given) return { status: 409, lock: current ?? "" };
+      await sql`update spellbook_native_sessions set wopi_lock=null, lock_updated_at=null, lock_expires_at=null, updated_at=now() where id=${context.sessionId}`;
       return { status: 200 };
     }
-    if (current && current !== given) return { status: 409, lock: current };
-    await sql`update spellbook_native_sessions set wopi_lock=${given}, lock_updated_at=now(), updated_at=now() where id=${context.sessionId}`;
+    if (operation === "REFRESH_LOCK" && current !== given)
+      return { status: 409, lock: current ?? "" };
+    if (operation === "LOCK" && oldLock !== null && current !== oldLock)
+      return { status: 409, lock: current ?? "" };
+    if (
+      operation === "LOCK" &&
+      oldLock === null &&
+      current &&
+      current !== given
+    )
+      return { status: 409, lock: current };
+    await sql`update spellbook_native_sessions set wopi_lock=${given}, lock_updated_at=now(), lock_expires_at=now() + ${lockSeconds} * interval '1 second', updated_at=now() where id=${context.sessionId}`;
     return { status: 200 };
   });
+}
+
+async function expireWopiLock(
+  sessionId: string,
+  sql: Sql | TransactionSql = db(),
+): Promise<void> {
+  await sql`
+    update spellbook_native_sessions set
+      wopi_lock=null,lock_updated_at=null,lock_expires_at=null,updated_at=now()
+    where id=${sessionId} and wopi_lock is not null
+      and coalesce(lock_expires_at,lock_updated_at + interval '30 minutes') <= now()
+  `;
+}
+
+function validWopiLock(value: string): boolean {
+  return /^[\x20-\x7e]{1,1024}$/u.test(value);
+}
+
+function wopiLockSeconds(request: Request): number {
+  const value = request.headers.get("x-wopi-lockexpirationtimeout");
+  if (value === null) return 30 * 60;
+  const seconds = Number(value);
+  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 60 * 60)
+    throw new HttpError(400, "invalid_wopi_lock_timeout");
+  return seconds;
 }
 
 export async function wopiPutFile(
@@ -492,8 +536,8 @@ export async function wopiPutFile(
 ): Promise<{ version: string; unchanged: boolean }> {
   const context = await requireWopi(request, documentId);
   const given = request.headers.get("x-wopi-lock") ?? "";
-  if (context.lock && context.lock !== given)
-    throw new WopiLockConflict(context.lock);
+  if (!context.lock || context.lock !== given)
+    throw new WopiLockConflict(context.lock ?? "");
   const length = Number(request.headers.get("content-length") ?? 0);
   if (length > currentPresentationFormat.maxBytes)
     throw new HttpError(413, "document_too_large");
@@ -506,12 +550,17 @@ export async function wopiPutFile(
   )
     throw new HttpError(400, "invalid_document_package");
   const digest = createHash("sha256").update(data).digest("hex");
-  const [current] =
-    await db()`select working_sha256, working_version_id from spellbook_native_sessions where id=${context.sessionId}`;
-  if (current?.working_sha256 === digest) {
-    await db()`update spellbook_native_sessions set save_revision=save_revision+1,last_seen_at=now(),updated_at=now() where id=${context.sessionId}`;
-    return { version: current.working_version_id, unchanged: true };
-  }
+  const unchangedVersion = await db().begin(async (sql) => {
+    await expireWopiLock(context.sessionId, sql);
+    const [current] =
+      await sql`select working_sha256,working_version_id,wopi_lock from spellbook_native_sessions where id=${context.sessionId} for update`;
+    if (!current?.wopi_lock || current.wopi_lock !== given)
+      throw new WopiLockConflict(current?.wopi_lock ?? "");
+    if (current.working_sha256 !== digest) return null;
+    await sql`update spellbook_native_sessions set save_revision=save_revision+1,last_seen_at=now(),updated_at=now() where id=${context.sessionId}`;
+    return current.working_version_id as string;
+  });
+  if (unchangedVersion) return { version: unchangedVersion, unchanged: true };
 
   const versionId = randomUUID();
   const jobId = randomUUID();
@@ -532,10 +581,11 @@ export async function wopiPutFile(
   };
   try {
     await db().begin(async (sql) => {
+      await expireWopiLock(context.sessionId, sql);
       const [session] =
         await sql`select working_version_id,wopi_lock from spellbook_native_sessions where id=${context.sessionId} for update`;
-      if (!session || (session.wopi_lock && session.wopi_lock !== given))
-        throw new HttpError(409, "wopi_session_changed");
+      if (!session?.wopi_lock || session.wopi_lock !== given)
+        throw new WopiLockConflict(session?.wopi_lock ?? "");
       await sql`insert into spellbook_versions (id,document_id,parent_version_id,kind,status,document_object,document_sha256)
         values (${versionId},${documentId},${session.working_version_id},'approved','processing',${object},${digest})`;
       await sql`insert into spellbook_jobs (id,job_type,document_id,version_id,status,payload)

@@ -210,11 +210,22 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
       await wopiLock(
         new Request(url, {
           method: "POST",
-          headers: { "x-wopi-override": "LOCK", "x-wopi-lock": "editor-lock" },
+          headers: {
+            "x-wopi-override": "LOCK",
+            "x-wopi-lock": "editor-lock",
+            "x-wopi-lockexpirationtimeout": "90",
+          },
         }),
         f.documentId,
       ),
     ).toEqual({ status: 200 });
+    const [locked] = await db()`
+      select wopi_lock,
+        extract(epoch from (lock_expires_at-lock_updated_at)) as lock_seconds
+      from spellbook_native_sessions where id=${f.nativeSessionId}
+    `;
+    expect(locked.wopi_lock).toBe("editor-lock");
+    expect(Number(locked.lock_seconds)).toBeCloseTo(90, 3);
     expect(
       await wopiLock(
         new Request(url, {
@@ -256,6 +267,103 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
     expect(document.current_version_id).toBe(f.versionId);
     expect(native).toMatchObject({ status: "validating" });
     expect(native.working_version_id).not.toBe(f.versionId);
+  });
+
+  it("implements WOPI lock transitions, expiry, and extended lock limits", async () => {
+    const f = await fixture();
+    const token = signWopiToken({
+      version: 1,
+      sessionId: f.nativeSessionId,
+      documentId: f.documentId,
+      accountId,
+      expiresAt: Date.now() + 60_000,
+    });
+    const url = `https://spellbook.integration.invalid/api/wopi/files/${f.documentId}?access_token=${encodeURIComponent(token)}`;
+    const lock = (
+      operation: "LOCK" | "REFRESH_LOCK" | "UNLOCK" | "GET_LOCK",
+      value?: string,
+      extra: Record<string, string> = {},
+    ) =>
+      wopiLock(
+        new Request(url, {
+          method: "POST",
+          headers: {
+            "x-wopi-override": operation,
+            ...(value === undefined ? {} : { "x-wopi-lock": value }),
+            ...extra,
+          },
+        }),
+        f.documentId,
+      );
+
+    await expect(lock("GET_LOCK")).resolves.toEqual({ status: 200, lock: "" });
+    await expect(lock("REFRESH_LOCK", "missing")).resolves.toEqual({
+      status: 409,
+      lock: "",
+    });
+    await expect(lock("LOCK", "x".repeat(1025))).rejects.toMatchObject({
+      status: 400,
+      message: "invalid_wopi_lock",
+    });
+    await expect(lock("LOCK", "é")).rejects.toMatchObject({
+      status: 400,
+      message: "invalid_wopi_lock",
+    });
+    await expect(
+      lock("LOCK", "first", { "x-wopi-lockexpirationtimeout": "59" }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "invalid_wopi_lock_timeout",
+    });
+    await expect(lock("LOCK", "first")).resolves.toEqual({ status: 200 });
+    let [lifetime] = await db()`
+      select extract(epoch from (lock_expires_at-lock_updated_at)) as seconds
+      from spellbook_native_sessions where id=${f.nativeSessionId}
+    `;
+    expect(Number(lifetime.seconds)).toBeCloseTo(30 * 60, 3);
+    await expect(
+      lock("REFRESH_LOCK", "first", {
+        "x-wopi-lockexpirationtimeout": "120",
+      }),
+    ).resolves.toEqual({ status: 200 });
+    [lifetime] = await db()`
+      select extract(epoch from (lock_expires_at-lock_updated_at)) as seconds
+      from spellbook_native_sessions where id=${f.nativeSessionId}
+    `;
+    expect(Number(lifetime.seconds)).toBeCloseTo(120, 3);
+    await expect(
+      lock("LOCK", "second", { "x-wopi-oldlock": "first" }),
+    ).resolves.toEqual({ status: 200 });
+    await expect(lock("GET_LOCK")).resolves.toEqual({
+      status: 200,
+      lock: "second",
+    });
+    await db()`
+      update spellbook_native_sessions set lock_expires_at=now()-interval '1 second'
+      where id=${f.nativeSessionId}
+    `;
+    await expect(lock("GET_LOCK")).resolves.toEqual({ status: 200, lock: "" });
+    const contentsUrl = new URL(url);
+    contentsUrl.pathname += "/contents";
+    await expect(
+      wopiPutFile(
+        new Request(contentsUrl, {
+          method: "POST",
+          headers: { "x-wopi-lock": "second" },
+          body: Buffer.from("PK-stale-lock-save"),
+        }),
+        f.documentId,
+      ),
+    ).rejects.toMatchObject({ message: "wopi_lock_mismatch", lock: "" });
+    const [expired] = await db()`
+      select wopi_lock,lock_updated_at,lock_expires_at
+      from spellbook_native_sessions where id=${f.nativeSessionId}
+    `;
+    expect(expired).toMatchObject({
+      wopi_lock: null,
+      lock_updated_at: null,
+      lock_expires_at: null,
+    });
   });
 
   it("reconciles a browser candidate only against its exact owned revision", async () => {
@@ -352,6 +460,28 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
     ).rejects.toMatchObject({
       status: 409,
       message: "office_editor_save_required",
+    });
+  });
+
+  it("expires an abandoned WOPI lock before switching editor modes", async () => {
+    const f = await fixture();
+    await db()`
+      update spellbook_native_sessions set
+        wopi_lock='abandoned-lock',lock_updated_at=now()-interval '31 minutes',
+        lock_expires_at=null
+      where id=${f.nativeSessionId}
+    `;
+    await expect(
+      createBrowserDocumentLaunch(session, f.documentId),
+    ).resolves.toMatchObject({ documentId: f.documentId });
+    const [native] = await db()`
+      select editor_mode,wopi_lock,lock_expires_at
+      from spellbook_native_sessions where id=${f.nativeSessionId}
+    `;
+    expect(native).toMatchObject({
+      editor_mode: "browser",
+      wopi_lock: null,
+      lock_expires_at: null,
     });
   });
 

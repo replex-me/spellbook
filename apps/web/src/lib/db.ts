@@ -156,6 +156,7 @@ async function migrate(): Promise<void> {
       status text not null check (status in ('active','validating','failed','closed')),
       wopi_lock text,
       lock_updated_at timestamptz,
+      lock_expires_at timestamptz,
       save_revision integer not null default 0,
       last_error text,
       last_seen_at timestamptz not null default now(),
@@ -168,6 +169,7 @@ async function migrate(): Promise<void> {
     alter table spellbook_native_sessions add column if not exists working_sha256 text;
     alter table spellbook_native_sessions add column if not exists account_email text;
     alter table spellbook_native_sessions add column if not exists editor_mode text not null default 'wopi';
+    alter table spellbook_native_sessions add column if not exists lock_expires_at timestamptz;
     alter table spellbook_native_sessions drop constraint if exists spellbook_native_sessions_editor_mode_check;
     alter table spellbook_native_sessions add constraint spellbook_native_sessions_editor_mode_check check (editor_mode in ('wopi','browser'));
 
