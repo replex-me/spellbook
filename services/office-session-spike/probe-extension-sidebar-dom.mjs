@@ -32,6 +32,27 @@ try {
     .frames()
     .find((frame) => frame.url().includes("/browser/"));
   if (!office) throw new Error("Office frame is missing.");
+  await office.evaluate(() => {
+    const style = document.createElement("style");
+    style.textContent =
+      '#sidebar-dock-wrapper:has(.extension-panel[data-extension-id="org.spellbook.editor"]) { display: none !important; }';
+    document.head.appendChild(style);
+  });
+  await page.waitForTimeout(1_000);
+  const launch = await page.evaluate(() => window.__spellbookLaunch);
+  const response = await page.evaluate(async ({ accessToken }) => {
+    const result = await fetch("/native/probe", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ operation: "observe" }),
+    });
+    return { status: result.status, value: await result.json() };
+  }, launch);
+  if (response.status !== 200 || !Array.isArray(response.value.slides))
+    throw new Error(`Hidden extension bridge failed: ${JSON.stringify(response)}`);
   const nodes = await office.evaluate(() =>
     [...document.querySelectorAll("[id*='sidebar'], [class*='sidebar'], .extension-panel")]
       .map((element) => {
@@ -61,7 +82,22 @@ try {
           element.rect.height > 0,
       ),
   );
-  process.stdout.write(`${JSON.stringify(nodes, null, 2)}\n`);
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        hiddenBridgeWorked: true,
+        observedSlides: response.value.slides.length,
+        extensionFrameAlive: page
+          .frames()
+          .some((frame) =>
+            frame.url().includes("/extensions/org.spellbook.editor/"),
+          ),
+        nodes,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 } finally {
   await browser.close();
 }
