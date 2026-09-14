@@ -54,6 +54,9 @@ test("execution plan assigns a real PPTX and bounded operation routes to every s
   assert.ok(
     scenarios.every((scenario) => /^[0-9a-f]{64}$/.test(scenario.sourceSha256)),
   );
+  assert.ok(
+    scenarios.every((scenario) => scenario.expectedPatchLevel === "undo-v17"),
+  );
   assert.ok(scenarios.every((scenario) => scenario.allowedOperations.length));
   assert.deepEqual(
     scenarios.find((scenario) => scenario.name === "animation-timing")

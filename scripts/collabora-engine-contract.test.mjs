@@ -90,6 +90,17 @@ test("runtime mutation contracts are generated from the public capability model"
   const capabilities = JSON.parse(
     readFileSync("contracts/native-edit-capabilities.json", "utf8"),
   );
+  const conformance = JSON.parse(
+    readFileSync("contracts/native-mutation-conformance.json", "utf8"),
+  );
+  const patchVersion = /^undo-v(?<version>[1-9][0-9]*)$/u.exec(
+    upstreamManifest.patchLevel,
+  );
+  assert.ok(patchVersion?.groups?.version);
+  assert.equal(
+    conformance.enginePatchLevel,
+    Number(patchVersion.groups.version),
+  );
   const operations = capabilities.mutationModel.operations;
   assert.equal(Object.keys(operations).length, 63);
   assert.equal(operations.set_printable.availability, "format_excluded");

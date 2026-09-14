@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.0.0",
-  "enginePatchLevel": 14,
+  "enginePatchLevel": 17,
   "executionOrder": [
     "table-structure",
     "layout-master",
@@ -185,12 +185,9 @@
           "SPELLBOOK_PROBE_PATCHED_ENGINE": "1"
         }
       },
-      "reopen": {
-        "script": "services/office-session-spike/probe-uno-reopen.mjs",
-        "env": {
-          "SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL": "undo-v14"
-        }
-      },
+    "reopen": {
+      "script": "services/office-session-spike/probe-uno-reopen.mjs"
+    },
       "proves": [
         "structure",
         "preflight_no_mutation",

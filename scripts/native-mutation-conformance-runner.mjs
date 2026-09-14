@@ -108,6 +108,10 @@ export function buildScenarioExecutionPlan(
       );
     return {
       name,
+      expectedPatchLevel:
+        conformancePlan.enginePatchLevel === 0
+          ? "stock"
+          : `undo-v${conformancePlan.enginePatchLevel}`,
       source: scenario.source,
       sourceSha256: scenario.sourceSha256,
       targetSlideIndexes: scenario.targetSlideIndexes ?? null,
@@ -409,6 +413,7 @@ async function runScenario({
     args: [reportPath, ...(scenario.apply.args ?? [])],
     env: {
       ...(scenario.apply.env ?? {}),
+      SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL: scenario.expectedPatchLevel,
       SPELLBOOK_PROBE_EXPECTED_OPERATIONS: JSON.stringify(
         scenario.allowedOperations,
       ),
@@ -461,6 +466,7 @@ async function runScenario({
     args: [reportPath, ...(scenario.reopen.args ?? [])],
     env: {
       ...(scenario.reopen.env ?? {}),
+      SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL: scenario.expectedPatchLevel,
       ...visualEnvironment(scenario.name, scenarioDirectory, "reopen"),
     },
     expectSave: false,
