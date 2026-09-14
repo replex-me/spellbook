@@ -11,11 +11,7 @@
 
   function synchronizeBridgeVisibility() {
     const active = Boolean(document.querySelector(panelSelector));
-    const changed =
-      document.documentElement.classList.contains(rootClass) !== active;
     document.documentElement.classList.toggle(rootClass, active);
-    if (changed)
-      requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
   }
 
   new MutationObserver(synchronizeBridgeVisibility).observe(
@@ -29,7 +25,7 @@
     const control = globalThis.app?.map?._extensions?.[extensionId];
     if (control) {
       attempts = 0;
-      if (!control._panel) control.toggle();
+      if (!document.querySelector(panelSelector)) control.toggle();
       synchronizeBridgeVisibility();
       return;
     }
