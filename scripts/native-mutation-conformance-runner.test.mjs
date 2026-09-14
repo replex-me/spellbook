@@ -11,6 +11,7 @@ import {
   localProbeBrowserOrigin,
   operationsFromReport,
   persistenceStateFromProbeOutput,
+  waitForSavedFile,
 } from "./native-mutation-conformance-runner.mjs";
 import { buildConformancePlan } from "./native-mutation-conformance.mjs";
 
@@ -209,4 +210,19 @@ test("only extension connection timeouts qualify for read-only session retry", (
     isTransientEditorConnectionFailure(new Error("PPTX persistence failed")),
     false,
   );
+});
+
+test("the runner reopens the latest save after the WOPI version settles", async () => {
+  let version = 1;
+  setTimeout(() => {
+    version = 2;
+  }, 10);
+
+  const saved = await waitForSavedFile(
+    { receipt: () => ({ version }) },
+    "/tmp/conformance-session",
+    { timeoutMs: 200, settleMs: 25, pollMs: 5 },
+  );
+
+  assert.equal(saved, "/tmp/conformance-session/saved-2.pptx");
 });

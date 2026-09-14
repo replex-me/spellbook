@@ -14,6 +14,7 @@ const DOCUMENT_TOOL_PROJECT =
 const DOCUMENT_TOOL_DLL =
   "services/document-worker/tools/Spellbook.Document.Tool/bin/Release/net10.0/Spellbook.Document.Tool.dll";
 const SAVE_TIMEOUT_MS = 30_000;
+const SAVE_SETTLE_MS = 3_000;
 const PROCESS_TIMEOUT_MS = 180_000;
 export const CONTAINER_REACHABLE_PROBE_BIND_ADDRESS = "0.0.0.0";
 
@@ -236,15 +237,36 @@ async function closeServer(server) {
   );
 }
 
-async function waitForSavedFile(probe, output) {
-  const deadline = Date.now() + SAVE_TIMEOUT_MS;
+export async function waitForSavedFile(
+  probe,
+  output,
+  {
+    timeoutMs = SAVE_TIMEOUT_MS,
+    settleMs = SAVE_SETTLE_MS,
+    pollMs = 100,
+  } = {},
+) {
+  const deadline = Date.now() + timeoutMs;
+  let latestVersion = 0;
+  let stableSince = null;
   while (Date.now() < deadline) {
     const version = probe.receipt().version;
-    if (version > 0) return path.join(output, `saved-${version}.pptx`);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (version < latestVersion)
+      throw new Error("The WOPI save version moved backwards.");
+    if (version > latestVersion) {
+      latestVersion = version;
+      stableSince = Date.now();
+    } else if (
+      latestVersion > 0 &&
+      stableSince !== null &&
+      Date.now() - stableSince >= settleMs
+    ) {
+      return path.join(output, `saved-${latestVersion}.pptx`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   throw new Error(
-    `The editor did not PUT a saved PPTX within ${SAVE_TIMEOUT_MS}ms.`,
+    `The editor did not finish a stable PPTX save within ${timeoutMs}ms.`,
   );
 }
 
