@@ -19,7 +19,10 @@ import {
 } from "./native-conversation";
 import { signNativeConnectorToken } from "./native-connector-token";
 import { aiConnectorConfig } from "./ai-connector-config";
-import { jobRedeliverySeconds } from "./job-delivery";
+import {
+  jobRedeliverySeconds,
+  NATIVE_AGENT_LEASE_SECONDS,
+} from "./job-delivery";
 
 type PermissionMode = "read_only" | "selection" | "slides" | "document";
 
@@ -172,6 +175,7 @@ export async function pollNativeSession(
   const native = await ownedSession(session, documentId, undefined, true);
   if (!Number.isSafeInteger(after) || after < 0)
     throw new HttpError(400, "invalid_event_cursor");
+  await failInterruptedLocalTurn(native.id, documentId);
   const retryAfterSeconds = jobRedeliverySeconds();
   const pending = await db()`select id,job_type,payload from spellbook_jobs
     where document_id=${documentId} and status='queued'
@@ -242,6 +246,51 @@ export async function pollNativeSession(
       error: native.last_error,
     },
   };
+}
+
+const INTERRUPTED_LOCAL_TURN_MESSAGE =
+  "로컬 AI 연결이 중단되었습니다. 현재 슬라이드와 변경 내용을 확인한 뒤 다시 요청하세요.";
+
+async function failInterruptedLocalTurn(
+  sessionId: string,
+  documentId: string,
+): Promise<void> {
+  await db().begin(async (sql) => {
+    const [stale] = await sql`
+      select j.id, t.id as turn_id, t.session_id
+      from spellbook_jobs j
+      join spellbook_native_turns t on t.job_id=j.id
+      where j.document_id=${documentId} and j.job_type='native_turn'
+        and j.status='running' and t.status='running'
+        and t.session_id=${sessionId}
+        and j.payload->>'execution'='local'
+        and coalesce(j.heartbeat_at,j.dispatched_at,j.created_at)
+          < now() - ${NATIVE_AGENT_LEASE_SECONDS} * interval '1 second'
+      order by j.created_at
+      limit 1 for update of j,t skip locked
+    `;
+    if (!stale) return;
+    const [claimed] = await sql`
+      update spellbook_jobs set status='failed',error='local_connector_interrupted',updated_at=now()
+      where id=${stale.id} and status='running'
+        and coalesce(heartbeat_at,dispatched_at,created_at)
+          < now() - ${NATIVE_AGENT_LEASE_SECONDS} * interval '1 second'
+      returning id
+    `;
+    if (!claimed) return;
+    await sql`
+      update spellbook_native_turns set status='failed',last_error=${INTERRUPTED_LOCAL_TURN_MESSAGE},updated_at=now()
+      where id=${stale.turn_id} and status='running'
+    `;
+    await sql`
+      update spellbook_native_tasks set status='expired',error='local_connector_interrupted',updated_at=now()
+      where turn_id=${stale.turn_id} and status in ('queued','delivered')
+    `;
+    await sql`
+      insert into spellbook_native_events (session_id,turn_id,event_type,payload)
+      values (${stale.session_id},${stale.turn_id},'error',${sql.json({ error: INTERRUPTED_LOCAL_TURN_MESSAGE })})
+    `;
+  });
 }
 
 function validObservation(value: unknown): boolean {
@@ -346,7 +395,7 @@ export async function executeNativeTool(input: Record<string, unknown>) {
     const [claimed] =
       await db()`update spellbook_jobs set status='running', execution_token=${executionToken}, heartbeat_at=now(), dispatched_at=coalesce(dispatched_at,now()), updated_at=now()
       where id=${jobId} and job_type='native_turn' and status in ('queued','running')
-        and (execution_token is null or execution_token=${executionToken} or heartbeat_at < now() - interval '60 seconds')
+        and (execution_token is null or execution_token=${executionToken} or heartbeat_at < now() - ${NATIVE_AGENT_LEASE_SECONDS} * interval '1 second')
         and payload->>'sessionId'=${sessionId} returning id`;
     if (!claimed) throw new HttpError(409, "native_agent_already_running");
     await db()`update spellbook_native_turns set status='running', updated_at=now() where job_id=${jobId} and status='queued'`;

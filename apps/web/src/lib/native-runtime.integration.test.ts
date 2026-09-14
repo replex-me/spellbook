@@ -467,6 +467,84 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
     }
   });
 
+  it("fails an interrupted local connector turn without replaying a possibly applied edit", async () => {
+    const previousMode = process.env.SPELLBOOK_AI_CONNECTOR_MODE;
+    process.env.SPELLBOOK_AI_CONNECTOR_MODE = "local";
+    try {
+      const f = await fixture();
+      const submitted = await submitNativeTurn(session, f.documentId, {
+        text: "제목을 바꿔줘",
+        permission: "document",
+        execution: "local",
+      });
+      const jobId = String(submitted.localJob?.jobId);
+      const executionToken = "interrupted-local-connector";
+      await executeNativeTool({
+        jobId,
+        sessionId: f.nativeSessionId,
+        executionToken,
+        operation: "start",
+      });
+      const task = (await executeNativeTool({
+        jobId,
+        sessionId: f.nativeSessionId,
+        executionToken,
+        operation: "task_create",
+        request: { operation: "observe" },
+      })) as { taskId: string };
+      await db()`update spellbook_jobs set heartbeat_at=now()-interval '10 minutes' where id=${jobId}`;
+
+      const recovered = await pollNativeSession(session, f.documentId, 0);
+      expect(recovered.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "error",
+            error: expect.stringContaining("현재 슬라이드와 변경 내용을 확인"),
+          }),
+        ]),
+      );
+      const [job] =
+        await db()`select status,error from spellbook_jobs where id=${jobId}`;
+      const [turn] =
+        await db()`select status,last_error from spellbook_native_turns where job_id=${jobId}`;
+      const [expiredTask] =
+        await db()`select status,error from spellbook_native_tasks where id=${task.taskId}`;
+      expect(job).toMatchObject({
+        status: "failed",
+        error: "local_connector_interrupted",
+      });
+      expect(turn).toMatchObject({
+        status: "failed",
+        last_error: expect.stringContaining("다시 요청"),
+      });
+      expect(expiredTask).toMatchObject({
+        status: "expired",
+        error: "local_connector_interrupted",
+      });
+      await expect(
+        executeNativeTool({
+          jobId,
+          sessionId: f.nativeSessionId,
+          executionToken,
+          operation: "event",
+          type: "tool",
+          value: "late event",
+        }),
+      ).rejects.toThrow("native_agent_lease_lost");
+
+      const retry = await submitNativeTurn(session, f.documentId, {
+        text: "현재 화면을 보고 계속해줘",
+        permission: "document",
+        execution: "local",
+      });
+      expect(retry.localJob?.jobId).not.toBe(jobId);
+    } finally {
+      if (previousMode === undefined)
+        delete process.env.SPELLBOOK_AI_CONNECTOR_MODE;
+      else process.env.SPELLBOOK_AI_CONNECTOR_MODE = previousMode;
+    }
+  });
+
   it("dispatches bounded durable history in chronological order", async () => {
     workers.enqueueWorkerJob.mockClear();
     const f = await fixture();

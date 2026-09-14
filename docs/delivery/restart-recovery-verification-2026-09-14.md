@@ -38,6 +38,29 @@ document=ready | job=succeeded | error=<empty>
 
 The proof document is retained in the local test account so the saved output and database events remain inspectable.
 
+## Local AI/native interruption boundary — 2026-09-15
+
+A separate stuck state existed for subscription-backed local AI turns. Once the
+connector claimed a job, the job became `running`; if the connector then exited,
+browser polling could neither redispatch nor finish it. Replaying it automatically
+would be unsafe because native tools may already have changed the live slide.
+
+Native agent heartbeats now share one 60-second lease constant. Browser polling
+atomically detects an expired local-connector lease, fails the job and turn,
+expires unfinished browser tasks and emits one user-visible recovery event. It
+leaves the live slide and native session intact so the user can inspect any
+partial change and submit a new turn. A callback or tool call from the abandoned
+connector can no longer reclaim the failed job.
+
+The PostgreSQL integration suite exercised the entire transition: start a local
+turn, create a browser task, expire the heartbeat, poll, reject the old worker and
+submit a replacement turn. All 11 native orchestration integration cases passed
+against an isolated PostgreSQL 17 container. This proves the transactional
+boundary; the packaged-connector process-kill exercise is still required.
+
 ## Remaining operations evidence
 
-This closes the accepted document-job failure exercised above. G7 still requires explicit recovery evidence for an interrupted AI/native turn, enforceable storage-capacity behavior and the deployed HTTPS/TLS path. It therefore remains incomplete.
+This closes the accepted document-job failure exercised above and the permanent
+database/UI stuck state after a local AI interruption. G7 still requires a real
+packaged-connector process-kill exercise, enforceable storage-capacity behavior
+and the deployed HTTPS/TLS path. It therefore remains incomplete.

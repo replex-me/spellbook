@@ -2,6 +2,12 @@ const DEFAULT_JOB_REDELIVERY_SECONDS = 15;
 const MIN_JOB_REDELIVERY_SECONDS = 5;
 const MAX_JOB_REDELIVERY_SECONDS = 900;
 
+// Native AI tools can mutate the live canvas before the final callback. A
+// different process may take over a managed queue delivery after this lease,
+// but a browser-dispatched local connector must fail visibly instead of
+// replaying the user's edit and possibly applying it twice.
+export const NATIVE_AGENT_LEASE_SECONDS = 60;
+
 export function jobRedeliverySeconds(
   value = process.env.SPELLBOOK_JOB_REDELIVERY_SECONDS,
 ): number {
