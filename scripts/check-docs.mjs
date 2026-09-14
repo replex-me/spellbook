@@ -44,6 +44,44 @@ for (const relativePath of requiredDocuments) {
   }
 }
 
+const mutationCapabilities = JSON.parse(
+  fs.readFileSync(
+    path.join(root, "contracts/native-edit-capabilities.json"),
+    "utf8",
+  ),
+);
+const editorUpstream = JSON.parse(
+  fs.readFileSync(
+    path.join(root, "services/office-editor/libreoffice/upstream.json"),
+    "utf8",
+  ),
+);
+const mutationOperations = Object.values(
+  mutationCapabilities.mutationModel.operations,
+);
+const operationCount = mutationOperations.length;
+const exposedOperationCount =
+  mutationCapabilities.toolInputSchema.properties.op.enum.length;
+const availabilityCount = (availability) =>
+  mutationOperations.filter(
+    (operation) => operation.availability === availability,
+  ).length;
+const formatSupport = fs.readFileSync(
+  path.join(root, "docs/product/format-support.md"),
+  "utf8",
+);
+for (const requiredStatement of [
+  `classifies ${operationCount} operations`,
+  `of which ${exposedOperationCount} bounded operations are exposed`,
+  `${availabilityCount("runtime_verified")} have passed the live runtime path`,
+  `${availabilityCount("engine_patch_ready")} are implemented against the cumulative \`${editorUpstream.patchLevel}\` engine candidate`,
+]) {
+  if (!formatSupport.includes(requiredStatement))
+    failures.push(
+      `docs/product/format-support.md: capability summary drifted; expected "${requiredStatement}"`,
+    );
+}
+
 function markdownFiles(directory) {
   const result = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
