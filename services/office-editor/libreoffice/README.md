@@ -59,7 +59,33 @@ Build the thin Spellbook editor image only from the approved runtime manifest:
 pnpm office:runtime:build
 ```
 
-The default public runtime remains the pinned stock digest until those promotion gates pass. A newer upstream release or a successful compile alone is not approval.
+After the integrated native suites pass, build a candidate wrapper from the
+registry-resolved engine digest, never from its mutable tag:
+
+```bash
+pnpm office:runtime:build:candidate -- \
+  registry.example/spellbook-engine@sha256:<engine-digest> \
+  registry.example/spellbook-office:candidate
+```
+
+Push that wrapper, resolve its own registry digest, and create the downstream
+release receipt from the two immutable image identities and the exact public
+Git commit:
+
+```bash
+node services/office-editor/libreoffice/write-runtime-release.mjs \
+  /secure/path/spellbook-office-runtime.release.json \
+  registry.example/spellbook-office@sha256:<runtime-digest> \
+  registry.example/spellbook-engine@sha256:<engine-digest> \
+  <40-character-public-commit>
+```
+
+The candidate wrapper records the public source revision, Collabora source
+commit, engine digest and patch-series hash as OCI labels. The receipt is the
+only artifact a managed downstream needs to lock; it must not copy this patch
+directory or rebuild a separate editor. The default public runtime remains the
+pinned stock digest until all promotion checks pass. A newer upstream release
+or a successful compile alone is not approval.
 
 ## Maintenance rule
 

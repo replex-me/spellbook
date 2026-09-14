@@ -30,6 +30,7 @@
     "office:conformance:plan": "node scripts/native-mutation-conformance.mjs",
     "office:conformance:run": "node scripts/native-mutation-conformance-runner.mjs",
     "office:runtime:build": "bash services/office-editor/libreoffice/build-runtime.sh",
+    "office:runtime:build:candidate": "bash services/office-editor/libreoffice/build-candidate-runtime.sh",
     "dev": "pnpm --filter @spellbook/web dev",
     "format:check": "prettier --check .",
     "test": "pnpm test:boundary && pnpm test:docs && pnpm test:contracts && pnpm test:harness && pnpm test:office && pnpm -r --if-present test && dotnet test services/document-worker/Spellbook.Document.Worker.slnx --configuration Release",
