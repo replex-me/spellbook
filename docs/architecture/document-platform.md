@@ -18,6 +18,25 @@ web workspace → platform contracts ← AI connector
 
 The public platform never imports a hosted module. Hosting adds adapters around public ports; it does not fork document behavior.
 
+## Browser-owned edit sessions
+
+The browser renderer is never allowed to impersonate a WOPI client. WOPI and
+browser editing are mutually exclusive modes of the same owned document
+session. A browser launch is refused while Collabora holds a WOPI lock; after a
+mode switch, the old WOPI capability can no longer read or save the file.
+
+The browser receives an opaque revision made from the current version identity
+and SHA-256 digest. Every candidate upload must be same-origin and carry that
+revision in `If-Match`. The server locks the session row, rejects a stale base,
+stores the candidate as a new child version, and passes it through the existing
+package scan, render and preservation validation before advancing the document.
+OPFS protects unsaved local work across browser interruption, but it is not the
+shared source of truth and cannot bypass server validation or version lineage.
+
+The transport and recovery contracts are implemented and transaction-tested;
+selecting the browser engine in the product UI remains blocked on the browser
+engine promotion gates described in its pinned runtime manifest.
+
 ## Common platform responsibilities
 
 The common layer owns behavior that is true for every document type:

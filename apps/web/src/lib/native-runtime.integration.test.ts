@@ -26,6 +26,11 @@ vi.mock("./db", async (original) => ({
 
 import { db } from "./db";
 import {
+  createBrowserDocumentLaunch,
+  getBrowserDocument,
+  saveBrowserDocument,
+} from "./browser-session";
+import {
   cancelNativeTurn,
   completeNativeScan,
   completeNativeTask,
@@ -36,7 +41,12 @@ import {
   submitNativeTurn,
 } from "./native-runtime";
 import { signWopiToken } from "./wopi-token";
-import { createNativeLaunch, wopiLock, wopiPutFile } from "./native-session";
+import {
+  createNativeLaunch,
+  wopiGetFile,
+  wopiLock,
+  wopiPutFile,
+} from "./native-session";
 import { requireNativeRequestSession } from "./native-request-auth";
 import { authorizeNativeConnectorJob } from "./native-connector-auth";
 import { POST as postNativeConnectorTool } from "../app/api/native/jobs/[jobId]/tools/route";
@@ -246,6 +256,103 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
     expect(document.current_version_id).toBe(f.versionId);
     expect(native).toMatchObject({ status: "validating" });
     expect(native.working_version_id).not.toBe(f.versionId);
+  });
+
+  it("reconciles a browser candidate only against its exact owned revision", async () => {
+    const f = await fixture();
+    const launch = await createBrowserDocumentLaunch(session, f.documentId);
+    expect(launch).toMatchObject({
+      documentId: f.documentId,
+      fileName: "native.pptx",
+      revision: `"${f.versionId}:${"a".repeat(64)}"`,
+    });
+    const opened = await getBrowserDocument(session, f.documentId);
+    expect(opened.data).toEqual(Buffer.from("PK-test-pptx"));
+    expect(opened.revision).toBe(launch.revision);
+
+    const candidate = Buffer.from("PK-browser-candidate");
+    const request = (
+      revision: string,
+      origin = "https://spellbook.integration.invalid",
+    ) =>
+      new Request(
+        `https://spellbook.integration.invalid/api/documents/${f.documentId}/browser/contents`,
+        {
+          method: "PUT",
+          headers: { origin, "if-match": revision },
+          body: candidate,
+        },
+      );
+    await expect(
+      saveBrowserDocument(
+        session,
+        f.documentId,
+        request(launch.revision, "https://attacker.invalid"),
+      ),
+    ).rejects.toMatchObject({ status: 403, message: "invalid_browser_origin" });
+    await expect(
+      saveBrowserDocument(
+        session,
+        f.documentId,
+        request(`"${randomUUID()}:${"b".repeat(64)}"`),
+      ),
+    ).rejects.toMatchObject({
+      status: 412,
+      message: "browser_revision_changed",
+    });
+
+    const saved = await saveBrowserDocument(
+      session,
+      f.documentId,
+      request(launch.revision),
+    );
+    expect(saved.unchanged).toBe(false);
+    expect(saved.revision).not.toBe(launch.revision);
+    expect(workers.enqueueWorkerJob.mock.calls.at(-1)?.[3]).toEqual(
+      expect.objectContaining({
+        inputObject: expect.stringContaining(
+          `/documents/${f.documentId}/versions/`,
+        ),
+        baselineInputObject: "native/document.pptx",
+        nativeSessionId: f.nativeSessionId,
+      }),
+    );
+    const [native] = await db()`
+      select editor_mode,status,working_version_id from spellbook_native_sessions
+      where id=${f.nativeSessionId}
+    `;
+    expect(native).toMatchObject({
+      editor_mode: "browser",
+      status: "validating",
+    });
+    expect(native.working_version_id).not.toBe(f.versionId);
+
+    const token = signWopiToken({
+      version: 1,
+      sessionId: f.nativeSessionId,
+      documentId: f.documentId,
+      accountId,
+      expiresAt: Date.now() + 60_000,
+    });
+    await expect(
+      wopiGetFile(
+        new Request(
+          `https://spellbook.integration.invalid/api/wopi/files/${f.documentId}?access_token=${encodeURIComponent(token)}`,
+        ),
+        f.documentId,
+      ),
+    ).rejects.toMatchObject({ status: 401, message: "expired_wopi_session" });
+  });
+
+  it("does not switch to browser editing while Collabora owns the WOPI lock", async () => {
+    const f = await fixture();
+    await db()`update spellbook_native_sessions set wopi_lock='editor-lock' where id=${f.nativeSessionId}`;
+    await expect(
+      createBrowserDocumentLaunch(session, f.documentId),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: "office_editor_save_required",
+    });
   });
 
   it("leases one AI turn, redelivers a browser task safely, and records completion", async () => {

@@ -152,6 +152,7 @@ async function migrate(): Promise<void> {
       account_email text,
       working_version_id uuid not null references spellbook_versions(id),
       working_sha256 text,
+      editor_mode text not null default 'wopi' check (editor_mode in ('wopi','browser')),
       status text not null check (status in ('active','validating','failed','closed')),
       wopi_lock text,
       lock_updated_at timestamptz,
@@ -166,6 +167,9 @@ async function migrate(): Promise<void> {
     create index if not exists spellbook_native_sessions_expiry_idx on spellbook_native_sessions(expires_at);
     alter table spellbook_native_sessions add column if not exists working_sha256 text;
     alter table spellbook_native_sessions add column if not exists account_email text;
+    alter table spellbook_native_sessions add column if not exists editor_mode text not null default 'wopi';
+    alter table spellbook_native_sessions drop constraint if exists spellbook_native_sessions_editor_mode_check;
+    alter table spellbook_native_sessions add constraint spellbook_native_sessions_editor_mode_check check (editor_mode in ('wopi','browser'));
 
     create table if not exists spellbook_native_turns (
       id uuid primary key,

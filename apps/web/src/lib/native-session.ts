@@ -265,12 +265,18 @@ export async function createNativeLaunch(
       for update
     `;
     if (existing) {
+      if (
+        existing.editor_mode === "browser" &&
+        existing.status === "validating"
+      )
+        throw new HttpError(409, "document_processing");
       const reusable =
         new Date(existing.expires_at).getTime() > Date.now() &&
         ["active", "validating"].includes(existing.status);
       const [updated] = await sql`
         update spellbook_native_sessions set
           account_email=${session.email},
+          editor_mode='wopi',
           working_version_id=${reusable ? existing.working_version_id : document.current_version_id},
           working_sha256=${reusable ? existing.working_sha256 : document.document_sha256},
           status=${reusable ? existing.status : "active"},
@@ -286,8 +292,8 @@ export async function createNativeLaunch(
     const id = randomUUID();
     await sql`
       insert into spellbook_native_sessions
-        (id,document_id,account_id,account_email,working_version_id,working_sha256,status,expires_at)
-      values (${id},${documentId},${session.accountId},${session.email},${document.current_version_id},${document.document_sha256},'active',${new Date(expiresAt)})
+        (id,document_id,account_id,account_email,working_version_id,working_sha256,editor_mode,status,expires_at)
+      values (${id},${documentId},${session.accountId},${session.email},${document.current_version_id},${document.document_sha256},'wopi','active',${new Date(expiresAt)})
     `;
     return { ...document, id, working_version_id: document.current_version_id };
   })) as Record<string, any>;
@@ -343,6 +349,7 @@ export async function requireWopi(
     left join spellbook_versions working on working.id=s.working_version_id and working.status in ('processing','ready')
     where s.id=${claims.sessionId} and s.document_id=${documentId}
       and s.account_id=${claims.accountId} and s.status in ('active','validating') and s.expires_at > now()
+      and s.editor_mode='wopi'
   `;
   if (!row) throw new HttpError(401, "expired_wopi_session");
   await db()`update spellbook_native_sessions set last_seen_at=now() where id=${claims.sessionId}`;
