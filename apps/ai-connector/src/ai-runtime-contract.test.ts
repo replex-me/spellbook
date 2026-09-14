@@ -18,11 +18,12 @@ describe("AI runtime capability contract", () => {
     ]);
   });
 
-  it("records Claude only as a researched future user-direct adapter", () => {
+  it("connects Claude through the user-owned unmodified Claude Code runtime", () => {
     const claude = aiRuntimeContract.providers.claude_code;
-    expect(claude.integrationStatus).toBe("research_only_not_implemented");
-    expect(claude.subscriptionConnection).toBe(
-      "not_implemented_user_direct_runtime_required",
+    expect(claude.integrationStatus).toBe("implemented");
+    expect(claude.subscriptionConnection).toBe("user_direct_unmodified_cli");
+    expect(claude.capabilities.structured_spellbook_tools).toBe(
+      "implemented_by_spellbook",
     );
     expect(claude.capabilities.image_generation).toBe(
       "no_verified_native_equivalent",

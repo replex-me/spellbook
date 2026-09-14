@@ -16,7 +16,7 @@ export interface LocalConnectorAccounts {
   startBrowserLogin(identity: string): Promise<unknown>;
   startLogin(identity: string): Promise<unknown>;
   logout(identity: string): Promise<void>;
-  client(identity: string): Promise<{ models(): Promise<unknown> }>;
+  models(identity: string): Promise<unknown>;
 }
 
 export interface LocalConnectorOptions {
@@ -86,7 +86,7 @@ async function handle(
       const state = (await options.accounts.status(options.identity)) as {
         account?: { account?: { type?: string } | null } | null;
       };
-      if (state.account?.account?.type !== "chatgpt") {
+      if (!state.account?.account) {
         const login = (await options.accounts.startBrowserLogin(
           options.identity,
         )) as { authUrl?: unknown };
@@ -157,8 +157,9 @@ async function handle(
     return json(response, 200, { status: "disconnected" });
   }
   if (url.pathname === "/v1/models") {
-    const client = await options.accounts.client(options.identity);
-    return json(response, 200, { models: await client.models() });
+    return json(response, 200, {
+      models: await options.accounts.models(options.identity),
+    });
   }
   if (url.pathname === "/v1/jobs/native") {
     const body = (await readJson(request)) as unknown as LocalNativeJob;

@@ -41,6 +41,7 @@ export function ModelControl({
           const initial =
             body.models.find((item) => item.isDefault) ?? body.models[0];
           onChange({
+            ...(initial.provider ? { provider: initial.provider } : {}),
             model: initial.model,
             effort: initial.defaultReasoningEffort,
           });
@@ -52,14 +53,18 @@ export function ModelControl({
       });
     return () => abort.abort();
   }, [generation, loadModels]);
-  const model = models.find((item) => item.model === value?.model);
+  const model = models.find(
+    (item) =>
+      item.model === value?.model &&
+      (!value?.provider || item.provider === value.provider),
+  );
   const recommended = models.find((item) => item.isDefault) ?? models[0];
   return (
     <details className="model-control">
       <summary title="모델과 추론 강도">
         <span>
           {value
-            ? `${model?.displayName ?? value.model} · ${value.effort}`
+            ? `${model?.provider === "claude_code" ? "Claude Code · " : "Codex · "}${model?.displayName ?? value.model} · ${value.effort}`
             : "모델 선택"}
         </span>
         <SpellbookIcon name="chevronDown" size={13} />
@@ -97,6 +102,7 @@ export function ModelControl({
                   onChange(
                     next
                       ? {
+                          ...(next.provider ? { provider: next.provider } : {}),
                           model: next.model,
                           effort: next.defaultReasoningEffort,
                         }
@@ -115,6 +121,9 @@ export function ModelControl({
                 ) : null}
                 {models.map((item) => (
                   <option key={item.model} value={item.model}>
+                    {item.provider === "claude_code"
+                      ? "Claude Code · "
+                      : "Codex · "}
                     {item.displayName}
                     {item.isDefault ? " · 추천" : ""}
                   </option>
@@ -129,7 +138,11 @@ export function ModelControl({
                   disabled={disabled}
                   value={value?.effort}
                   onChange={(event) =>
-                    onChange({ model: model.model, effort: event.target.value })
+                    onChange({
+                      ...(model.provider ? { provider: model.provider } : {}),
+                      model: model.model,
+                      effort: event.target.value,
+                    })
                   }
                 >
                   {model.supportedReasoningEfforts.map((item) => (

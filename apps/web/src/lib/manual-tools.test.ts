@@ -29,6 +29,13 @@ describe("direct edit and model controls", () => {
       parseModelSettings({ ...settings, sandbox: "full-access" }),
     ).toThrow();
     expect(() => parseModelSettings({ model: "x", effort: 2 })).toThrow();
+    expect(() =>
+      parseModelSettings({
+        provider: "untrusted-runtime",
+        model: "x",
+        effort: "high",
+      }),
+    ).toThrow();
     const models = [
       {
         model: "account-model",
@@ -44,5 +51,11 @@ describe("direct edit and model controls", () => {
     expect(supportsSettings(models, { ...settings, effort: "max" })).toBe(
       false,
     );
+    expect(
+      supportsSettings([{ ...models[0], provider: "codex" }], {
+        ...settings,
+        provider: "claude_code",
+      }),
+    ).toBe(false);
   });
 });

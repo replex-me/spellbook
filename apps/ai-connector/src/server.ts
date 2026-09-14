@@ -56,8 +56,9 @@ async function handleInternalRequest(
     }
     const body = await readJson(request);
     if (url.pathname === "/internal/models") {
-      const client = await sessions.client(requiredString(body, "email"));
-      return json(response, 200, { models: await client.models() });
+      return json(response, 200, {
+        models: await sessions.models(requiredString(body, "email")),
+      });
     }
     if (url.pathname === "/internal/account/status") {
       return json(
@@ -204,7 +205,7 @@ async function executeNativeJob(
       elementIds:
         job.permissionMode === "selection" ? initial.selectedElementIds : [],
     };
-    const client = await sessions.client(job.email);
+    const client = await sessions.client(job.email, job.modelSettings);
     const result = await runNativeTurn(client, {
       requestText: job.requestText,
       conversationHistory: job.conversationHistory,
@@ -232,6 +233,18 @@ async function executeNativeJob(
     };
   } catch (error) {
     controller.abort();
+    console.error(
+      JSON.stringify({
+        event: "native_ai_turn_failed",
+        jobId: job.jobId,
+        provider:
+          job.modelSettings?.provider ?? job.modelSettings?.model ?? "default",
+        error:
+          error instanceof Error
+            ? error.message.slice(0, 1_000)
+            : "unknown_error",
+      }),
+    );
     const message =
       error instanceof Error &&
       /not connected|timed out|rate limit|permission|cancel|native_/i.test(

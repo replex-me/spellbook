@@ -11,7 +11,11 @@ export function parseModelSettings(value: unknown): ModelSettings | undefined {
     throw new Error("invalid_model_settings");
   const input = value as Record<string, unknown>;
   if (
-    Object.keys(input).some((key) => !["model", "effort"].includes(key)) ||
+    Object.keys(input).some(
+      (key) => !["provider", "model", "effort"].includes(key),
+    ) ||
+    (input.provider !== undefined &&
+      !["codex", "claude_code"].includes(String(input.provider))) ||
     typeof input.model !== "string" ||
     !input.model ||
     input.model.length > 120 ||
@@ -20,7 +24,13 @@ export function parseModelSettings(value: unknown): ModelSettings | undefined {
     input.effort.length > 24
   )
     throw new Error("invalid_model_settings");
-  return { model: input.model, effort: input.effort };
+  return {
+    ...(input.provider
+      ? { provider: input.provider as ModelSettings["provider"] }
+      : {}),
+    model: input.model,
+    effort: input.effort,
+  };
 }
 
 export function supportsSettings(
@@ -28,7 +38,11 @@ export function supportsSettings(
   settings: ModelSettings,
 ): boolean {
   return !!models
-    .find((item) => item.model === settings.model)
+    .find(
+      (item) =>
+        item.model === settings.model &&
+        (!settings.provider || item.provider === settings.provider),
+    )
     ?.supportedReasoningEfforts.some(
       (item) => item.reasoningEffort === settings.effort,
     );

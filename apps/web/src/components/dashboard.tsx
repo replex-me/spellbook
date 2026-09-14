@@ -28,7 +28,7 @@ export default function Dashboard({
   const [uploadMessage, setUploadMessage] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const {
-    account: chatgpt,
+    account: connectedAi,
     codeCopied,
     connect: connectAccount,
     connecting,
@@ -169,18 +169,23 @@ export default function Dashboard({
               </span>
               <div>
                 <strong>내 AI 연결</strong>
-                <p>ChatGPT 구독의 Codex를 사용합니다.</p>
+                <p>Codex 또는 Claude Code 구독을 사용합니다.</p>
               </div>
-              <StatusBadge tone={chatgpt ? "success" : "neutral"}>
-                {chatgpt ? "연결됨" : "연결 안 됨"}
+              <StatusBadge tone={connectedAi ? "success" : "neutral"}>
+                {connectedAi ? "연결됨" : "연결 안 됨"}
               </StatusBadge>
             </header>
 
-            {chatgpt ? (
+            {connectedAi ? (
               <div className="ai-account-connected">
                 <div>
-                  <strong>{chatgpt.email ?? "ChatGPT 계정"}</strong>
-                  <span>플랜: {chatgpt.planType ?? "확인 불가"}</span>
+                  <strong>
+                    {connectedAi.email ??
+                      (connectedAi.type === "claude"
+                        ? "Claude 계정"
+                        : "ChatGPT 계정")}
+                  </strong>
+                  <span>플랜: {connectedAi.planType ?? "확인 불가"}</span>
                 </div>
                 <button
                   className="ds-button is-quiet is-danger is-compact"
@@ -278,7 +283,7 @@ export default function Dashboard({
                       </strong>
                       <p>
                         {aiMode === "local"
-                          ? "허용 후 이어지는 OpenAI 화면에서 로그인합니다. 비밀번호와 구독 토큰은 Spellbook 서버로 전송되지 않습니다."
+                          ? "허용 후 Codex 또는 이 컴퓨터에 로그인된 Claude Code를 선택할 수 있습니다. 비밀번호와 구독 토큰은 Spellbook 서버로 전송되지 않습니다."
                           : "일회용 코드를 받아 OpenAI 화면에서 승인합니다."}
                       </p>
                     </div>

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   codexSessionLocation,
   isAllowedAiIdentity,
+  selectedProvider,
   stableIdentityKey,
 } from "./session-manager.js";
 
@@ -45,5 +46,21 @@ describe("local AI subscription identity", () => {
       `/tmp/spellbook-auth/${stableIdentityKey("owner@example.test")}`,
     );
     expect(location.isolated).toBe(true);
+  });
+
+  it("routes explicit and legacy Claude model selections to Claude Code", () => {
+    expect(
+      selectedProvider({
+        provider: "claude_code",
+        model: "sonnet",
+        effort: "high",
+      }),
+    ).toBe("claude_code");
+    expect(selectedProvider({ model: "sonnet", effort: "high" })).toBe(
+      "claude_code",
+    );
+    expect(selectedProvider({ model: "gpt-5.6-sol", effort: "high" })).toBe(
+      "codex",
+    );
   });
 });

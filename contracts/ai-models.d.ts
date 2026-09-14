@@ -1,5 +1,6 @@
 /** Public account-backed model catalog; no API catalog or static model IDs. */
 export interface AvailableModel {
+  provider?: "codex" | "claude_code";
   model: string;
   displayName: string;
   defaultReasoningEffort: string;
@@ -10,6 +11,7 @@ export interface AvailableModel {
   isDefault: boolean;
 }
 export interface ModelSettings {
+  provider?: "codex" | "claude_code";
   model: string;
   effort: string;
 }

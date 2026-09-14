@@ -69,6 +69,7 @@ export interface AppServerStartOptions {
 }
 
 export interface AgentTurnClient {
+  readonly supportsImageGeneration?: boolean;
   runStructuredTurn(
     input: Array<Record<string, unknown>>,
     outputSchema: Record<string, unknown>,
@@ -78,6 +79,7 @@ export interface AgentTurnClient {
 }
 
 export class AppServerClient {
+  readonly supportsImageGeneration = true;
   private readonly process: ChildProcessWithoutNullStreams;
   private readonly pending = new Map<number, PendingRequest>();
   private readonly events = new EventEmitter();
@@ -215,6 +217,7 @@ export class AppServerClient {
         )
           continue;
         models.set(item.model, {
+          provider: "codex",
           model: item.model,
           displayName: item.displayName,
           defaultReasoningEffort: item.defaultReasoningEffort,

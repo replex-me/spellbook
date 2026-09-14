@@ -728,8 +728,9 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                   <>
                     <h1>AI 편집을 사용하려면 연결이 필요합니다</h1>
                     <p>
-                      PPT는 지금 바로 직접 편집할 수 있습니다. ChatGPT 구독을
-                      연결하면 같은 화면을 보며 수정하고 결과까지 확인합니다.
+                      PPT는 지금 바로 직접 편집할 수 있습니다. Codex 또는 Claude
+                      Code 구독을 연결하면 같은 화면을 보며 수정하고 결과까지
+                      확인합니다.
                     </p>
                     {ai.message ? (
                       <p className="system-alert is-danger" role="alert">
@@ -742,7 +743,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                       disabled={ai.connecting}
                       onClick={() => void ai.connect()}
                     >
-                      {ai.connecting ? "연결 준비 중…" : "ChatGPT 연결"}
+                      {ai.connecting ? "연결 준비 중…" : "AI Connector 연결"}
                     </button>
                     <a
                       className="native-security-link"

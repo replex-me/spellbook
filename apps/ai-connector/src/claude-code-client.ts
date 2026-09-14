@@ -5,7 +5,10 @@ import {
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { promisify } from "node:util";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -54,6 +57,7 @@ interface ToolServer {
 }
 
 export class ClaudeCodeClient implements AgentTurnClient {
+  readonly supportsImageGeneration = false;
   private readonly conversationSessions = new Map<string, string>();
 
   constructor(private readonly binary = resolveClaudeBinary()) {}
@@ -163,6 +167,10 @@ export class ClaudeCodeClient implements AgentTurnClient {
   }
 }
 
+export function isClaudeModel(modelName: string | undefined): boolean {
+  return claudeModels.some((model) => model.model === modelName);
+}
+
 export async function readClaudeAuthStatus(
   binary = resolveClaudeBinary(),
 ): Promise<ClaudeAuthStatus> {
@@ -186,8 +194,17 @@ export async function readClaudeAuthStatus(
 
 export function resolveClaudeBinary(
   configured = process.env.CLAUDE_BIN?.trim(),
+  exists: (file: string) => boolean = existsSync,
 ): string {
-  return configured || "claude";
+  if (configured) return configured;
+  const executable = process.platform === "win32" ? "claude.exe" : "claude";
+  const candidates = [
+    path.join(os.homedir(), ".local", "bin", executable),
+    ...(process.platform === "darwin"
+      ? ["/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
+      : []),
+  ];
+  return candidates.find(exists) ?? executable;
 }
 
 export function claudeTurnArguments(input: {
@@ -512,6 +529,7 @@ function model(
   isDefault = false,
 ): AvailableModel {
   return {
+    provider: "claude_code",
     model: name,
     displayName,
     defaultReasoningEffort: "high",

@@ -42,7 +42,7 @@ The self-hosted Compose profile can run the connector inside the user's deployme
 
 The transport, origin ceremony, scoped job capability, local model catalog, generated-image path and callback boundary are implemented and covered by HTTP and database integration tests. A real ChatGPT subscription account read, model catalog and structured app-server turn have also passed through the local connector. A packaged-app native edit loop and other provider policies remain release verification gates; one working account is not evidence that every subscription or model works.
 
-Codex is the only implemented provider adapter in this repository. Claude Code and other runtimes remain design candidates until a connector, authentication ceremony, tests and provider-policy review ship.
+Codex and Claude Code are implemented as user-direct provider adapters in the local connector. Codex uses its bundled App Server and Claude uses the user's unmodified, already authenticated Claude Code binary through an isolated MCP tool server. Neither path gives the model general shell, filesystem, browser, plugin or subagent authority inside a document turn. Other runtimes remain design candidates until their connector, authentication ceremony, tests and provider-policy review ship.
 
 ## License boundary
 

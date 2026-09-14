@@ -50,7 +50,7 @@ export class EditRunner {
       if (baseImages.length === 0) {
         throw new Error("Visual editing requires at least one source preview.");
       }
-      const client = await this.sessions.client(job.email);
+      const client = await this.sessions.client(job.email, job.modelSettings);
       if (job.mode === "plan") {
         const schema = job.conversational
           ? await conversationPlanSchema()

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   claudeTurnArguments,
+  isClaudeModel,
   readClaudeAuthStatus,
   resolveClaudeBinary,
 } from "./claude-code-client.js";
@@ -66,5 +67,18 @@ describe("Claude Code subscription adapter", () => {
     expect(resolveClaudeBinary("/opt/homebrew/bin/claude")).toBe(
       "/opt/homebrew/bin/claude",
     );
+  });
+
+  it("finds a normal desktop install without depending on shell PATH", () => {
+    expect(
+      resolveClaudeBinary(undefined, (candidate) =>
+        candidate.endsWith("/.local/bin/claude"),
+      ),
+    ).toMatch(/\.local\/bin\/claude$/u);
+  });
+
+  it("identifies only models owned by the Claude adapter", () => {
+    expect(isClaudeModel("sonnet")).toBe(true);
+    expect(isClaudeModel("gpt-5.6-sol")).toBe(false);
   });
 });

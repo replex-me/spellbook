@@ -48,7 +48,7 @@ async function harness() {
       .mockResolvedValue({ type: "chatgpt", authUrl: "https://auth.example" }),
     startLogin: vi.fn().mockResolvedValue({ type: "chatgptDeviceCode" }),
     logout: vi.fn().mockResolvedValue(undefined),
-    client: vi.fn().mockResolvedValue({ models }),
+    models,
   };
   const runNativeJob = vi.fn();
   handler = createLocalConnectorHandler({

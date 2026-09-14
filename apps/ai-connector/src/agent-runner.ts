@@ -50,7 +50,7 @@ export class AgentRunner {
   ) {}
 
   async run(job: AiJob) {
-    const client = await this.sessions.client(job.email);
+    const client = await this.sessions.client(job.email, job.modelSettings);
     const lifetime = new AbortController();
     const executionToken = randomUUID();
     let leaseLost = false;

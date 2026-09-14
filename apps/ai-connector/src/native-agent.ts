@@ -197,7 +197,8 @@ export async function runNativeTurn(
     state: NativeObservation,
   ): number => {
     const operation = command.op ?? "";
-    const operationContract = nativeEditContract.mutationModel.operations[operation];
+    const operationContract =
+      nativeEditContract.mutationModel.operations[operation];
     if (
       !operationContract ||
       operationContract.availability === "format_excluded" ||
@@ -613,7 +614,8 @@ export async function runNativeTurn(
     );
   let text = await turn(
     `User request: ${input.requestText}`,
-    ["slides", "document"].includes(input.permission.mode),
+    ["slides", "document"].includes(input.permission.mode) &&
+      client.supportsImageGeneration !== false,
   );
   if (generatedImageInserted && !reviewed) {
     const review = await turn(

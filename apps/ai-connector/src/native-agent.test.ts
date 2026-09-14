@@ -78,6 +78,30 @@ function fixture(
   };
 }
 describe("shared open document agent", () => {
+  it("does not advertise image generation to a provider without that capability", async () => {
+    const client = {
+      supportsImageGeneration: false,
+      runStructuredTurn: async (
+        _a: unknown,
+        _b: unknown,
+        _c: unknown,
+        options: AgentTurnOptions,
+      ) => {
+        expect(options.allowImageGeneration).toBe(false);
+        expect(options.onGeneratedImage).toBeUndefined();
+        return "이미지 생성은 지원하지 않습니다.";
+      },
+    } as unknown as AppServerClient;
+    await runNativeTurn(client, {
+      requestText: "이미지를 만들어줘",
+      host: { call: vi.fn() },
+      signal: new AbortController().signal,
+      permission,
+      onText: vi.fn(),
+      onTool: vi.fn(),
+    });
+  });
+
   it("uses explicit durable history without a connector-local conversation thread", async () => {
     let prompt = "";
     const client = {

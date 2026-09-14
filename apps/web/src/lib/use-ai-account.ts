@@ -67,7 +67,7 @@ export function useAiAccount(config: AiConnectorConfig) {
         );
         setAccountResponse(value);
         setStatus("ready");
-        if (value.account?.account?.type === "chatgpt") {
+        if (value.account?.account) {
           setWaitingForBrowserLogin(false);
           setMessage("");
         }
@@ -80,7 +80,7 @@ export function useAiAccount(config: AiConnectorConfig) {
       const value = (await response.json()) as AccountResponse;
       setAccountResponse(value);
       setStatus("ready");
-      if (value.account?.account?.type === "chatgpt") {
+      if (value.account?.account) {
         setDeviceLogin(null);
         setMessage("");
       }
@@ -185,10 +185,7 @@ export function useAiAccount(config: AiConnectorConfig) {
     [connectorOrigin, localSession],
   );
 
-  const account =
-    accountResponse?.account?.account?.type === "chatgpt"
-      ? accountResponse.account.account
-      : null;
+  const account = accountResponse?.account?.account ?? null;
   return {
     account,
     codeCopied,

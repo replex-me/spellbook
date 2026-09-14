@@ -3,8 +3,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { AppServerClient } from "./app-server-client.js";
+import { AppServerClient, type AgentTurnClient } from "./app-server-client.js";
 import { activeAiRuntime } from "./ai-runtime-contract.js";
+import { ClaudeCodeClient, isClaudeModel } from "./claude-code-client.js";
+import type { ModelSettings } from "../../../contracts/ai-models.js";
+import type { AvailableModel } from "./types.js";
 
 interface ManagedSession {
   client: AppServerClient;
@@ -14,23 +17,37 @@ interface ManagedSession {
 
 export class SessionManager {
   private readonly sessions = new Map<string, Promise<ManagedSession>>();
+  private readonly claude = new ClaudeCodeClient();
 
   async status(rawEmail: string): Promise<{
     account: unknown;
+    providers: Array<{ id: "codex" | "claude_code"; connected: boolean }>;
     rateLimits: unknown;
     runtime: typeof activeAiRuntime;
   }> {
     const session = await this.get(rawEmail);
-    const account = await session.client.accountRead();
+    const codex = await session.client.accountRead();
+    const claude = await this.claude.accountRead().catch(() => ({
+      account: null,
+      requiresClaudeAuth: true,
+    }));
     let rateLimits: unknown = null;
-    if (account.account?.type === "chatgpt") {
+    if (codex.account?.type === "chatgpt") {
       try {
         rateLimits = await session.client.rateLimitsRead();
       } catch {
         rateLimits = null;
       }
     }
-    return { account, rateLimits, runtime: activeAiRuntime };
+    return {
+      account: codex.account ? codex : claude,
+      providers: [
+        { id: "codex", connected: codex.account?.type === "chatgpt" },
+        { id: "claude_code", connected: claude.account?.type === "claude" },
+      ],
+      rateLimits,
+      runtime: activeAiRuntime,
+    };
   }
 
   async startLogin(rawEmail: string): Promise<unknown> {
@@ -46,7 +63,32 @@ export class SessionManager {
     await session.client.logout();
   }
 
-  async client(rawEmail: string): Promise<AppServerClient> {
+  async models(rawEmail: string): Promise<AvailableModel[]> {
+    const session = await this.get(rawEmail);
+    const models: AvailableModel[] = [];
+    const codex = await session.client.accountRead();
+    if (codex.account?.type === "chatgpt")
+      models.push(...(await session.client.models()));
+    const claude = await this.claude.accountRead().catch(() => ({
+      account: null,
+      requiresClaudeAuth: true,
+    }));
+    if (claude.account?.type === "claude")
+      models.push(...(await this.claude.models()));
+    if (models.length === 0)
+      throw new Error("No supported AI subscription is connected.");
+    return models;
+  }
+
+  async client(
+    rawEmail: string,
+    modelSettings?: ModelSettings,
+  ): Promise<AgentTurnClient> {
+    if (selectedProvider(modelSettings) === "claude_code") {
+      if ((await this.claude.accountRead()).account?.type !== "claude")
+        throw new Error("Claude subscription is not connected in Claude Code.");
+      return this.claude;
+    }
     const session = await this.get(rawEmail);
     const status = await session.client.accountRead();
     if (status.account?.type !== "chatgpt")
@@ -89,6 +131,15 @@ export class SessionManager {
       email,
     };
   }
+}
+
+export function selectedProvider(
+  modelSettings?: ModelSettings,
+): "codex" | "claude_code" {
+  return modelSettings?.provider === "claude_code" ||
+    (!modelSettings?.provider && isClaudeModel(modelSettings?.model))
+    ? "claude_code"
+    : "codex";
 }
 
 export function codexSessionLocation(email: string): {
