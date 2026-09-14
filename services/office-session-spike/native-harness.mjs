@@ -46,6 +46,7 @@ export function createNativeHarness({ probeEnabled = false } = {}) {
         reject(new Error("cancelled"));
         return;
       }
+      const timeoutMs = request.operation === "observe" ? 60_000 : 20_000;
       const timer = setTimeout(
         () =>
           finish(
@@ -53,11 +54,11 @@ export function createNativeHarness({ probeEnabled = false } = {}) {
               "편집 응답을 확인하지 못했습니다. 명령을 자동 재실행하지 않았습니다.",
             ),
           ),
-        20000,
+        timeoutMs,
       );
       tasks.set(id, {
         id,
-        request: { ...request, expiresAt: Date.now() + 19000 },
+        request: { ...request, expiresAt: Date.now() + timeoutMs - 1000 },
         sent: false,
         finish,
         timer,

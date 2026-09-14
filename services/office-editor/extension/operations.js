@@ -349,10 +349,7 @@ function spellbookDocumentOperation(request) {
       return Object.fromEntries(
         Object.entries(value)
           .filter(([key]) => key !== "propertyStates")
-          .map(([key, candidate]) => [
-            key,
-            withoutPropertyStates(candidate),
-          ]),
+          .map(([key, candidate]) => [key, withoutPropertyStates(candidate)]),
       );
     return value;
   };
@@ -1547,8 +1544,35 @@ function spellbookDocumentOperation(request) {
         request.suppressCapture,
       ),
     });
-    if (request.operation === "observe")
+    if (request.operation === "observe") {
+      if (request.captureSlideIndexes !== undefined) {
+        if (
+          !Array.isArray(request.captureSlideIndexes) ||
+          request.captureSlideIndexes.length > 8
+        )
+          throw new Error("invalid_capture_slide_indexes");
+        const captureSlideIndexes = [
+          ...new Set(request.captureSlideIndexes),
+        ].sort((left, right) => left - right);
+        if (
+          captureSlideIndexes.some(
+            (slideIndex) =>
+              !Number.isInteger(slideIndex) ||
+              slideIndex < 0 ||
+              slideIndex >= before.slides.length,
+          )
+        )
+          throw new Error("invalid_capture_slide_indexes");
+        return {
+          ...before,
+          layoutAudit: withAuditDelta(before, before),
+          changedSlideIndexes: [],
+          images: captureSlideIndexes.map((slideIndex) => capture(slideIndex)),
+          visualEvidenceComplete: true,
+        };
+      }
       return result(before, before.textDetails.slideIndex);
+    }
     if (request.operation !== "edit")
       throw new Error("unsupported_native_operation");
     let expectedSlides;
@@ -3144,8 +3168,7 @@ function spellbookDocumentOperation(request) {
         const applied =
           stableJson(withoutPropertyStates(afterCell)) ===
           stableJson(withoutPropertyStates(expectedCell));
-        const comparableExpectedSlides =
-          withoutPropertyStates(expectedSlides);
+        const comparableExpectedSlides = withoutPropertyStates(expectedSlides);
         const comparableAfterSlides = withoutPropertyStates(after.slides);
         const comparableBeforeMasters = withoutPropertyStates(before.masters);
         const comparableAfterMasters = withoutPropertyStates(after.masters);
@@ -3155,7 +3178,10 @@ function spellbookDocumentOperation(request) {
           documentStateJson(comparableAfterSlides) !==
             documentStateJson(comparableExpectedSlides);
         const scopeDifference =
-          firstDifferencePath(comparableExpectedSlides, comparableAfterSlides) ??
+          firstDifferencePath(
+            comparableExpectedSlides,
+            comparableAfterSlides,
+          ) ??
           firstDifferencePath(
             comparableBeforeMasters,
             comparableAfterMasters,

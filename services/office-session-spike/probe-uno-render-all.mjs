@@ -49,25 +49,34 @@ try {
     await page.waitForTimeout(250);
   }
 
-  const observe = (detailSlideIndex = null) =>
-    page.evaluate(async (requestedSlideIndex) => {
-      const launch = window.__spellbookLaunch;
-      const response = await fetch("/native/probe", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${launch.accessToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          operation: "observe",
-          detailSlideIndex: requestedSlideIndex,
-        }),
-      });
-      const value = await response.json();
-      if (!response.ok)
-        throw new Error(value.error ?? `HTTP ${response.status}`);
-      return value;
-    }, detailSlideIndex);
+  const observe = (detailSlideIndex = null, captureSlideIndexes = undefined) =>
+    page.evaluate(
+      async ({ requestedSlideIndex, requestedCaptureSlideIndexes }) => {
+        const launch = window.__spellbookLaunch;
+        const response = await fetch("/native/probe", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${launch.accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            operation: "observe",
+            detailSlideIndex: requestedSlideIndex,
+            ...(requestedCaptureSlideIndexes
+              ? { captureSlideIndexes: requestedCaptureSlideIndexes }
+              : {}),
+          }),
+        });
+        const value = await response.json();
+        if (!response.ok)
+          throw new Error(value.error ?? `HTTP ${response.status}`);
+        return value;
+      },
+      {
+        requestedSlideIndex: detailSlideIndex,
+        requestedCaptureSlideIndexes: captureSlideIndexes,
+      },
+    );
 
   const initial = await observe();
   if (expectedPatchLevel && initial.engine?.patchLevel !== expectedPatchLevel)
@@ -77,12 +86,24 @@ try {
   if (!Array.isArray(initial.slides) || initial.slides.length === 0)
     throw new Error("The editor returned no slides.");
 
+  const images = new Map(
+    (initial.images ?? []).map((image) => [image.slideIndex, image]),
+  );
+  const remainingSlideIndexes = initial.slides
+    .map((_, slideIndex) => slideIndex)
+    .filter((slideIndex) => !images.has(slideIndex));
+  for (let offset = 0; offset < remainingSlideIndexes.length; offset += 8) {
+    const requested = remainingSlideIndexes.slice(offset, offset + 8);
+    const captured = await observe(null, requested);
+    if (captured.revision !== initial.revision)
+      throw new Error("The document changed during slide capture.");
+    for (const image of captured.images ?? [])
+      images.set(image.slideIndex, image);
+  }
+
   const slides = [];
   for (let slideIndex = 0; slideIndex < initial.slides.length; slideIndex++) {
-    const state = await observe(slideIndex);
-    const image = state.images?.find(
-      (candidate) => candidate.slideIndex === slideIndex,
-    );
+    const image = images.get(slideIndex);
     if (!image?.pngBytes?.length)
       throw new Error(`Slide ${slideIndex + 1} returned no PNG evidence.`);
     await writeFile(
@@ -90,7 +111,7 @@ try {
       Buffer.from(image.pngBytes),
       { mode: 0o600 },
     );
-    const slide = state.slides[slideIndex];
+    const slide = initial.slides[slideIndex];
     slides.push({
       slideIndex,
       name: slide.name,
