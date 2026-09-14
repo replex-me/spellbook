@@ -2,6 +2,20 @@ ARG SPELLBOOK_COLLABORA_BASE_IMAGE=collabora/code@sha256:379b8f1fc955dd6d01ba24a
 ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL=stock
 FROM ${SPELLBOOK_COLLABORA_BASE_IMAGE} AS collabora
 
+FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS open-fonts
+COPY services/fonts/install-open-fonts.sh /usr/local/bin/install-spellbook-open-fonts
+RUN sh /usr/local/bin/install-spellbook-open-fonts \
+    && rm -rf /var/lib/apt/lists/*
+COPY services/fonts/spellbook-font-aliases.conf /etc/fonts/conf.d/70-spellbook-font-aliases.conf
+COPY services/fonts/spellbook-korean-fallback.conf /etc/fonts/conf.d/99-spellbook-korean-fallback.conf
+RUN fc-cache -f \
+    && test "$(fc-match --format='%{family}' Calibri)" = "Carlito" \
+    && test "$(fc-match --format='%{family}' Arial)" = "Liberation Sans" \
+    && test "$(fc-match --format='%{family}|%{style}' HeadLineA)" = "Liberation Sans Narrow|Bold" \
+    && test "$(fc-match --format='%{family}' '맑은 고딕')" = "Noto Sans CJK KR" \
+    && fc-match --format='%{family}' 'Noto Sans KR' | grep --fixed-strings "Noto Sans KR" \
+    && fc-match --format='%{family}' Pretendard | grep --fixed-strings "Pretendard"
+
 FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS gateway-builder
 ARG TARGETOS
 ARG TARGETARCH
@@ -71,9 +85,19 @@ RUN node /tmp/patch-localization.mjs \
 FROM collabora AS runtime
 ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL
 USER root
+COPY --from=open-fonts /usr/share/fonts /usr/share/fonts
+COPY --from=open-fonts /usr/local/share/fonts /usr/local/share/fonts
+COPY --from=open-fonts /usr/share/doc/pretendard /usr/share/doc/pretendard
+COPY --from=open-fonts /usr/share/doc/google-noto /usr/share/doc/google-noto
+COPY --from=open-fonts /etc/fonts/conf.d/70-spellbook-font-aliases.conf /etc/fonts/conf.d/70-spellbook-font-aliases.conf
+COPY --from=open-fonts /etc/fonts/conf.d/99-spellbook-korean-fallback.conf /etc/fonts/conf.d/99-spellbook-korean-fallback.conf
 COPY --from=browser-assets --chown=cool:cool /upstream/browser/dist /usr/share/coolwsd/browser/dist
 COPY --from=browser-assets --chown=cool:cool /minimal /opt/spellbook/coolwsd
 COPY --from=gateway-builder --chown=cool:cool /out/spellbook-office-gateway /usr/local/bin/spellbook-office-gateway
+RUN fc-cache -f \
+    && test "$(fc-match --format='%{family}' Calibri)" = "Carlito" \
+    && test "$(fc-match --format='%{family}' Arial)" = "Liberation Sans" \
+    && test "$(fc-match --format='%{family}' '맑은 고딕')" = "Noto Sans CJK KR"
 USER cool
 EXPOSE 9980
 ENTRYPOINT ["/usr/local/bin/spellbook-office-gateway"]

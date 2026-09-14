@@ -33,53 +33,22 @@ RUN case "$TARGETARCH" in \
 FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS runtime
 ARG LIBREOFFICE_VERSION=26.8.0.3
 ARG LIBREOFFICE_DEBIAN_VERSION=26.8.0.3-2~bpo13+1
-ARG PRETENDARD_VERSION=1.3.9
-ARG PRETENDARD_SHA256=04be351a74d6bf7d60c480a3087e51d185485d35a52023142af1df19eb8c428a
-ARG NOTO_SANS_KR_SHA256=194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252
-ARG NOTO_KR_OFL_SHA256=1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9
+COPY services/fonts/install-open-fonts.sh /usr/local/bin/install-spellbook-open-fonts
 RUN apt-get -o Acquire::Retries=5 update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates \
     && echo 'deb https://deb.debian.org/debian trixie-backports main' > /etc/apt/sources.list.d/backports.list \
     && apt-get -o Acquire::Retries=5 update \
     && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && sh /usr/local/bin/install-spellbook-open-fonts \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t trixie-backports \
-        curl \
-        fontconfig \
-        fonts-crosextra-caladea \
-        fonts-crosextra-carlito \
-        fonts-lato \
-        fonts-liberation \
-        fonts-liberation-sans-narrow \
-        fonts-nanum \
-        fonts-noto-cjk \
-        fonts-noto-color-emoji \
-        fonts-roboto-unhinted \
         "libreoffice-core-nogui=4:${LIBREOFFICE_DEBIAN_VERSION}" \
         "libreoffice-impress-nogui=4:${LIBREOFFICE_DEBIAN_VERSION}" \
         poppler-utils \
         "python3-uno=4:${LIBREOFFICE_DEBIAN_VERSION}" \
-        unzip \
     && soffice --version | grep --fixed-strings "LibreOffice ${LIBREOFFICE_VERSION}" \
-    && curl --fail --location --retry 3 --silent --show-error \
-        "https://github.com/orioncactus/pretendard/releases/download/v${PRETENDARD_VERSION}/Pretendard-${PRETENDARD_VERSION}.zip" \
-        --output /tmp/pretendard.zip \
-    && echo "${PRETENDARD_SHA256}  /tmp/pretendard.zip" | sha256sum --check --strict \
-    && mkdir -p /usr/local/share/fonts/pretendard /usr/share/doc/pretendard \
-    && unzip -j /tmp/pretendard.zip 'public/static/*.otf' -d /usr/local/share/fonts/pretendard \
-    && unzip -p /tmp/pretendard.zip LICENSE.txt > /usr/share/doc/pretendard/LICENSE.txt \
-    && rm -f /tmp/pretendard.zip \
-    && mkdir -p /usr/local/share/fonts/google-noto /usr/share/doc/google-noto \
-    && curl --fail --location --retry 3 --silent --show-error \
-        "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanskr/NotoSansKR%5Bwght%5D.ttf" \
-        --output /usr/local/share/fonts/google-noto/NotoSansKR.ttf \
-    && echo "${NOTO_SANS_KR_SHA256}  /usr/local/share/fonts/google-noto/NotoSansKR.ttf" | sha256sum --check --strict \
-    && curl --fail --location --retry 3 --silent --show-error \
-        "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanskr/OFL.txt" \
-        --output /usr/share/doc/google-noto/NotoSansKR-OFL.txt \
-    && echo "${NOTO_KR_OFL_SHA256}  /usr/share/doc/google-noto/NotoSansKR-OFL.txt" | sha256sum --check --strict \
     && rm -rf /var/lib/apt/lists/*
-COPY services/document-worker/fonts/spellbook-font-aliases.conf /etc/fonts/conf.d/70-spellbook-font-aliases.conf
-COPY services/document-worker/fonts/spellbook-korean-fallback.conf /etc/fonts/conf.d/99-spellbook-korean-fallback.conf
+COPY services/fonts/spellbook-font-aliases.conf /etc/fonts/conf.d/70-spellbook-font-aliases.conf
+COPY services/fonts/spellbook-korean-fallback.conf /etc/fonts/conf.d/99-spellbook-korean-fallback.conf
 RUN fc-cache -f \
     && test "$(fc-match --format='%{family}' Calibri)" = "Carlito" \
     && test "$(fc-match --format='%{family}' Arial)" = "Liberation Sans" \
