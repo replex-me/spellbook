@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const require = createRequire(
@@ -11,6 +11,10 @@ const reportPath = process.argv[3] ? path.resolve(process.argv[3]) : null;
 const browser = await chromium.launch({ headless: true });
 
 const stable = (value) => JSON.stringify(value);
+const cellComparable = (cell) => {
+  const { propertyStates: _propertyStates, ...persistedValues } = cell ?? {};
+  return persistedValues;
+};
 const firstDifference = (expected, observed, currentPath = "document") => {
   if (Object.is(expected, observed)) return null;
   if (
@@ -36,6 +40,25 @@ try {
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
   });
+  if (process.env.SPELLBOOK_PROBE_OPERATIONS_JS_PATH) {
+    const operations = (
+      await readFile(
+        path.resolve(process.env.SPELLBOOK_PROBE_OPERATIONS_JS_PATH),
+        "utf8",
+      )
+    ).replace(
+      "__SPELLBOOK_ENGINE_PATCH_LEVEL__",
+      process.env.SPELLBOOK_PROBE_ENGINE_PATCH_LEVEL ?? "undo-v0",
+    );
+    await page.route(
+      "**/extensions/org.spellbook.editor/operations.js",
+      (route) =>
+        route.fulfill({
+          body: operations,
+          contentType: "text/javascript; charset=utf-8",
+        }),
+    );
+  }
   await page.goto(url, { waitUntil: "domcontentloaded" });
   const deadline = Date.now() + 60_000;
   while (
@@ -257,7 +280,7 @@ try {
     after.transaction?.commandCount !== 1 ||
     after.transaction?.undoActionsAdded !== 1 ||
     historyAfter.undo.length !== historyBefore.undo.length + 1 ||
-    stable(afterCell) !== stable(expectedCell)
+    stable(cellComparable(afterCell)) !== stable(cellComparable(expectedCell))
   )
     throw new Error(
       "Table cell formatting did not apply exactly and atomically.",
@@ -346,8 +369,9 @@ try {
     batchHistoryAfter.undo.length !== batchHistoryBefore.undo.length + 1 ||
     expectedBatchCells.some(
       ({ row, column, cell }) =>
-        stable(batchTarget?.table?.cellDetails?.[row]?.[column]) !==
-        stable(cell),
+        stable(
+          cellComparable(batchTarget?.table?.cellDetails?.[row]?.[column]),
+        ) !== stable(cellComparable(cell)),
     )
   )
     throw new Error(

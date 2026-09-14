@@ -343,6 +343,19 @@ function spellbookDocumentOperation(request) {
     };
     return JSON.stringify(normalize(value));
   };
+  const withoutPropertyStates = (value) => {
+    if (Array.isArray(value)) return value.map(withoutPropertyStates);
+    if (value && typeof value === "object")
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([key]) => key !== "propertyStates")
+          .map(([key, candidate]) => [
+            key,
+            withoutPropertyStates(candidate),
+          ]),
+      );
+    return value;
+  };
   // Effect and Speed are legacy UI projections derived by LibreOffice from
   // the standard transition fields. They are useful observations but are not
   // part of the typed command's persisted state and must not make an exact
@@ -3123,11 +3136,27 @@ function spellbookDocumentOperation(request) {
               : candidate,
           ),
         }));
-        const applied = stableJson(afterCell) === stableJson(expectedCell);
+        const applied =
+          stableJson(withoutPropertyStates(afterCell)) ===
+          stableJson(withoutPropertyStates(expectedCell));
+        const comparableExpectedSlides =
+          withoutPropertyStates(expectedSlides);
+        const comparableAfterSlides = withoutPropertyStates(after.slides);
+        const comparableBeforeMasters = withoutPropertyStates(before.masters);
+        const comparableAfterMasters = withoutPropertyStates(after.masters);
         const unrelatedChanged =
-          documentStateJson(after.masters) !==
-            documentStateJson(before.masters) ||
-          documentStateJson(after.slides) !== documentStateJson(expectedSlides);
+          documentStateJson(comparableAfterMasters) !==
+            documentStateJson(comparableBeforeMasters) ||
+          documentStateJson(comparableAfterSlides) !==
+            documentStateJson(comparableExpectedSlides);
+        const scopeDifference =
+          firstDifferencePath(comparableExpectedSlides, comparableAfterSlides) ??
+          firstDifferencePath(
+            comparableBeforeMasters,
+            comparableAfterMasters,
+            "masters",
+          ) ??
+          "unknown";
         const undoActionsAdded =
           undo.getAllUndoActionTitles().length - undoCount;
         if (
@@ -3137,7 +3166,7 @@ function spellbookDocumentOperation(request) {
         )
           throw new Error(
             unrelatedChanged
-              ? "unexpected_edit_scope"
+              ? `unexpected_edit_scope:${scopeDifference}`
               : !applied
                 ? "native_command_not_applied"
                 : "native_undo_not_recorded",

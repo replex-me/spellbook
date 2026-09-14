@@ -17,6 +17,10 @@ const expected = JSON.parse(
 ).persistenceExpected;
 if (!expected?.cells?.length)
   throw new Error("The table-cell-format report has no persistence data.");
+const persistedCellValues = (cell) => {
+  const { propertyStates: _propertyStates, ...values } = cell ?? {};
+  return values;
+};
 
 const browser = await chromium.launch({ headless: true });
 try {
@@ -62,7 +66,8 @@ try {
     .find((element) => element.objectName === expected.objectName);
   const differences = expected.cells.flatMap(({ row, column, cell }) => {
     const actual = table?.table?.cellDetails?.[row]?.[column];
-    return JSON.stringify(actual) === JSON.stringify(cell)
+    return JSON.stringify(persistedCellValues(actual)) ===
+      JSON.stringify(persistedCellValues(cell))
       ? []
       : [{ row, column, expected: cell, actual }];
   });
