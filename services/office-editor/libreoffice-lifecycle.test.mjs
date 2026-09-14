@@ -35,6 +35,10 @@ test("source build admission and candidate promotion are separate evidence state
   assert.match(sourceBuild, /Integrated build failed; preserving/u);
   assert.match(sourceBuild, /build_completed=true/u);
   assert.match(sourceBuild, /for cppunit_target in/u);
+  assert.match(sourceBuild, /SPELLBOOK_NATIVE_EVIDENCE_DIR/u);
+  assert.match(sourceBuild, /\$cppunit_target\.log/u);
+  assert.match(sourceBuild, /\$cppunit_target\.status/u);
+  assert.match(sourceBuild, /PIPESTATUS\[0\]/u);
   assert.doesNotMatch(
     sourceBuild,
     /make -C "\$engine_build_root" "\$\{cppunit_targets\[@\]\}"/u,

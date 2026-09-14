@@ -129,8 +129,31 @@ engine_build_root="$source_root/docker/from-source/builddir/online/engine"
 # multiple CppunitTest targets together lets those submakes race while creating
 # the same generated RDB and dependency files. Run suites sequentially while
 # each suite still uses its own normal internal parallelism.
+native_evidence_dir="${SPELLBOOK_NATIVE_EVIDENCE_DIR:-}"
+if [[ -n "$native_evidence_dir" ]]; then
+  mkdir -p "$native_evidence_dir"
+fi
 for cppunit_target in "${cppunit_targets[@]}"; do
-  make -C "$engine_build_root" "$cppunit_target"
+  if [[ -z "$native_evidence_dir" ]]; then
+    make -C "$engine_build_root" "$cppunit_target"
+    continue
+  fi
+  if [[ ! "$cppunit_target" =~ ^[A-Za-z0-9_]+$ ]]; then
+    echo "Invalid Cppunit target name: $cppunit_target" >&2
+    exit 1
+  fi
+  set +e
+  {
+    printf 'Spellbook native suite: %s\n' "$cppunit_target"
+    make -C "$engine_build_root" "$cppunit_target"
+  } 2>&1 | tee "$native_evidence_dir/$cppunit_target.log"
+  cppunit_status="${PIPESTATUS[0]}"
+  set -e
+  printf '%s\n' "$cppunit_status" > "$native_evidence_dir/$cppunit_target.status"
+  if [[ "$cppunit_status" != 0 ]]; then
+    echo "$cppunit_target failed with exit code $cppunit_status." >&2
+    exit "$cppunit_status"
+  fi
 done
 
 docker image inspect "$image_repository:$image_tag" >/dev/null
