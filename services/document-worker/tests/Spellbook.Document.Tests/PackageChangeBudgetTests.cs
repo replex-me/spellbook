@@ -239,6 +239,45 @@ public sealed class PackageChangeBudgetTests : IDisposable
     }
 
     [Fact]
+    public void IgnoresOnlyMasterLayoutDynamicPlaceholderCacheText()
+    {
+        var source = TestPresentationFactory.Create(directory);
+        var baseline = Path.Combine(directory, "placeholder-cache-baseline.pptx");
+        var candidate = Path.Combine(directory, "placeholder-cache-candidate.pptx");
+        File.Copy(source, baseline);
+        File.Copy(source, candidate);
+        AddSlideLayoutFixture(baseline);
+        AddSlideLayoutFixture(candidate);
+        AddDynamicLayoutPlaceholders(baseline, "<date/time>", "<footer>", "<number>");
+        AddDynamicLayoutPlaceholders(candidate, " ", " ", "1");
+
+        var ignored = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(ContractVersions.Current, []));
+        Assert.True(ignored.Valid, string.Join("\n", ignored.Errors));
+        Assert.Empty(ignored.Changes);
+
+        using (var archive = ZipFile.Open(candidate, ZipArchiveMode.Update))
+        {
+            var part = FirstXmlPart(archive, "ppt/slideLayouts/");
+            var layout = ReadXml(archive, part);
+            XNamespace presentation = "http://schemas.openxmlformats.org/presentationml/2006/main";
+            layout.Descendants(presentation + "ph")
+                .Single(element => (string?)element.Attribute("type") == "sldNum")
+                .SetAttributeValue("type", "body");
+            Replace(archive, part, layout);
+        }
+
+        var semanticChange = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(ContractVersions.Current, []));
+        Assert.False(semanticChange.Valid);
+        Assert.Equal("slide_layout_parts", Assert.Single(semanticChange.Changes).Category);
+    }
+
+    [Fact]
     public void KeepsSlideObjectIdsExactBecauseAnimationsCanTargetThem()
     {
         var baseline = TestPresentationFactory.Create(directory);
@@ -400,6 +439,56 @@ public sealed class PackageChangeBudgetTests : IDisposable
                                     new XElement(drawing + "bodyPr"),
                                     new XElement(drawing + "lstStyle"),
                                 new XElement(drawing + "p"))))))));
+    }
+
+    private static void AddDynamicLayoutPlaceholders(
+        string path,
+        string dateText,
+        string footerText,
+        string slideNumberText)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        var part = FirstXmlPart(archive, "ppt/slideLayouts/");
+        var layout = ReadXml(archive, part);
+        XNamespace presentation = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        XNamespace drawing = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        var shapeTree = layout.Descendants(presentation + "spTree").Single();
+        var placeholders = new[]
+        {
+            (Type: "dt", FieldType: "datetime", Text: dateText),
+            (Type: "ftr", FieldType: (string?)null, Text: footerText),
+            (Type: "sldNum", FieldType: "slidenum", Text: slideNumberText),
+        };
+        foreach (var (type, fieldType, text) in placeholders)
+        {
+            var textNode = fieldType is null
+                ? new XElement(drawing + "r", new XElement(drawing + "t", text))
+                : new XElement(
+                    drawing + "fld",
+                    new XAttribute("id", "{11111111-1111-1111-1111-111111111111}"),
+                    new XAttribute("type", fieldType),
+                    new XElement(drawing + "t", text));
+            shapeTree.Add(
+                new XElement(
+                    presentation + "sp",
+                    new XElement(
+                        presentation + "nvSpPr",
+                        new XElement(
+                            presentation + "cNvPr",
+                            new XAttribute("id", (shapeTree.Elements(presentation + "sp").Count() + 10).ToString()),
+                            new XAttribute("name", $"{type} placeholder")),
+                        new XElement(presentation + "cNvSpPr"),
+                        new XElement(
+                            presentation + "nvPr",
+                            new XElement(presentation + "ph", new XAttribute("type", type)))),
+                    new XElement(presentation + "spPr"),
+                    new XElement(
+                        presentation + "txBody",
+                        new XElement(drawing + "bodyPr"),
+                        new XElement(drawing + "lstStyle"),
+                        new XElement(drawing + "p", textNode))));
+        }
+        Replace(archive, part, layout);
     }
 
     private static void AddCollaboraPageGuid(string path, string guid)

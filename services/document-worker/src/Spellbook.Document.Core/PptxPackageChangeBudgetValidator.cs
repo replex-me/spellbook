@@ -229,6 +229,33 @@ public sealed class PptxPackageChangeBudgetValidator
                 nonVisualProperties.SetAttributeValue("id", (++objectIndex).ToString());
         }
 
+        // Date, footer and slide-number placeholders in master/layout parts
+        // carry a cached display value. Independent Office sessions can
+        // replace the authoring prompt (for example, "<number>") with the
+        // evaluated value (for example, "1") after a slide-layout change.
+        // The placeholder kind, field type, run structure and formatting are
+        // the persisted semantics; the cache text is not. Normalize only the
+        // text nodes owned by these three placeholder kinds and only in
+        // master/layout parts so ordinary authored slide text remains exact.
+        if (part.StartsWith("ppt/slideLayouts/", StringComparison.Ordinal)
+            || part.StartsWith("ppt/slideMasters/", StringComparison.Ordinal))
+        {
+            foreach (var shape in document.Descendants(PresentationNamespace + "sp"))
+            {
+                var placeholderType = (string?)shape
+                    .Descendants(PresentationNamespace + "ph")
+                    .FirstOrDefault()
+                    ?.Attribute("type");
+                if (placeholderType is not ("dt" or "ftr" or "sldNum")) continue;
+
+                var textIndex = 0;
+                foreach (var text in shape
+                    .Descendants(PresentationNamespace + "txBody")
+                    .Descendants(DrawingNamespace + "t"))
+                    text.Value = $"__office_placeholder_cache_{++textIndex}__";
+            }
+        }
+
         if (part == "docProps/core.xml")
         {
             foreach (var property in document.Root?.Elements() ?? [])
