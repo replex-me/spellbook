@@ -35,7 +35,24 @@ app.MapPost("/internal/jobs/scan-render", (
         var adapter = RequireAdapter(adapters, job.FormatId);
         using var workspace = new JobWorkspace(job.JobId);
         var inputPath = Path.Combine(workspace.Path, $"source{adapter.FileExtension}");
-        await storage.DownloadAsync(job.InputObject, inputPath, cancellationToken);
+        if (adapter.FormatId == "pptx" && !string.IsNullOrWhiteSpace(job.BaselineInputObject))
+        {
+            var incomingPath = Path.Combine(workspace.Path, $"incoming{adapter.FileExtension}");
+            var baselinePath = Path.Combine(workspace.Path, $"baseline{adapter.FileExtension}");
+            await storage.DownloadAsync(job.InputObject, incomingPath, cancellationToken);
+            await storage.DownloadAsync(job.BaselineInputObject, baselinePath, cancellationToken);
+            var preservation = new PptxUnsupportedFeaturePreserver()
+                .Preserve(baselinePath, incomingPath, inputPath);
+            if (!string.Equals(
+                preservation.CandidateDocumentSha256,
+                preservation.OutputDocumentSha256,
+                StringComparison.Ordinal))
+                await storage.UploadFileAsync(job.InputObject, inputPath, cancellationToken);
+        }
+        else
+        {
+            await storage.DownloadAsync(job.InputObject, inputPath, cancellationToken);
+        }
         var scan = adapter.Scan(inputPath);
         var graph = adapter.Inspect(inputPath, scan);
         var images = await adapter.RenderAsync(inputPath, Path.Combine(workspace.Path, "slides"), cancellationToken);
@@ -211,7 +228,7 @@ static async Task UploadImagesAsync(LocalObjectStore storage, string prefix, IRe
         await storage.UploadFileAsync($"{prefix}/slides/slide-{index + 1}.png", images[index], cancellationToken);
 }
 
-public sealed record ScanRenderJob(string JobId, string CallbackUrl, string StorageNamespace, string FormatId, string InputObject, string OutputPrefix);
+public sealed record ScanRenderJob(string JobId, string CallbackUrl, string StorageNamespace, string FormatId, string InputObject, string OutputPrefix, string? BaselineInputObject = null);
 public sealed record PatchRenderJob(string JobId, string CallbackUrl, string StorageNamespace, string FormatId, string InputObject, string OutputDocumentObject, string OutputPrefix, EditCommandBatch Command, Dictionary<string, string>? AssetObjects = null);
 public sealed record WorkerOutputs(string GraphObject, string? ScanObject, string? ValidationObject, string? DocumentObject, int SlideCount, string DocumentSha256);
 public sealed record WorkerCallback(string JobId, string Status, WorkerOutputs? Outputs, string? Error);

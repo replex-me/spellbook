@@ -79,6 +79,17 @@ switch (args[0])
         if (!report.Valid) return 1;
         break;
     }
+    case "preserve-unsupported" when args.Length == 5:
+    {
+        var report = new PptxUnsupportedFeaturePreserver().Preserve(args[1], args[2], args[3]);
+        await WriteJson(args[4], report, DocumentJsonContext.Default.UnsupportedFeaturePreservationReport);
+        await JsonSerializer.SerializeAsync(
+            Console.OpenStandardOutput(),
+            report,
+            DocumentJsonContext.Default.UnsupportedFeaturePreservationReport);
+        Console.WriteLine();
+        break;
+    }
     default:
         Usage();
         return 2;
@@ -93,4 +104,4 @@ static async Task WriteJson<T>(string path, T value, System.Text.Json.Serializat
 }
 
 static void Usage() => Console.Error.WriteLine(
-    "Usage: inspect <source.pptx> <graph.json> | patch <source.pptx> <command.json> <candidate.pptx> | smoke-replace-first-text <source.pptx> <candidate.pptx> <text> | render <source.pptx> <output-dir> | extract-embedded-fonts <source.pptx> <output-dir> | validate-change-budget <baseline.pptx> <candidate.pptx> <budget.json>");
+    "Usage: inspect <source.pptx> <graph.json> | patch <source.pptx> <command.json> <candidate.pptx> | smoke-replace-first-text <source.pptx> <candidate.pptx> <text> | render <source.pptx> <output-dir> | extract-embedded-fonts <source.pptx> <output-dir> | validate-change-budget <baseline.pptx> <candidate.pptx> <budget.json> | preserve-unsupported <baseline.pptx> <candidate.pptx> <output.pptx> <report.json>");

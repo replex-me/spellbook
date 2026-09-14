@@ -225,6 +225,15 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
       }),
       f.documentId,
     );
+    expect(workers.enqueueWorkerJob.mock.calls.at(-1)?.[3]).toEqual(
+      expect.objectContaining({
+        inputObject: expect.stringContaining(
+          `/documents/${f.documentId}/versions/`,
+        ),
+        baselineInputObject: "native/document.pptx",
+        nativeSessionId: f.nativeSessionId,
+      }),
+    );
     expect(storage.putObject).toHaveBeenCalledWith(
       expect.stringContaining(`/documents/${f.documentId}/versions/`),
       savedBytes,

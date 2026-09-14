@@ -318,6 +318,7 @@ export async function requireWopi(
   WopiClaims & {
     fileName: string;
     documentObject: string;
+    preservationObject: string;
     versionId: string;
     lock: string | null;
   }
@@ -334,6 +335,7 @@ export async function requireWopi(
   const [row] = await db()`
     select s.id, s.wopi_lock, s.working_version_id, d.file_name,
       coalesce(working.document_object,current.document_object) as document_object,
+      current.document_object as preservation_object,
       coalesce(working.id,current.id) as version_id
     from spellbook_native_sessions s
     join spellbook_documents d on d.id=s.document_id and d.account_id=s.account_id
@@ -348,6 +350,7 @@ export async function requireWopi(
     ...claims,
     fileName: row.file_name,
     documentObject: row.document_object,
+    preservationObject: row.preservation_object,
     versionId: row.version_id,
     lock: row.wopi_lock,
   };
@@ -516,6 +519,7 @@ export async function wopiPutFile(
     storageNamespace: storageNamespace(),
     formatId: currentPresentationFormat.id,
     inputObject: object,
+    baselineInputObject: context.preservationObject,
     outputPrefix,
     nativeSessionId: context.sessionId,
   };

@@ -41,6 +41,7 @@ public sealed class PptxSafetyScanner
         var hasPresentation = false;
         var slideCount = 0;
         var hasExternalRelationships = false;
+        var hasActiveXControls = false;
         var brokenInternalRelationships = 0;
         var riskyExternalRelationshipSourceParts = new HashSet<string>(StringComparer.Ordinal);
         var warnings = new List<string>();
@@ -70,6 +71,9 @@ public sealed class PptxSafetyScanner
 
             hasContentTypes |= entry.FullName.Equals("[Content_Types].xml", StringComparison.Ordinal);
             hasPresentation |= entry.FullName.Equals("ppt/presentation.xml", StringComparison.Ordinal);
+            hasActiveXControls |= entry.FullName.StartsWith("ppt/activeX/", StringComparison.Ordinal)
+                || entry.FullName.StartsWith("ppt/drawings/", StringComparison.Ordinal)
+                    && entry.FullName.EndsWith(".vml", StringComparison.OrdinalIgnoreCase);
             if (entry.FullName.StartsWith("ppt/slides/", StringComparison.Ordinal) &&
                 entry.FullName.EndsWith(".xml", StringComparison.Ordinal) &&
                 !entry.FullName.Contains("/_rels/", StringComparison.Ordinal))
@@ -107,6 +111,10 @@ public sealed class PptxSafetyScanner
         if (brokenInternalRelationships > 0)
         {
             warnings.Add($"대상이 없거나 이름이 정확히 일치하지 않는 내부 관계 {brokenInternalRelationships}개를 발견했습니다. 정적 슬라이드 검사는 계속하지만 해당 부가 콘텐츠는 보증하지 않습니다.");
+        }
+        if (hasActiveXControls)
+        {
+            warnings.Add("ActiveX 컨트롤은 웹에서 직접 편집할 수 없지만 저장할 때 원본 패키지 요소를 그대로 보존합니다.");
         }
 
         return new DocumentScan(

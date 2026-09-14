@@ -144,7 +144,8 @@ public sealed class PresentationInspector
         var warnings = new List<string>();
         var elements = new List<ElementNode>();
         var zIndex = 0;
-        var hasUnsupported = hasExternalContentRisk || hasFontRisk;
+        var hasActiveXControls = slide.Descendants().Any(element => element.Name.LocalName == "controls");
+        var hasUnsupported = hasExternalContentRisk || hasFontRisk || hasActiveXControls;
 
         foreach (var shape in shapeTree.Elements().Where(element => KnownElementKinds.Contains(element.Name.LocalName)))
         {
@@ -239,6 +240,10 @@ public sealed class PresentationInspector
         if (hasExternalContentRisk)
         {
             warnings.Add("외부 연결 콘텐츠가 포함되어 이 슬라이드의 렌더링 충실도는 B 등급입니다.");
+        }
+        if (hasActiveXControls)
+        {
+            warnings.Add("ActiveX 컨트롤은 웹에서 직접 편집할 수 없지만 다운로드 파일에는 보존됩니다.");
         }
 
         return new SlideGraph(

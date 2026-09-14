@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   classifyScaledDimensionComparison,
+  isTransientCorpusProbeFailure,
+  stableSlideSemantics,
   summarizeEditorCorpus,
 } from "./evaluate-office-editor-corpus.mjs";
 
@@ -28,6 +30,51 @@ test("editor corpus comparison permits resolution scaling only at the same aspec
     ).mode,
     "mismatch",
   );
+  assert.equal(
+    classifyScaledDimensionComparison(
+      { width: 1360, height: 908 },
+      { width: 1280, height: 853 },
+    ).mode,
+    "scale",
+  );
+});
+
+test("editor corpus persistence ignores runtime master projections but keeps slide semantics", () => {
+  const state = {
+    slides: [
+      {
+        name: "Slide 1",
+        hidden: false,
+        layout: 20,
+        masterName: "Default",
+        elementCount: 3,
+      },
+    ],
+  };
+  assert.deepEqual(stableSlideSemantics(state), [
+    { name: "Slide 1", hidden: false, layout: 20, elementCount: 3 },
+  ]);
+});
+
+test("editor corpus retries only connection and read-only observation timeouts", () => {
+  assert.equal(
+    isTransientCorpusProbeFailure(
+      new Error("Native editor extension did not connect."),
+    ),
+    true,
+  );
+  assert.equal(
+    isTransientCorpusProbeFailure(
+      new Error(
+        "편집 응답을 확인하지 못했습니다. 명령을 자동 재실행하지 않았습니다.",
+      ),
+    ),
+    true,
+  );
+  assert.equal(
+    isTransientCorpusProbeFailure(new Error("PPTX persistence failed")),
+    false,
+  );
 });
 
 test("editor corpus summary separates PowerPoint fidelity from save-reopen drift", () => {
@@ -46,11 +93,24 @@ test("editor corpus summary separates PowerPoint fidelity from save-reopen drift
         },
       ],
     },
+    {
+      status: "passed",
+      slideCount: 1,
+      evidenceGaps: [{ code: "missing_powerpoint_reference" }],
+      slides: [
+        {
+          powerPointComparison: null,
+          roundtripComparison: { normalizedRmse: 0.02 },
+        },
+      ],
+    },
     { status: "failed", slideCount: 0, slides: [] },
   ]);
-  assert.equal(summary.passedDecks, 1);
+  assert.equal(summary.passedDecks, 2);
   assert.equal(summary.failedDecks, 1);
-  assert.equal(summary.slides, 2);
+  assert.equal(summary.evidenceGapDecks, 1);
+  assert.equal(summary.evidenceGaps, 1);
+  assert.equal(summary.slides, 3);
   assert.equal(summary.referenceComparison.p50Rmse, 0.2);
   assert.equal(summary.referenceComparison.p95Rmse, 0.4);
   assert.equal(summary.saveReopenComparison.maxRmse, 0.03);

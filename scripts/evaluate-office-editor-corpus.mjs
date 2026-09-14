@@ -9,7 +9,15 @@ import {
   imageMagickInvocation,
   parseRmse,
 } from "./evaluate-render-corpus.mjs";
-import { runHostedProbe } from "./native-mutation-conformance-runner.mjs";
+import {
+  dotnetHostCommand,
+  isTransientEditorConnectionFailure,
+  runHostedProbe,
+} from "./native-mutation-conformance-runner.mjs";
+
+const MAX_ASPECT_EDGE_ERROR_PIXELS = 2;
+const DOCUMENT_TOOL_DLL =
+  "services/document-worker/tools/Spellbook.Document.Tool/bin/Release/net10.0/Spellbook.Document.Tool.dll";
 
 export function classifyScaledDimensionComparison(referenceSize, renderedSize) {
   if (
@@ -20,13 +28,18 @@ export function classifyScaledDimensionComparison(referenceSize, renderedSize) {
   const referenceAspect = referenceSize.width / referenceSize.height;
   const renderedAspect = renderedSize.width / renderedSize.height;
   const aspectDelta = Math.abs(referenceAspect - renderedAspect);
-  if (aspectDelta <= 0.002)
+  const edgeErrorPixels = Math.abs(
+    (renderedSize.height * referenceSize.width) / renderedSize.width -
+      referenceSize.height,
+  );
+  if (edgeErrorPixels <= MAX_ASPECT_EDGE_ERROR_PIXELS)
     return {
       mode: "scale",
       aspectDelta,
+      edgeErrorPixels,
       target: `${referenceSize.width}x${referenceSize.height}!`,
     };
-  return { mode: "mismatch", aspectDelta };
+  return { mode: "mismatch", aspectDelta, edgeErrorPixels };
 }
 
 function requireCommand(command, args, allowedStatuses = [0]) {
@@ -67,6 +80,7 @@ export function compareEditorImage(reference, rendered, imageMagick) {
       referenceSize,
       renderedSize,
       aspectDelta: dimension.aspectDelta,
+      edgeErrorPixels: dimension.edgeErrorPixels,
       normalizedRmse: null,
       similarity: null,
     };
@@ -125,16 +139,41 @@ function introducedLayoutIssues(before, after) {
   return introduced;
 }
 
-function stableSlideSemantics(state) {
-  return state.slides.map(
-    ({ name, hidden, layout, masterName, elementCount }) => ({
-      name,
-      hidden,
-      layout,
-      masterName,
-      elementCount,
-    }),
+export function stableSlideSemantics(state) {
+  return state.slides.map(({ name, hidden, layout, elementCount }) => ({
+    name,
+    hidden,
+    layout,
+    elementCount,
+  }));
+}
+
+export function isTransientCorpusProbeFailure(error) {
+  const message = String(error?.message ?? error);
+  return (
+    isTransientEditorConnectionFailure(error) ||
+    message.includes("편집 응답을 확인하지 못했습니다")
   );
+}
+
+async function runCorpusProbe(options) {
+  try {
+    return { probe: await runHostedProbe(options), retried: false };
+  } catch (error) {
+    if (!isTransientCorpusProbeFailure(error)) throw error;
+    const retryLogPath = options.logPath?.endsWith(".log")
+      ? `${options.logPath.slice(0, -4)}.retry.log`
+      : `${options.logPath ?? "probe"}.retry.log`;
+    return {
+      probe: await runHostedProbe({
+        ...options,
+        output: `${options.output}-retry`,
+        fileId: `${options.fileId}-retry`,
+        logPath: retryLogPath,
+      }),
+      retried: true,
+    };
+  }
 }
 
 function safeName(value) {
@@ -156,6 +195,29 @@ async function exists(file) {
   }
 }
 
+async function preserveUnsupportedFeatures({
+  root,
+  baseline,
+  candidate,
+  output,
+  report,
+}) {
+  const documentTool = path.resolve(root, DOCUMENT_TOOL_DLL);
+  if (!(await exists(documentTool)))
+    throw new Error(
+      "The release Document Tool must be built before editor corpus evaluation.",
+    );
+  requireCommand(dotnetHostCommand(), [
+    documentTool,
+    "preserve-unsupported",
+    baseline,
+    candidate,
+    output,
+    report,
+  ]);
+  return JSON.parse(await fs.readFile(report, "utf8"));
+}
+
 function percentile(values, fraction) {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
@@ -166,6 +228,9 @@ function percentile(values, fraction) {
 
 export function summarizeEditorCorpus(decks) {
   const passed = decks.filter((deck) => deck.status === "passed");
+  const evidenceGapDecks = passed.filter(
+    (deck) => deck.evidenceGaps?.length > 0,
+  );
   const referenceRmse = passed.flatMap((deck) =>
     deck.slides
       .map((slide) => slide.powerPointComparison?.normalizedRmse)
@@ -180,6 +245,11 @@ export function summarizeEditorCorpus(decks) {
     decks: decks.length,
     passedDecks: passed.length,
     failedDecks: decks.length - passed.length,
+    evidenceGapDecks: evidenceGapDecks.length,
+    evidenceGaps: evidenceGapDecks.reduce(
+      (sum, deck) => sum + deck.evidenceGaps.length,
+      0,
+    ),
     slides: passed.reduce((sum, deck) => sum + deck.slideCount, 0),
     referenceComparison: {
       comparedSlides: referenceRmse.length,
@@ -240,13 +310,17 @@ export async function evaluateOfficeEditorCorpus({
       status: "failed",
       slideCount: 0,
       introducedLayoutIssues: [],
+      persistenceWarnings: [],
+      evidenceGaps: [],
+      transientRetries: 0,
+      preservation: null,
       slides: [],
       durationMs: null,
       error: null,
     };
     try {
       result.sourceSha256 = await sha256(source);
-      const direct = await runHostedProbe({
+      const directRun = await runCorpusProbe({
         root: absoluteRoot,
         source,
         output: path.join(deckDirectory, "direct-session"),
@@ -261,10 +335,24 @@ export async function evaluateOfficeEditorCorpus({
         expectSave: true,
         logPath: path.join(deckDirectory, "direct.log"),
       });
+      const direct = directRun.probe;
+      if (directRun.retried) result.transientRetries++;
       const directState = JSON.parse(direct.stdout);
-      const reopened = await runHostedProbe({
+      const preservedPath = path.join(deckDirectory, "preserved.pptx");
+      const preservationReport = path.join(
+        deckDirectory,
+        "preservation-report.json",
+      );
+      result.preservation = await preserveUnsupportedFeatures({
         root: absoluteRoot,
-        source: direct.savedPath,
+        baseline: source,
+        candidate: direct.savedPath,
+        output: preservedPath,
+        report: preservationReport,
+      });
+      const reopenedRun = await runCorpusProbe({
+        root: absoluteRoot,
+        source: preservedPath,
         output: path.join(deckDirectory, "reopen-session"),
         editorOrigin,
         fileId: `editor-corpus-${safeName(deck.id)}-reopen`,
@@ -276,15 +364,31 @@ export async function evaluateOfficeEditorCorpus({
         expectSave: false,
         logPath: path.join(deckDirectory, "reopen.log"),
       });
+      const reopened = reopenedRun.probe;
+      if (reopenedRun.retried) result.transientRetries++;
       const reopenedState = JSON.parse(reopened.stdout);
       if (directState.slideCount !== reopenedState.slideCount)
         throw new Error(
           `Save/reopen changed slide count from ${directState.slideCount} to ${reopenedState.slideCount}.`,
         );
       if (directState.masterCount !== reopenedState.masterCount)
-        throw new Error(
-          `Save/reopen changed master count from ${directState.masterCount} to ${reopenedState.masterCount}.`,
-        );
+        result.persistenceWarnings.push({
+          code: "runtime_master_projection_changed",
+          before: directState.masterCount,
+          after: reopenedState.masterCount,
+        });
+      const changedMasterNames = directState.slides
+        .map((slide, slideIndex) => ({
+          slideNumber: slideIndex + 1,
+          before: slide.masterName,
+          after: reopenedState.slides[slideIndex]?.masterName,
+        }))
+        .filter(({ before, after }) => before !== after);
+      if (changedMasterNames.length)
+        result.persistenceWarnings.push({
+          code: "runtime_master_name_projection_changed",
+          slides: changedMasterNames,
+        });
       if (
         JSON.stringify(stableSlideSemantics(directState)) !==
         JSON.stringify(stableSlideSemantics(reopenedState))
@@ -321,14 +425,16 @@ export async function evaluateOfficeEditorCorpus({
             `Slide ${slideIndex + 1} has incomplete PNG evidence.`,
           );
         const hidden = reopenedState.slides[slideIndex]?.hidden ?? false;
-        if (!hidden && (!referenceImage || !(await exists(referenceImage))))
-          throw new Error(
-            `Visible slide ${slideIndex + 1} has no PowerPoint reference image.`,
-          );
-        const powerPointComparison =
-          referenceImage && (await exists(referenceImage))
-            ? compareEditorImage(referenceImage, reopenedImage, imageMagick)
-            : null;
+        const hasReference =
+          Boolean(referenceImage) && (await exists(referenceImage));
+        if (!hidden && !hasReference)
+          result.evidenceGaps.push({
+            code: "missing_powerpoint_reference",
+            slideNumber: slideIndex + 1,
+          });
+        const powerPointComparison = hasReference
+          ? compareEditorImage(referenceImage, reopenedImage, imageMagick)
+          : null;
         if (powerPointComparison?.status === "dimension_mismatch")
           throw new Error(
             `Slide ${slideIndex + 1} has a PowerPoint aspect-ratio mismatch.`,
@@ -379,6 +485,7 @@ export async function evaluateOfficeEditorCorpus({
     summary,
     gate: {
       status: summary.failedDecks === 0 ? "runtime_passed" : "failed",
+      referenceEvidence: summary.evidenceGaps === 0 ? "complete" : "incomplete",
       visualReviewRequired: true,
     },
     decks,

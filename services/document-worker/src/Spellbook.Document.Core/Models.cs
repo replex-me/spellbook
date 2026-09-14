@@ -102,6 +102,14 @@ public sealed record PackageChangeBudgetReport(
     IReadOnlyList<PackagePartChange> Changes,
     IReadOnlyList<string> Errors);
 
+public sealed record UnsupportedFeaturePreservationReport(
+    string ContractVersion,
+    string BaselineDocumentSha256,
+    string CandidateDocumentSha256,
+    string OutputDocumentSha256,
+    IReadOnlyList<int> RestoredSlideIndexes,
+    IReadOnlyList<string> CopiedParts);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DocumentScan))]
 [JsonSerializable(typeof(ElementGraph))]
@@ -110,4 +118,5 @@ public sealed record PackageChangeBudgetReport(
 [JsonSerializable(typeof(ValidationReport))]
 [JsonSerializable(typeof(PackageChangeBudgetRequest))]
 [JsonSerializable(typeof(PackageChangeBudgetReport))]
+[JsonSerializable(typeof(UnsupportedFeaturePreservationReport))]
 public partial class DocumentJsonContext : JsonSerializerContext;

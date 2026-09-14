@@ -1025,6 +1025,47 @@ public sealed class DocumentEngineTests : IDisposable
         Assert.Contains(slide.Warnings, warning => warning.Contains("외부 연결 콘텐츠", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void UnsupportedFeaturePreserverRestoresUntouchedActiveXPackageClosure()
+    {
+        var baseline = TestPresentationFactory.Create(directory);
+        AddActiveXFixture(baseline);
+        var candidate = Path.Combine(directory, "activex-candidate.pptx");
+        File.Copy(baseline, candidate);
+        StripActiveXFixture(candidate);
+        var output = Path.Combine(directory, "activex-preserved.pptx");
+
+        var report = new PptxUnsupportedFeaturePreserver().Preserve(baseline, candidate, output);
+
+        Assert.Equal([0], report.RestoredSlideIndexes);
+        Assert.Equal(
+            [
+                "ppt/activeX/activeX1.bin",
+                "ppt/activeX/activeX1.xml",
+                "ppt/drawings/vmlDrawing1.vml",
+                "ppt/media/control1.wmf"
+            ],
+            report.CopiedParts);
+        using (var archive = ZipFile.OpenRead(output))
+        {
+            var slide = ReadXml(archive, "ppt/slides/slide1.xml");
+            Assert.Single(slide.Descendants(), element => element.Name.LocalName == "controls");
+            Assert.NotNull(archive.GetEntry("ppt/activeX/activeX1.bin"));
+            Assert.NotNull(archive.GetEntry("ppt/drawings/vmlDrawing1.vml"));
+            Assert.NotNull(archive.GetEntry("ppt/media/control1.wmf"));
+            var relationships = ReadXml(archive, "ppt/slides/_rels/slide1.xml.rels");
+            Assert.Contains(
+                relationships.Descendants(),
+                element => ((string?)element.Attribute("Type"))?.EndsWith("/control", StringComparison.Ordinal) == true);
+        }
+        var scan = new PptxSafetyScanner().Scan(output);
+        Assert.Contains(scan.Warnings, warning => warning.Contains("ActiveX", StringComparison.Ordinal));
+        var graph = new PresentationInspector(new RendererFontEnvironment(true, ["Fixture Sans"]))
+            .Inspect(output, scan);
+        Assert.Equal("B", Assert.Single(graph.Slides).SupportGrade);
+        Assert.Contains(graph.Slides[0].Warnings, warning => warning.Contains("ActiveX", StringComparison.Ordinal));
+    }
+
     public void Dispose()
     {
         Directory.Delete(directory, true);
@@ -1125,6 +1166,91 @@ public sealed class DocumentEngineTests : IDisposable
             new XAttribute("Type", type),
             new XAttribute("Target", target)));
         Replace(archive, relationshipPath, relationships);
+    }
+
+    private static void AddActiveXFixture(string path)
+    {
+        XNamespace presentation = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        XNamespace drawing = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        XNamespace officeRelationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        XNamespace packageRelationships = "http://schemas.openxmlformats.org/package/2006/relationships";
+        XNamespace contentTypes = "http://schemas.openxmlformats.org/package/2006/content-types";
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        var slide = ReadXml(archive, "ppt/slides/slide1.xml");
+        var commonSlide = slide.Root!.Element(presentation + "cSld")!;
+        var controls = new XElement(
+            presentation + "controls",
+            new XElement(
+                presentation + "control",
+                new XAttribute("name", "CheckBox1"),
+                new XAttribute(officeRelationships + "id", "rIdActiveX"),
+                new XElement(
+                    presentation + "pic",
+                    new XElement(
+                        presentation + "blipFill",
+                        new XElement(drawing + "blip", new XAttribute(officeRelationships + "embed", "rIdControlImage"))))));
+        var extensions = commonSlide.Element(presentation + "extLst");
+        if (extensions is null) commonSlide.Add(controls);
+        else extensions.AddBeforeSelf(controls);
+        Replace(archive, "ppt/slides/slide1.xml", slide);
+
+        var slideRelationships = archive.GetEntry("ppt/slides/_rels/slide1.xml.rels") is null
+            ? new XDocument(new XElement(packageRelationships + "Relationships"))
+            : ReadXml(archive, "ppt/slides/_rels/slide1.xml.rels");
+        slideRelationships.Root!.Add(
+            new XElement(packageRelationships + "Relationship",
+                new XAttribute("Id", "rIdActiveX"),
+                new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/control"),
+                new XAttribute("Target", "../activeX/activeX1.xml")),
+            new XElement(packageRelationships + "Relationship",
+                new XAttribute("Id", "rIdControlImage"),
+                new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"),
+                new XAttribute("Target", "../media/control1.wmf")),
+            new XElement(packageRelationships + "Relationship",
+                new XAttribute("Id", "rIdVml"),
+                new XAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing"),
+                new XAttribute("Target", "../drawings/vmlDrawing1.vml")));
+        Replace(archive, "ppt/slides/_rels/slide1.xml.rels", slideRelationships);
+
+        Write(archive, "ppt/activeX/activeX1.xml", "<ax:ocx xmlns:ax=\"http://schemas.microsoft.com/office/2006/activeX\" r:id=\"rId1\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" />");
+        Write(archive, "ppt/activeX/activeX1.bin", [1, 2, 3, 4]);
+        Write(archive, "ppt/activeX/_rels/activeX1.xml.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary\" Target=\"activeX1.bin\" /></Relationships>");
+        Write(archive, "ppt/media/control1.wmf", [5, 6, 7, 8]);
+        Write(archive, "ppt/drawings/vmlDrawing1.vml", "<xml xmlns:v=\"urn:schemas-microsoft-com:vml\"><v:shape id=\"control1\" /></xml>");
+        Write(archive, "ppt/drawings/_rels/vmlDrawing1.vml.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/control1.wmf\" /></Relationships>");
+
+        var types = ReadXml(archive, "[Content_Types].xml");
+        types.Root!.Add(
+            new XElement(contentTypes + "Default", new XAttribute("Extension", "bin"), new XAttribute("ContentType", "application/vnd.ms-office.activeX")),
+            new XElement(contentTypes + "Default", new XAttribute("Extension", "wmf"), new XAttribute("ContentType", "image/x-wmf")),
+            new XElement(contentTypes + "Default", new XAttribute("Extension", "vml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.vmlDrawing")),
+            new XElement(contentTypes + "Override", new XAttribute("PartName", "/ppt/activeX/activeX1.xml"), new XAttribute("ContentType", "application/vnd.ms-office.activeX+xml")));
+        Replace(archive, "[Content_Types].xml", types);
+    }
+
+    private static void StripActiveXFixture(string path)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        foreach (var entry in archive.Entries
+            .Where(entry => entry.FullName.StartsWith("ppt/activeX/", StringComparison.Ordinal)
+                || entry.FullName.StartsWith("ppt/drawings/", StringComparison.Ordinal)
+                || entry.FullName == "ppt/media/control1.wmf")
+            .ToList())
+            entry.Delete();
+        var slide = ReadXml(archive, "ppt/slides/slide1.xml");
+        slide.Descendants().First(element => element.Name.LocalName == "controls").Remove();
+        Replace(archive, "ppt/slides/slide1.xml", slide);
+        var relationships = ReadXml(archive, "ppt/slides/_rels/slide1.xml.rels");
+        relationships.Root!.Elements()
+            .Where(element => new[] { "rIdActiveX", "rIdControlImage", "rIdVml" }.Contains((string?)element.Attribute("Id")))
+            .Remove();
+        Replace(archive, "ppt/slides/_rels/slide1.xml.rels", relationships);
+        var types = ReadXml(archive, "[Content_Types].xml");
+        types.Root!.Elements()
+            .Where(element => new[] { "bin", "wmf", "vml" }.Contains((string?)element.Attribute("Extension"))
+                || (string?)element.Attribute("PartName") == "/ppt/activeX/activeX1.xml")
+            .Remove();
+        Replace(archive, "[Content_Types].xml", types);
     }
 
     private static byte[] CreateUncompressedEot(ushort permissions, bool supportsHangul)
