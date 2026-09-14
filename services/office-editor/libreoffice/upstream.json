@@ -9,11 +9,11 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v16",
+  "patchLevel": "undo-v17",
   "sourcePatchSeriesReady": true,
-  "sourceCandidateReady": true,
-  "patchSeriesSha256": "722a6dd9ce1a81cd389a4c0e000228bc50318a4ed3722f3d7557d84a31aa0b1a",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v16-r1-candidate",
+  "sourceCandidateReady": false,
+  "patchSeriesSha256": "6bcf534fd5e3e3caa88d2edd909dadaef5311a8d9f1dceb442d90aab2a4f10ab",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v17-r1-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -48,7 +48,8 @@
     "patches/0031-observable-text-and-layout-identity.patch",
     "patches/0032-native-object-lifecycle.patch",
     "patches/0033-text-layout-cache-invalidation.patch",
-    "patches/0034-insert-slide-preserves-sparse-master.patch"
+    "patches/0034-insert-slide-preserves-sparse-master.patch",
+    "patches/0035-preserve-nonlayout-undo-and-content-placeholder.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
@@ -69,6 +70,7 @@
     "CppunitTest_sd_uiimpress:testPptxObjectLocksRoundTrip",
     "CppunitTest_sd_uiimpress:testTypedLayoutPreservesImportedMaster",
     "CppunitTest_sd_uiimpress:testTypedLayoutSelectsExistingMaster",
+    "CppunitTest_sd_uiimpress:testPptxEmptyContentPlaceholderStaysEditable",
     "CppunitTest_sd_uiimpress:testTypedLayoutUndoRestoresAnimationTree",
     "CppunitTest_sd_uiimpress:testTypedTextFormattingAppliesToAllScripts",
     "CppunitTest_sd_uiimpress:testUnoShapeCreationRegistersNativeUndo",

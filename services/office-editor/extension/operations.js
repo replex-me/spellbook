@@ -1094,6 +1094,11 @@ function spellbookDocumentOperation(request) {
             name: shapeName,
             objectName,
             kind: shapeKind,
+            presentationObject: safeProperty(shape, "IsPresentationObject"),
+            emptyPresentationObject: safeProperty(
+              shape,
+              "IsEmptyPresentationObject",
+            ),
             geometryType: shapeGeometryType(shape, shapeKind),
             propertyStates: shapePropertyStates(shape, text),
             text,

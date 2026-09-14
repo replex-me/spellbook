@@ -135,7 +135,7 @@ function withoutMergedContinuationFormatting(slides) {
 }
 
 const AUTOMATIC_UNO_PLACEHOLDER_NAME =
-  /^unnamed-com\.sun\.star\.presentation\.[A-Za-z]+Shape$/u;
+  /^unnamed-com\.sun\.star\.presentation\.[A-Za-z0-9]+Shape$/u;
 const SERIALIZED_PLACEHOLDER_NAME = /^PlaceHolder [1-9][0-9]*$/u;
 
 /**
@@ -160,6 +160,15 @@ function withoutTransientEmptyPlaceholderDefaults(slides) {
         (!automaticInMemoryName && !automaticSerializedName)
       )
         continue;
+      if (
+        element.presentationObject === true &&
+        element.emptyPresentationObject === true &&
+        [
+          "com.sun.star.presentation.OLE2Shape",
+          "com.sun.star.presentation.OutlinerShape",
+        ].includes(element.kind)
+      )
+        element.kind = "com.sun.star.presentation.ContentPlaceholderShape";
       for (const field of [
         "name",
         "objectName",
@@ -186,7 +195,9 @@ function withCanonicalShapeIdentity(slides) {
         element.kind = "com.sun.star.drawing.CustomShape";
       if (
         !element.objectName &&
-        /^unnamed-com\.sun\.star\.[A-Za-z.]+Shape$/u.test(element.name ?? "")
+        /^unnamed-com\.sun\.star\.[A-Za-z0-9.]+Shape$/u.test(
+          element.name ?? "",
+        )
       )
         delete element.name;
     }

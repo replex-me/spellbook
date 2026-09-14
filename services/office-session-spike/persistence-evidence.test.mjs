@@ -472,6 +472,53 @@ test("document persistence canonicalizes only empty engine-generated layout plac
   );
 });
 
+test("document persistence treats empty editable content placeholder representations as equivalent", () => {
+  const state = (kind, name, objectName) => ({
+    masters: [],
+    slides: [
+      {
+        elements: [
+          {
+            elementId: "0/0",
+            name,
+            objectName,
+            kind,
+            text: "",
+            presentationObject: true,
+            emptyPresentationObject: true,
+            width: 100,
+            height: 50,
+          },
+        ],
+      },
+    ],
+  });
+  const inMemory = state(
+    "com.sun.star.presentation.OLE2Shape",
+    "unnamed-com.sun.star.presentation.OLE2Shape",
+    "",
+  );
+  const reopened = state(
+    "com.sun.star.presentation.OutlinerShape",
+    "PlaceHolder 2",
+    "PlaceHolder 2",
+  );
+  assert.deepEqual(
+    normalizeDocumentPersistenceState(inMemory),
+    normalizeDocumentPersistenceState(reopened),
+  );
+
+  const flattened = structuredClone(reopened);
+  flattened.slides[0].elements[0].kind =
+    "com.sun.star.drawing.GraphicObjectShape";
+  flattened.slides[0].elements[0].presentationObject = false;
+  flattened.slides[0].elements[0].emptyPresentationObject = false;
+  assert.notDeepEqual(
+    normalizeDocumentPersistenceState(inMemory),
+    normalizeDocumentPersistenceState(flattened),
+  );
+});
+
 test("document persistence compares standard transition state, not derived UI projections", () => {
   const expected = normalizeDocumentPersistenceState({
     slides: [

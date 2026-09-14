@@ -125,6 +125,12 @@
       "name": "testTypedLayoutSelectsExistingMaster",
       "proves": ["single_undo", "exact_undo_redo", "structure"]
     },
+    "empty-content-placeholder-roundtrip": {
+      "minEnginePatch": 17,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testPptxEmptyContentPlaceholderStaysEditable",
+      "proves": ["save_reopen", "structure"]
+    },
     "layout-animation-tree-history": {
       "minEnginePatch": 9,
       "target": "CppunitTest_sd_uiimpress",
