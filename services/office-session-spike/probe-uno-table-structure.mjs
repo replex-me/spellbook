@@ -4,6 +4,7 @@ import path from "node:path";
 import { documentStatesEquivalent } from "./document-state-evidence.mjs";
 import {
   installNativeBridgeTrace,
+  nativeBridgeDiagnostics,
   waitForNativeBridge,
 } from "./native-bridge-probe.mjs";
 
@@ -158,7 +159,15 @@ try {
     throw new Error("Table document did not reach a stable observed state.");
   };
 
-  let observed = await settleObservation();
+  let observed;
+  try {
+    observed = await settleObservation();
+  } catch (error) {
+    error.message += ` Bridge trace: ${JSON.stringify(
+      await nativeBridgeDiagnostics(page),
+    )}`;
+    throw error;
+  }
   const persistenceBefore = {
     slides: structuredClone(observed.slides),
     masters: structuredClone(observed.masters),
