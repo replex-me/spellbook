@@ -64,11 +64,16 @@ test("extension repeats its ready handshake until the host transfers a port", as
   vm.runInNewContext(source, context);
   assert.equal(messages.length, 1);
   assert.equal(messages[0].message.type, "spellbook.extension-ready");
+  assert.equal(typeof messages[0].message.bridgeSessionId, "string");
   assert.equal(messages[0].targetOrigin, "*");
   assert.equal(intervals.size, 1);
   const repeat = [...intervals.values()][0];
   repeat();
   assert.equal(messages.length, 2);
+  assert.equal(
+    messages[1].message.bridgeSessionId,
+    messages[0].message.bridgeSessionId,
+  );
 
   const port = {
     postMessage(message) {
@@ -77,7 +82,20 @@ test("extension repeats its ready handshake until the host transfers a port", as
   };
   listeners.get("message")({
     source: top,
-    data: { type: "spellbook.connect" },
+    data: {
+      type: "spellbook.connect",
+      bridgeSessionId: "stale-extension-session",
+    },
+    ports: [port],
+  });
+  assert.equal(cleared.length, 0);
+  assert.equal(portMessages.length, 0);
+  listeners.get("message")({
+    source: top,
+    data: {
+      type: "spellbook.connect",
+      bridgeSessionId: messages[0].message.bridgeSessionId,
+    },
     ports: [port],
   });
   assert.equal(cleared.length, 1);

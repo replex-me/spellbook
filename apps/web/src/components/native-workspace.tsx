@@ -39,6 +39,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   const office = useRef<HTMLIFrameElement>(null),
     form = useRef<HTMLFormElement>(null);
   const port = useRef<MessagePort | null>(null),
+    bridgeSession = useRef<string | null>(null),
     submitted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null),
     bottom = useRef<HTMLDivElement>(null);
@@ -246,14 +247,20 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== origin) return;
-      if (
-        event.data?.type === "spellbook.extension-ready" &&
-        event.source &&
-        !port.current
-      ) {
+      if (event.data?.type === "spellbook.extension-ready" && event.source) {
+        const sessionId =
+          typeof event.data.bridgeSessionId === "string"
+            ? event.data.bridgeSessionId
+            : "legacy";
+        if (port.current && bridgeSession.current === sessionId) return;
+        port.current?.close();
+        port.current = null;
+        bridgeSession.current = sessionId;
+        setBridgeReady(false);
         const channel = new MessageChannel();
         port.current = channel.port1;
         channel.port1.onmessage = (result) => {
+          if (port.current !== channel.port1) return;
           if (result.data?.type === "ready") {
             setBridgeReady(true);
             sendOffice("Hide_Sidebar");
@@ -263,7 +270,11 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
             void api("result", result.data).catch((e) => setError(e.message));
         };
         (event.source as Window).postMessage(
-          { type: "spellbook.connect" },
+          {
+            type: "spellbook.connect",
+            bridgeSessionId:
+              sessionId === "legacy" ? undefined : sessionId,
+          },
           origin,
           [channel.port2],
         );
@@ -453,7 +464,14 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     aiConnected,
     dispatchLocalJob,
   ]);
-  useEffect(() => () => port.current?.close(), []);
+  useEffect(
+    () => () => {
+      port.current?.close();
+      port.current = null;
+      bridgeSession.current = null;
+    },
+    [],
+  );
   useEffect(() => {
     if (!aiConnected) setModel(undefined);
   }, [aiConnected]);

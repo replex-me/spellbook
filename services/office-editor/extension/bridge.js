@@ -23,6 +23,9 @@ window.presentNative = {
 };
 let connection;
 let readyTimer;
+const bridgeSessionId = `${Date.now().toString(36)}-${Math.random()
+  .toString(36)
+  .slice(2)}`;
 const imageSignatureIsValid = (bytes, mediaType) => {
   const view = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 8));
   const png =
@@ -125,6 +128,8 @@ window.addEventListener("message", (event) => {
   if (
     event.source !== window.top ||
     event.data?.type !== "spellbook.connect" ||
+    (event.data.bridgeSessionId !== undefined &&
+      event.data.bridgeSessionId !== bridgeSessionId) ||
     !event.ports[0]
   )
     return;
@@ -169,7 +174,10 @@ const announceReady = () => {
     clearInterval(readyTimer);
     return;
   }
-  window.top.postMessage({ type: "spellbook.extension-ready" }, "*");
+  window.top.postMessage(
+    { type: "spellbook.extension-ready", bridgeSessionId },
+    "*",
+  );
 };
 announceReady();
 readyTimer = setInterval(announceReady, 250);
