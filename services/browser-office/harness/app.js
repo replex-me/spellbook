@@ -113,20 +113,24 @@ function applyMutation(bytes, command) {
   });
 }
 
-async function addSlide() {
-  if (!currentBytes) throw new Error("Open a PPTX before adding a slide.");
+async function mutate(command) {
+  if (!currentBytes) throw new Error("Open a PPTX before editing slides.");
   const before = currentBytes.slice();
-  const result = await applyMutation(before, {
-    op: "add_slide",
-    templateSlideIndex: 0,
-    insertIndex: currentSlideCount,
-  });
+  const result = await applyMutation(before, command);
   history.push(before);
   await writeAndOpen(new Uint8Array(result.bytes), filename);
   undoButton.disabled = false;
   observed.lastMutation = result.report;
   evidence.value = JSON.stringify(observed);
   return result.report;
+}
+
+async function addSlide() {
+  return mutate({
+    op: "add_slide",
+    templateSlideIndex: 0,
+    insertIndex: currentSlideCount,
+  });
 }
 
 async function undoMutation() {
@@ -155,25 +159,78 @@ async function runConformance() {
     await (await fetch("/fixtures/general-native-surface.pptx")).arrayBuffer(),
   );
   const initial = await writeAndOpen(fixture, "general-native-surface.pptx");
-  const mutation = await addSlide();
+  const addMutation = await addSlide();
   if (currentSlideCount !== initial.slideCount + 1)
     throw new Error("OOXML add_slide did not add exactly one slide.");
-  const mutated = await recordBytes(
+  const added = await recordBytes(
     "after-insert",
     currentBytes,
     currentSlideCount,
-    mutation,
+    addMutation,
   );
-  const undone = await undoMutation();
-  if (undone.slideCount !== initial.slideCount)
-    throw new Error("Browser undo did not restore the original slide count.");
+
+  const duplicateMutation = await mutate({
+    op: "duplicate_slide",
+    slideIndex: 0,
+    insertIndex: currentSlideCount,
+  });
+  if (currentSlideCount !== initial.slideCount + 2)
+    throw new Error("OOXML duplicate_slide did not add exactly one slide.");
+  await recordBytes(
+    "after-duplicate",
+    currentBytes,
+    currentSlideCount,
+    duplicateMutation,
+  );
+
+  const moveMutation = await mutate({
+    op: "move_slide",
+    slideIndex: currentSlideCount - 1,
+    insertIndex: 0,
+  });
+  if (currentSlideCount !== initial.slideCount + 2)
+    throw new Error("OOXML move_slide changed the slide count.");
+  await recordBytes(
+    "after-move",
+    currentBytes,
+    currentSlideCount,
+    moveMutation,
+  );
+
+  const deleteMutation = await mutate({
+    op: "delete_slide",
+    slideIndex: 0,
+  });
+  if (currentSlideCount !== initial.slideCount + 1)
+    throw new Error("OOXML delete_slide did not remove exactly one slide.");
+  const deleted = await recordBytes(
+    "after-delete",
+    currentBytes,
+    currentSlideCount,
+    deleteMutation,
+  );
+
+  const undoCounts = [
+    initial.slideCount + 2,
+    initial.slideCount + 2,
+    initial.slideCount + 1,
+    initial.slideCount,
+  ];
+  let undone;
+  for (const expectedCount of undoCounts) {
+    undone = await undoMutation();
+    if (undone.slideCount !== expectedCount)
+      throw new Error(
+        `Browser undo restored ${undone.slideCount} slides instead of ${expectedCount}.`,
+      );
+  }
   const restored = await recordBytes(
     "after-undo",
     currentBytes,
     currentSlideCount,
     { operation: "restore_original" },
   );
-  if (mutated.entry.sha256 === restored.entry.sha256)
+  if (deleted.entry.sha256 === restored.entry.sha256)
     throw new Error("Mutation and undone saves unexpectedly match.");
   const reopenPath = "/tmp/spellbook/reopened.pptx";
   FS.writeFile(reopenPath, restored.bytes);
@@ -183,9 +240,14 @@ async function runConformance() {
   await waitForUiPaint("reopen");
   body.dataset.initialSlides = String(initial.slideCount);
   body.dataset.reopenedSlides = String(reopened.slideCount);
-  body.dataset.mutatedSha256 = mutated.entry.sha256;
+  body.dataset.mutatedSha256 = deleted.entry.sha256;
   body.dataset.restoredSha256 = restored.entry.sha256;
-  setState("complete", "Browser edit, save, undo and reopen passed");
+  body.dataset.addedSha256 = added.entry.sha256;
+  body.dataset.topologyOperations = "add,duplicate,move,delete";
+  setState(
+    "complete",
+    "Browser slide topology, four-step Undo and reopen passed",
+  );
 }
 
 fileInput.addEventListener("change", async () => {

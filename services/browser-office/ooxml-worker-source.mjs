@@ -16,18 +16,44 @@ const slideContentType =
 const maximumInputBytes = 64 * 1024 * 1024;
 const maximumExpandedBytes = 512 * 1024 * 1024;
 const maximumEntries = 10_000;
+const presentationPath = "ppt/presentation.xml";
+const presentationRelationshipsPath = "ppt/_rels/presentation.xml.rels";
+const contentTypesPath = "[Content_Types].xml";
+const topologyOperations = new Set([
+  "add_slide",
+  "duplicate_slide",
+  "delete_slide",
+  "move_slide",
+]);
+const sharedDependencyKinds = new Set([
+  "slideLayout",
+  "slideMaster",
+  "notesMaster",
+  "theme",
+  "image",
+  "audio",
+  "video",
+  "slide",
+]);
 
 export function applyOoxmlCommand(input, command) {
   if (!(input instanceof Uint8Array))
     throw new TypeError("PPTX input must be a Uint8Array.");
   if (input.byteLength > maximumInputBytes)
     throw new Error("PPTX exceeds the browser mutation limit.");
-  if (command?.op !== "add_slide")
+  if (!topologyOperations.has(command?.op))
     throw new Error(`Unsupported browser OOXML operation: ${command?.op}`);
-  return addSlide(input, command);
+  const context = openPackage(input);
+  const report =
+    command.op === "add_slide" || command.op === "duplicate_slide"
+      ? createSlide(context, command)
+      : command.op === "delete_slide"
+        ? deleteSlide(context, command)
+        : moveSlide(context, command);
+  return { bytes: zipSync(context.entries, { level: 6 }), report };
 }
 
-function addSlide(input, command) {
+function openPackage(input) {
   inspectZipPackage(input);
   const entries = unzipSync(input);
   const entryNames = Object.keys(entries);
@@ -39,10 +65,6 @@ function addSlide(input, command) {
   );
   if (expandedBytes > maximumExpandedBytes)
     throw new Error("Expanded PPTX exceeds the browser mutation limit.");
-
-  const presentationPath = "ppt/presentation.xml";
-  const presentationRelationshipsPath = "ppt/_rels/presentation.xml.rels";
-  const contentTypesPath = "[Content_Types].xml";
   const presentation = parseXml(entries, presentationPath);
   const relationships = parseXml(entries, presentationRelationshipsPath);
   const contentTypes = parseXml(entries, contentTypesPath);
@@ -72,13 +94,34 @@ function addSlide(input, command) {
       node.localName === "sldId",
   );
   if (slideIds.length === 0) throw new Error("The PPTX has no template slide.");
+  return {
+    entries,
+    presentation,
+    relationships,
+    contentTypes,
+    slideIdList,
+    slideIds,
+  };
+}
+
+function createSlide(context, command) {
+  const {
+    entries,
+    presentation,
+    relationships,
+    contentTypes,
+    slideIdList,
+    slideIds,
+  } = context;
   if (slideIds.length >= 200)
     throw new Error("The browser document slide limit is 200.");
-  const templateSlideIndex = integerInRange(
-    command.templateSlideIndex,
+  const sourceProperty =
+    command.op === "add_slide" ? "templateSlideIndex" : "slideIndex";
+  const sourceIndex = integerInRange(
+    command[sourceProperty],
     0,
     slideIds.length - 1,
-    "templateSlideIndex",
+    sourceProperty,
   );
   const insertIndex = integerInRange(
     command.insertIndex,
@@ -86,46 +129,36 @@ function addSlide(input, command) {
     slideIds.length,
     "insertIndex",
   );
-
-  const templateRelationshipId = slideIds[templateSlideIndex].getAttributeNS(
-    relationshipAttributeNamespace,
-    "id",
-  );
-  const templateRelationship = [
-    ...relationships.getElementsByTagNameNS(
-      packageRelationshipNamespace,
-      "Relationship",
-    ),
-  ].find((element) => element.getAttribute("Id") === templateRelationshipId);
-  if (!templateRelationship)
-    throw new Error("Template slide relationship is missing.");
-  const templateSlidePath = resolvePart(
-    presentationPath,
-    templateRelationship.getAttribute("Target"),
-  );
-  if (!templateSlidePath.startsWith("ppt/slides/"))
-    throw new Error("Template relationship does not target a slide part.");
-  const newSlidePath = nextSlidePath(entryNames);
+  const source = slideInfo(context, sourceIndex);
+  const newSlidePath = nextSlidePath(Object.keys(entries));
   const newSlideRelationshipsPath = relationshipsPath(newSlidePath);
-  const templateSlideRelationshipsPath = relationshipsPath(templateSlidePath);
+  const sourceSlideRelationshipsPath = relationshipsPath(source.path);
+  const changedParts = new Set();
 
-  const slide = parseXml(entries, templateSlidePath);
-  const commonSlideData = requiredElement(slide, presentationNamespace, "cSld");
-  const shapeTree = requiredElement(
-    commonSlideData,
-    presentationNamespace,
-    "spTree",
-  );
-  removeDirectChildrenExcept(shapeTree, ["nvGrpSpPr", "grpSpPr"]);
-  removeDirectChildrenExcept(commonSlideData, ["bg", "spTree"]);
-  removeDirectChildrenExcept(slide.documentElement, ["cSld", "clrMapOvr"]);
-  entries[newSlidePath] = serializeXml(slide);
-
-  if (entries[templateSlideRelationshipsPath]) {
-    const slideRelationships = parseXml(
-      entries,
-      templateSlideRelationshipsPath,
+  if (command.op === "duplicate_slide") {
+    const copied = new Map([[source.path, newSlidePath]]);
+    clonePart(context, source.path, newSlidePath, copied, changedParts);
+  } else {
+    const slide = parseXml(entries, source.path);
+    const commonSlideData = requiredElement(
+      slide,
+      presentationNamespace,
+      "cSld",
     );
+    const shapeTree = requiredElement(
+      commonSlideData,
+      presentationNamespace,
+      "spTree",
+    );
+    removeDirectChildrenExcept(shapeTree, ["nvGrpSpPr", "grpSpPr"]);
+    removeDirectChildrenExcept(commonSlideData, ["bg", "spTree"]);
+    removeDirectChildrenExcept(slide.documentElement, ["cSld", "clrMapOvr"]);
+    entries[newSlidePath] = serializeXml(slide);
+    changedParts.add(newSlidePath);
+    copyContentType(context, source.path, newSlidePath, slideContentType);
+    if (!entries[sourceSlideRelationshipsPath])
+      throw new Error("Template slide has no layout relationship.");
+    const slideRelationships = parseXml(entries, sourceSlideRelationshipsPath);
     for (const element of [
       ...slideRelationships.getElementsByTagNameNS(
         packageRelationshipNamespace,
@@ -136,21 +169,17 @@ function addSlide(input, command) {
       if (kind !== "slideLayout" && kind !== "image")
         element.parentNode.removeChild(element);
     }
+    const layoutRelationships = relationshipElements(slideRelationships).filter(
+      (element) => element.getAttribute("Type").endsWith("/slideLayout"),
+    );
+    if (layoutRelationships.length !== 1)
+      throw new Error(
+        "Template slide must have exactly one layout relationship.",
+      );
     entries[newSlideRelationshipsPath] = serializeXml(slideRelationships);
+    changedParts.add(newSlideRelationshipsPath);
   }
-
-  const existingRelationshipIds = new Set(
-    [
-      ...relationships.getElementsByTagNameNS(
-        packageRelationshipNamespace,
-        "Relationship",
-      ),
-    ].map((element) => element.getAttribute("Id")),
-  );
-  let relationshipOrdinal = 1;
-  while (existingRelationshipIds.has(`rIdSpellbook${relationshipOrdinal}`))
-    relationshipOrdinal += 1;
-  const newRelationshipId = `rIdSpellbook${relationshipOrdinal}`;
+  const newRelationshipId = nextRelationshipId(relationships);
   const newRelationship = relationships.createElementNS(
     packageRelationshipNamespace,
     "Relationship",
@@ -169,7 +198,11 @@ function addSlide(input, command) {
   const maximumSlideId = Math.max(
     ...slideIds.map((element) => Number(element.getAttribute("id"))),
   );
-  if (!Number.isSafeInteger(maximumSlideId) || maximumSlideId < 1)
+  if (
+    !Number.isSafeInteger(maximumSlideId) ||
+    maximumSlideId < 1 ||
+    maximumSlideId >= 0xffffffff
+  )
     throw new Error("PPTX slide identifiers are invalid.");
   const newSlideId = presentation.createElementNS(
     presentationNamespace,
@@ -183,43 +216,262 @@ function addSlide(input, command) {
   );
   if (insertIndex === slideIds.length) slideIdList.appendChild(newSlideId);
   else slideIdList.insertBefore(newSlideId, slideIds[insertIndex]);
-
-  const sourceOverride = [
-    ...contentTypes.getElementsByTagNameNS(contentTypeNamespace, "Override"),
-  ].find(
-    (element) => element.getAttribute("PartName") === `/${templateSlidePath}`,
-  );
-  const override = contentTypes.createElementNS(
-    contentTypeNamespace,
-    "Override",
-  );
-  override.setAttribute("PartName", `/${newSlidePath}`);
-  override.setAttribute(
-    "ContentType",
-    sourceOverride?.getAttribute("ContentType") || slideContentType,
-  );
-  contentTypes.documentElement.appendChild(override);
-
   entries[presentationPath] = serializeXml(presentation);
   entries[presentationRelationshipsPath] = serializeXml(relationships);
   entries[contentTypesPath] = serializeXml(contentTypes);
-  const output = zipSync(entries, { level: 6 });
+  changedParts.add(contentTypesPath);
+  changedParts.add(presentationRelationshipsPath);
+  changedParts.add(presentationPath);
   return {
-    bytes: output,
-    report: {
-      operation: "add_slide",
-      templateSlideIndex,
-      insertIndex,
-      slideCount: slideIds.length + 1,
-      changedParts: [
-        contentTypesPath,
-        presentationRelationshipsPath,
-        presentationPath,
-        newSlideRelationshipsPath,
-        newSlidePath,
-      ].filter((path) => entries[path]),
-    },
+    operation: command.op,
+    sourceIndex,
+    insertIndex,
+    slideCount: slideIds.length + 1,
+    changedParts: [...changedParts].sort(),
   };
+}
+
+function moveSlide(context, command) {
+  const sourceIndex = integerInRange(
+    command.slideIndex,
+    0,
+    context.slideIds.length - 1,
+    "slideIndex",
+  );
+  const insertIndex = integerInRange(
+    command.insertIndex,
+    0,
+    context.slideIds.length - 1,
+    "insertIndex",
+  );
+  const reordered = [...context.slideIds];
+  const [slideId] = reordered.splice(sourceIndex, 1);
+  reordered.splice(insertIndex, 0, slideId);
+  for (const element of context.slideIds)
+    context.slideIdList.removeChild(element);
+  for (const element of reordered) context.slideIdList.appendChild(element);
+  context.entries[presentationPath] = serializeXml(context.presentation);
+  return {
+    operation: command.op,
+    sourceIndex,
+    insertIndex,
+    slideCount: context.slideIds.length,
+    changedParts: [presentationPath],
+  };
+}
+
+function deleteSlide(context, command) {
+  if (context.slideIds.length === 1)
+    throw new Error("The last slide cannot be deleted.");
+  const sourceIndex = integerInRange(
+    command.slideIndex,
+    0,
+    context.slideIds.length - 1,
+    "slideIndex",
+  );
+  const source = slideInfo(context, sourceIndex);
+  for (let index = 0; index < context.slideIds.length; index += 1) {
+    if (index === sourceIndex) continue;
+    const other = slideInfo(context, index);
+    const relPath = relationshipsPath(other.path);
+    if (!context.entries[relPath]) continue;
+    const linked = relationshipElements(
+      parseXml(context.entries, relPath),
+    ).some(
+      (relationship) =>
+        relationship.getAttribute("TargetMode") !== "External" &&
+        resolvePart(other.path, relationship.getAttribute("Target")) ===
+          source.path,
+    );
+    if (linked)
+      throw new Error(
+        "Another slide links to this slide. Remove that link before deleting it.",
+      );
+  }
+
+  const before = reachableParts(context.entries);
+  source.slideId.parentNode.removeChild(source.slideId);
+  source.relationship.parentNode.removeChild(source.relationship);
+  const after = reachableParts(context.entries, context.relationships);
+  const removedParts = [...before].filter((part) => !after.has(part));
+  const changedParts = new Set([
+    contentTypesPath,
+    presentationRelationshipsPath,
+    presentationPath,
+  ]);
+  for (const part of removedParts) {
+    delete context.entries[part];
+    changedParts.add(part);
+    const relPath = relationshipsPath(part);
+    if (context.entries[relPath]) {
+      delete context.entries[relPath];
+      changedParts.add(relPath);
+    }
+  }
+  for (const override of [
+    ...context.contentTypes.getElementsByTagNameNS(
+      contentTypeNamespace,
+      "Override",
+    ),
+  ])
+    if (
+      removedParts.includes(
+        override.getAttribute("PartName").replace(/^\//u, ""),
+      )
+    )
+      override.parentNode.removeChild(override);
+  context.entries[presentationPath] = serializeXml(context.presentation);
+  context.entries[presentationRelationshipsPath] = serializeXml(
+    context.relationships,
+  );
+  context.entries[contentTypesPath] = serializeXml(context.contentTypes);
+  return {
+    operation: command.op,
+    sourceIndex,
+    slideCount: context.slideIds.length - 1,
+    changedParts: [...changedParts].sort(),
+    removedParts: removedParts.sort(),
+  };
+}
+
+function slideInfo(context, index) {
+  const slideId = context.slideIds[index];
+  const relationshipId = slideId.getAttributeNS(
+    relationshipAttributeNamespace,
+    "id",
+  );
+  const relationship = relationshipElements(context.relationships).find(
+    (element) => element.getAttribute("Id") === relationshipId,
+  );
+  if (!relationship || relationship.getAttribute("TargetMode") === "External")
+    throw new Error("Slide relationship is missing or external.");
+  const path = resolvePart(
+    presentationPath,
+    relationship.getAttribute("Target"),
+  );
+  if (!path.startsWith("ppt/slides/") || !context.entries[path])
+    throw new Error("Slide relationship does not target a package slide.");
+  return { slideId, relationship, path };
+}
+
+function relationshipElements(document) {
+  return [
+    ...document.getElementsByTagNameNS(
+      packageRelationshipNamespace,
+      "Relationship",
+    ),
+  ];
+}
+
+function nextRelationshipId(document) {
+  const existing = new Set(
+    relationshipElements(document).map((element) => element.getAttribute("Id")),
+  );
+  let ordinal = 1;
+  while (existing.has(`rIdSpellbook${ordinal}`)) ordinal += 1;
+  return `rIdSpellbook${ordinal}`;
+}
+
+function copyContentType(context, source, destination, fallback = null) {
+  const overrides = [
+    ...context.contentTypes.getElementsByTagNameNS(
+      contentTypeNamespace,
+      "Override",
+    ),
+  ];
+  if (
+    overrides.some(
+      (element) => element.getAttribute("PartName") === `/${destination}`,
+    )
+  )
+    throw new Error(`PPTX content type already exists for ${destination}.`);
+  const sourceOverride = overrides.find(
+    (element) => element.getAttribute("PartName") === `/${source}`,
+  );
+  if (!sourceOverride && !fallback) return;
+  const override = context.contentTypes.createElementNS(
+    contentTypeNamespace,
+    "Override",
+  );
+  override.setAttribute("PartName", `/${destination}`);
+  override.setAttribute(
+    "ContentType",
+    sourceOverride?.getAttribute("ContentType") || fallback,
+  );
+  context.contentTypes.documentElement.appendChild(override);
+}
+
+function clonePart(context, source, destination, copied, changedParts) {
+  if (copied.size > 500)
+    throw new Error("Slide dependency graph exceeds the safe copy limit.");
+  const bytes = context.entries[source];
+  if (!bytes) throw new Error(`Missing slide dependency: ${source}`);
+  context.entries[destination] = bytes.slice();
+  changedParts.add(destination);
+  copyContentType(context, source, destination);
+  const sourceRelationshipsPath = relationshipsPath(source);
+  if (!context.entries[sourceRelationshipsPath]) return;
+  const relationships = parseXml(context.entries, sourceRelationshipsPath);
+  for (const relationship of relationshipElements(relationships)) {
+    if (relationship.getAttribute("TargetMode") === "External") continue;
+    const target = resolvePart(source, relationship.getAttribute("Target"));
+    const kind = relationship.getAttribute("Type").split("/").at(-1);
+    let mapped = copied.get(target);
+    if (!mapped) {
+      if (sharedDependencyKinds.has(kind)) mapped = target;
+      else {
+        mapped = nextPartPath(context.entries, target);
+        copied.set(target, mapped);
+        clonePart(context, target, mapped, copied, changedParts);
+      }
+    }
+    relationship.setAttribute("Target", relativePart(destination, mapped));
+  }
+  const destinationRelationshipsPath = relationshipsPath(destination);
+  context.entries[destinationRelationshipsPath] = serializeXml(relationships);
+  changedParts.add(destinationRelationshipsPath);
+}
+
+function nextPartPath(entries, source) {
+  if (source.startsWith("ppt/slides/"))
+    return nextSlidePath(Object.keys(entries));
+  const slash = source.lastIndexOf("/");
+  const dot = source.lastIndexOf(".");
+  const directory = source.slice(0, slash + 1);
+  const stem = source.slice(slash + 1, dot > slash ? dot : undefined);
+  const extension = dot > slash ? source.slice(dot) : "";
+  let ordinal = 1;
+  let candidate;
+  do {
+    candidate = `${directory}${stem}-spellbook-${ordinal}${extension}`;
+    ordinal += 1;
+  } while (entries[candidate]);
+  return candidate;
+}
+
+function reachableParts(entries, presentationRelationshipsOverride = null) {
+  const reachable = new Set();
+  const visit = (source, relationshipPath) => {
+    if (
+      !entries[relationshipPath] &&
+      relationshipPath !== presentationRelationshipsPath
+    )
+      return;
+    const relationships =
+      relationshipPath === presentationRelationshipsPath &&
+      presentationRelationshipsOverride
+        ? presentationRelationshipsOverride
+        : parseXml(entries, relationshipPath);
+    for (const relationship of relationshipElements(relationships)) {
+      if (relationship.getAttribute("TargetMode") === "External") continue;
+      const target = resolvePart(source, relationship.getAttribute("Target"));
+      if (reachable.has(target)) continue;
+      reachable.add(target);
+      visit(target, relationshipsPath(target));
+    }
+  };
+  visit("", "_rels/.rels");
+  return reachable;
 }
 
 function inspectZipPackage(input) {

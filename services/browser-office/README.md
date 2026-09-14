@@ -19,6 +19,7 @@ manifest before it can be hosted.
 pnpm browser-office:fetch
 pnpm browser-office:serve
 pnpm browser-office:verify
+pnpm browser-office:verify:powerpoint
 ```
 
 The command writes ignored runtime artifacts to `runtime/`. The `.wasm` and
@@ -27,14 +28,17 @@ original request names with the declared `Content-Type`, `Content-Encoding:
 br`, CORS, CORP, and immutable cache headers.
 
 The tracked shell now owns the canvas and two distinct workers. ZetaOffice is
-the visual interaction engine; `ooxml-worker-source.mjs` applies the first
-structure-preserving browser command directly to the original package. This
-separation is mandatory. A stock ZetaOffice `store()` round trip was valid XML
+the visual interaction engine; `ooxml-worker-source.mjs` applies the slide
+topology command family (`add_slide`, `duplicate_slide`, `move_slide`, and
+`delete_slide`) directly to the original package. All four commands share one
+relationship-graph implementation: owned dependencies are cloned, reusable
+layout/theme/media parts stay shared, and unreachable owned parts are removed.
+This separation is mandatory. A stock ZetaOffice `store()` round trip was valid XML
 and reopened in PowerPoint, but rewrote untouched slide, layout, master, theme
 and font data. Spellbook therefore never promotes that whole-file output as
 the authoritative PPTX.
 
-Promotion still requires the shared edit-command contract beyond `add_slide`,
+Promotion still requires the rest of the shared edit-command contract,
 Korean IME and accessibility checks, OPFS recovery, a current patched browser
 LibreOffice build, public-corpus render comparison and a PowerPoint platform
 matrix. Until those gates pass, `status` stays `viability_probe_only` and the
@@ -42,10 +46,11 @@ server editor remains the runtime fallback.
 
 The Spellbook-owned conformance shell is available at
 `http://127.0.0.1:4173/?autorun=1`. It loads the tracked public PPTX fixture,
-adds a slide through the OOXML worker, reopens the candidate in the canvas,
-restores the original for Undo and reopens it again. The page reaches
-`body[data-state="complete"]` only when the slide-count and saved-hash
-invariants pass. This is a development gate, not yet the product editor.
+adds, duplicates, moves, and deletes slides through the OOXML worker, reopening
+every candidate in the canvas. It then undoes all four mutations and reopens
+the restored original. The page reaches `body[data-state="complete"]` only when
+the slide-count, saved-hash, and lifecycle invariants pass. This is a
+development gate, not yet the product editor.
 
 `browser-office:verify` launches a headless local browser, asserts isolation,
 slide counts and a strict logical package-change budget, and writes both PPTX
@@ -54,6 +59,11 @@ files, a screenshot and machine-readable timing evidence to
 uncompressed bytes and Undo must restore every original part. It does not
 promote the browser runtime; the screenshot and PPTX outputs still need the
 same visual and PowerPoint inspection required of the server engine.
+
+`browser-office:verify:powerpoint` follows that browser run with native
+PowerPoint reopen/export. It verifies slide counts and pixel-identical identity,
+move, delete-round-trip, and Undo mappings across the generated files. Run it
+only on a macOS host with PowerPoint and no unrelated presentation open.
 
 Upstream references:
 

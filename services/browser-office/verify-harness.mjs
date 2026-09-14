@@ -63,7 +63,9 @@ try {
     initialSlides: Number(document.body.dataset.initialSlides),
     reopenedSlides: Number(document.body.dataset.reopenedSlides),
     mutatedSha256: document.body.dataset.mutatedSha256 ?? null,
+    addedSha256: document.body.dataset.addedSha256 ?? null,
     restoredSha256: document.body.dataset.restoredSha256 ?? null,
+    topologyOperations: document.body.dataset.topologyOperations ?? null,
     status: document.querySelector("#status")?.textContent ?? null,
     evidence: globalThis.spellbookBrowserOffice.evidence,
     crossOriginIsolated: globalThis.crossOriginIsolated,
@@ -76,6 +78,9 @@ try {
   const artifactPaths = new Map();
   for (const [label, filename] of [
     ["after-insert", "after-insert.pptx"],
+    ["after-duplicate", "after-duplicate.pptx"],
+    ["after-move", "after-move.pptx"],
+    ["after-delete", "after-delete.pptx"],
     ["after-undo", "after-undo.pptx"],
   ]) {
     const values = await page.evaluate(
@@ -94,9 +99,9 @@ try {
   });
   result.packageIntegrity = evaluatePackageIntegrity({
     baselinePath,
-    insertedPath: artifactPaths.get("after-insert"),
+    artifactPaths,
     undonePath: artifactPaths.get("after-undo"),
-    mutation: result.evidence.lastMutation,
+    runs: result.evidence.runs,
   });
 
   const failures = [
@@ -108,6 +113,9 @@ try {
       : null,
     result.mutatedSha256 === result.restoredSha256
       ? "mutated and restored hashes match"
+      : null,
+    result.topologyOperations !== "add,duplicate,move,delete"
+      ? "browser topology sequence is incomplete"
       : null,
     pageErrors.length ? `${pageErrors.length} uncaught page error(s)` : null,
     requestFailures.length
@@ -133,50 +141,149 @@ try {
 
 function evaluatePackageIntegrity({
   baselinePath,
-  insertedPath,
+  artifactPaths,
   undonePath,
-  mutation,
+  runs,
 }) {
-  const inserted = comparePackages(baselinePath, insertedPath);
+  const inserted = comparePackages(
+    baselinePath,
+    artifactPaths.get("after-insert"),
+  );
+  const duplicated = comparePackages(
+    artifactPaths.get("after-insert"),
+    artifactPaths.get("after-duplicate"),
+  );
+  const moved = comparePackages(
+    artifactPaths.get("after-duplicate"),
+    artifactPaths.get("after-move"),
+  );
+  const deleted = comparePackages(
+    artifactPaths.get("after-move"),
+    artifactPaths.get("after-delete"),
+  );
+  const deleteRoundTrip = comparePackages(
+    artifactPaths.get("after-insert"),
+    artifactPaths.get("after-delete"),
+  );
   const undone = comparePackages(baselinePath, undonePath);
-  const expectedChanged = new Set([
+  const controlParts = new Set([
     "[Content_Types].xml",
     "ppt/_rels/presentation.xml.rels",
     "ppt/presentation.xml",
   ]);
-  const expectedAdded = new Set(
-    (mutation?.changedParts ?? []).filter((part) => !expectedChanged.has(part)),
-  );
+  const mutation = (label) =>
+    runs.find((entry) => entry.label === label)?.mutation;
   const errors = [];
-  const unexpectedChanged = inserted.changedSharedParts.filter(
-    (part) => !expectedChanged.has(part),
+  validateCreateDiff(
+    "add",
+    inserted,
+    mutation("after-insert"),
+    controlParts,
+    errors,
   );
-  const unexpectedAdded = inserted.addedParts.filter(
-    (part) => !expectedAdded.has(part),
+  validateCreateDiff(
+    "duplicate",
+    duplicated,
+    mutation("after-duplicate"),
+    controlParts,
+    errors,
   );
-  const missingAdded = [...expectedAdded].filter(
-    (part) => !inserted.addedParts.includes(part),
+  validateBoundedDiff(
+    "move",
+    moved,
+    new Set(["ppt/presentation.xml"]),
+    new Set(),
+    new Set(),
+    errors,
   );
-  if (unexpectedChanged.length)
-    errors.push(`unexpected changed parts: ${unexpectedChanged.join(", ")}`);
-  if (unexpectedAdded.length)
-    errors.push(`unexpected added parts: ${unexpectedAdded.join(", ")}`);
-  if (missingAdded.length)
-    errors.push(`missing added parts: ${missingAdded.join(", ")}`);
-  if (inserted.removedParts.length)
-    errors.push(`removed parts: ${inserted.removedParts.join(", ")}`);
-  if (
-    undone.changedSharedParts.length ||
-    undone.addedParts.length ||
-    undone.removedParts.length
-  )
-    errors.push("undo output differs from the original package parts");
+  const deleteMutation = mutation("after-delete");
+  validateBoundedDiff(
+    "delete",
+    deleted,
+    controlParts,
+    new Set(),
+    new Set(
+      (deleteMutation?.changedParts ?? []).filter(
+        (part) => !controlParts.has(part),
+      ),
+    ),
+    errors,
+  );
+  validateEmptyDiff("add/delete round trip", deleteRoundTrip, errors);
+  validateEmptyDiff("four-step undo", undone, errors);
   return {
     valid: errors.length === 0,
     errors,
     inserted: summarizeDiff(inserted),
+    duplicated: summarizeDiff(duplicated),
+    moved: summarizeDiff(moved),
+    deleted: summarizeDiff(deleted),
+    deleteRoundTrip: summarizeDiff(deleteRoundTrip),
     undone: summarizeDiff(undone),
   };
+}
+
+function validateCreateDiff(label, diff, mutation, controlParts, errors) {
+  validateBoundedDiff(
+    label,
+    diff,
+    controlParts,
+    new Set(
+      (mutation?.changedParts ?? []).filter((part) => !controlParts.has(part)),
+    ),
+    new Set(),
+    errors,
+  );
+}
+
+function validateBoundedDiff(
+  label,
+  diff,
+  allowedChanged,
+  expectedAdded,
+  expectedRemoved,
+  errors,
+) {
+  const unexpectedChanged = diff.changedSharedParts.filter(
+    (part) => !allowedChanged.has(part),
+  );
+  const unexpectedAdded = diff.addedParts.filter(
+    (part) => !expectedAdded.has(part),
+  );
+  const missingAdded = [...expectedAdded].filter(
+    (part) => !diff.addedParts.includes(part),
+  );
+  const unexpectedRemoved = diff.removedParts.filter(
+    (part) => !expectedRemoved.has(part),
+  );
+  const missingRemoved = [...expectedRemoved].filter(
+    (part) => !diff.removedParts.includes(part),
+  );
+  if (unexpectedChanged.length)
+    errors.push(
+      `${label} changed unexpected parts: ${unexpectedChanged.join(", ")}`,
+    );
+  if (unexpectedAdded.length)
+    errors.push(
+      `${label} added unexpected parts: ${unexpectedAdded.join(", ")}`,
+    );
+  if (missingAdded.length)
+    errors.push(`${label} missed added parts: ${missingAdded.join(", ")}`);
+  if (unexpectedRemoved.length)
+    errors.push(
+      `${label} removed unexpected parts: ${unexpectedRemoved.join(", ")}`,
+    );
+  if (missingRemoved.length)
+    errors.push(`${label} missed removed parts: ${missingRemoved.join(", ")}`);
+}
+
+function validateEmptyDiff(label, diff, errors) {
+  if (
+    diff.changedSharedParts.length ||
+    diff.addedParts.length ||
+    diff.removedParts.length
+  )
+    errors.push(`${label} differs from its original package parts`);
 }
 
 function comparePackages(before, after) {
