@@ -53,10 +53,23 @@ print(json.dumps({'tests': tests, 'edits': edits}))
       source,
       /fc-match --format='%\{family\}' Arial\)" = "Liberation Sans"/,
     );
-    if (dockerfile === "services/office-editor/Dockerfile")
+    if (dockerfile === "services/office-editor/Dockerfile") {
       assert.match(
         source,
-        /coolwsd-systemplate-setup \/opt\/cool\/systemplate \/opt\/collaboraoffice/,
+        /COPY --from=open-fonts \/usr\/share\/fonts \/opt\/cool\/systemplate\/usr\/share\/fonts/,
       );
+      assert.match(
+        source,
+        /COPY --from=open-fonts \/var\/cache\/fontconfig \/opt\/cool\/systemplate\/var\/cache\/fontconfig/,
+      );
+      assert.match(
+        source,
+        /spellbook-korean-fallback\.conf \/opt\/cool\/systemplate\/etc\/fonts\/conf\.d\/99-spellbook-korean-fallback\.conf/,
+      );
+      const runtimeStage = source.slice(
+        source.indexOf("FROM collabora AS runtime"),
+      );
+      assert.doesNotMatch(runtimeStage, /^RUN /mu);
+    }
   }
 });
