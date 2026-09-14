@@ -6,10 +6,24 @@ const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 function normalizeExpected(expected) {
-  if (!expected || !["transition", "animation"].includes(expected.kind))
-    throw new Error("Playback expectation must name transition or animation.");
+  if (
+    !expected ||
+    !["transition", "animation", "interaction"].includes(expected.kind)
+  )
+    throw new Error(
+      "Playback expectation must name transition, animation or interaction.",
+    );
   if (!Number.isInteger(expected.slideIndex) || expected.slideIndex < 0)
     throw new Error("Playback expectation requires a non-negative slideIndex.");
+  if (
+    expected.kind === "interaction" &&
+    (!expected.action ||
+      !Number.isInteger(expected.targetSlideIndex) ||
+      expected.targetSlideIndex < 0)
+  )
+    throw new Error(
+      "Interaction playback requires an action and targetSlideIndex.",
+    );
   return {
     ...expected,
     timeoutMs: expected.timeoutMs ?? DEFAULT_TIMEOUT_MS,
@@ -47,7 +61,7 @@ export function validatePlaybackEvidence(evidence, expected) {
       throw new Error("The transition did not render multiple canvas frames.");
     if (!evidence.transition?.ended)
       throw new Error("The transition did not reach its playback end event.");
-  } else {
+  } else if (expectation.kind === "animation") {
     const animation = evidence.presentationInfo.animation;
     if (!animation?.present)
       throw new Error(
@@ -77,6 +91,20 @@ export function validatePlaybackEvidence(evidence, expected) {
       throw new Error(
         `The animation did not produce distinct composited frames (${evidence.animation?.frameFingerprints ?? 0}/${evidence.animation?.frameSamples ?? 0}).`,
       );
+  } else {
+    const matchingInteraction = evidence.presentationInfo.interactions?.find(
+      ({ clickAction }) => clickAction?.action === expectation.action,
+    );
+    if (!matchingInteraction)
+      throw new Error(
+        "The edited interaction was not exported to the web player.",
+      );
+    if (!evidence.interaction?.executed)
+      throw new Error("The web player did not execute the click interaction.");
+    if (evidence.interaction?.targetSlideIndex !== expectation.targetSlideIndex)
+      throw new Error("The click interaction reached a different slide.");
+    if (!evidence.interaction?.targetRendered)
+      throw new Error("The target slide did not finish rendering.");
   }
 
   return {
@@ -87,6 +115,7 @@ export function validatePlaybackEvidence(evidence, expected) {
     presentationInfo: evidence.presentationInfo,
     transition: evidence.transition,
     animation: evidence.animation,
+    interaction: evidence.interaction,
   };
 }
 
@@ -127,6 +156,7 @@ async function waitForProbe(frame, predicate, timeoutMs, message) {
             started: probe.animation.started,
             ended: probe.animation.ended,
           },
+          interaction: probe.interaction,
         };
       })
       .catch(() => null);
@@ -139,7 +169,7 @@ async function waitForProbe(frame, predicate, timeoutMs, message) {
 export async function verifySlideshowPlayback(page, expected) {
   const expectation = normalizeExpected(expected);
   const frame = await findOfficeFrame(page, expectation.timeoutMs);
-  await frame.evaluate(({ kind, slideIndex }) => {
+  await frame.evaluate(({ kind, slideIndex, targetSlideIndex }) => {
     const presenter = window.app.map.slideShowPresenter;
     if (presenter.getCanvas()) presenter.endPresentation(true);
     const handler = presenter._slideShowHandler;
@@ -159,6 +189,11 @@ export async function verifySlideshowPlayback(page, expected) {
       animation: {
         started: false,
         ended: false,
+      },
+      interaction: {
+        executed: false,
+        targetSlideIndex: null,
+        targetRendered: false,
       },
       restore: [],
     };
@@ -205,6 +240,8 @@ export async function verifySlideshowPlayback(page, expected) {
 
     const onTransitionEnd = ({ slide }) => {
       if (slide === slideIndex) probe.transition.ended = true;
+      if (kind === "interaction" && slide === targetSlideIndex)
+        probe.interaction.targetRendered = true;
     };
     map.on("transitionend", onTransitionEnd);
     probe.restore.push(() => map.off("transitionend", onTransitionEnd));
@@ -255,6 +292,10 @@ export async function verifySlideshowPlayback(page, expected) {
             ),
           ],
         },
+        interactions: (slide.interactions ?? []).map((interaction) => ({
+          bounds: interaction.bounds,
+          clickAction: interaction.clickAction ?? null,
+        })),
       };
       const canvas = presenter.getCanvas();
       probe.canvas = { width: canvas?.width ?? 0, height: canvas?.height ?? 0 };
@@ -312,6 +353,51 @@ export async function verifySlideshowPlayback(page, expected) {
           frameHashes: [...frameHashes],
         },
       );
+    } else if (expectation.kind === "interaction") {
+      const interaction = await frame.evaluate(({ action }) => {
+        const presenter = window.app.map.slideShowPresenter;
+        const navigator = presenter._slideShowNavigator;
+        const slide =
+          presenter._presentationInfo?.slides?.[navigator.currentSlideIndex];
+        const match = slide?.interactions?.find(
+          (candidate) => candidate.clickAction?.action === action,
+        );
+        if (!match?.bounds)
+          throw new Error("slideshow_interaction_metadata_missing");
+        const executed = navigator.tryExecuteInteractionAt(
+          match.bounds.x + match.bounds.width / 2,
+          match.bounds.y + match.bounds.height / 2,
+        );
+        return { executed };
+      }, expectation);
+      if (!interaction.executed)
+        throw new Error("The web player rejected the click interaction.");
+      const deadline = Date.now() + expectation.timeoutMs;
+      let targetSlideIndex = null;
+      do {
+        targetSlideIndex = await frame
+          .evaluate(
+            () =>
+              window.app.map.slideShowPresenter._slideShowNavigator
+                .currentSlideIndex,
+          )
+          .catch(() => null);
+        if (targetSlideIndex === expectation.targetSlideIndex) break;
+        await wait(40);
+      } while (Date.now() < deadline);
+      await frame.evaluate(
+        (value) => {
+          Object.assign(window.__presentPlaybackProbe.interaction, value);
+        },
+        { executed: true, targetSlideIndex },
+      );
+      if (targetSlideIndex === expectation.targetSlideIndex)
+        await waitForProbe(
+          frame,
+          (state) => state.interaction.targetRendered,
+          expectation.timeoutMs,
+          "The interaction target slide did not finish rendering.",
+        );
     }
 
     const evidence = await frame.evaluate(() => {
@@ -329,6 +415,7 @@ export async function verifySlideshowPlayback(page, expected) {
           frameFingerprints: probe.animation.frameFingerprints ?? 0,
           frameHashes: probe.animation.frameHashes ?? [],
         },
+        interaction: probe.interaction,
       };
     });
     return validatePlaybackEvidence(evidence, expectation);

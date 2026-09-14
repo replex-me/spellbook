@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "coordinateUnit": "1/100mm",
   "nativeUndoRequired": true,
   "verifiedWith": {
     "date": "2026-09-15",
-    "probe": "scripts/native-mutation-conformance-runner.mjs (undo-v17: 62 operations, native Undo/Redo, save/reopen, change budget and visual evidence)"
+    "probe": "scripts/native-mutation-conformance-runner.mjs (undo-v18: 63 operations, native Undo/Redo, save/reopen, change budget, visual and playback evidence)"
   },
   "aiExposure": {
-    "operationCount": 62,
+    "operationCount": 63,
     "policy": "Expose every bounded operation except format-excluded mutations. Before execution, authorize against the current document permission and the live editor engine patch level. Availability records release-evidence maturity; it does not silently remove an implemented operation from the model schema."
   },
   "transaction": {
@@ -127,6 +127,18 @@
         "fixture": "object-style",
         "verification": ["structure", "save_reopen", "change_budget", "visual"],
         "changeBudget": ["slide_parts"]
+      },
+      "object_interaction": {
+        "domain": "editor",
+        "undoProvider": "interaction_snapshot",
+        "fixture": "object-interaction",
+        "verification": [
+          "structure",
+          "save_reopen",
+          "change_budget",
+          "playback"
+        ],
+        "changeBudget": ["slide_parts", "slide_relationships"]
       },
       "object_text": {
         "domain": "editor",
@@ -608,6 +620,14 @@
         "availability": "format_excluded",
         "minEnginePatch": 0
       },
+      "set_object_interaction": {
+        "family": "object_interaction",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 18
+      },
       "replace_text_range": {
         "family": "object_text",
         "target": "element",
@@ -764,6 +784,7 @@
       "set_script_position",
       "set_shape_shadow",
       "set_object_lock",
+      "set_object_interaction",
       "replace_text_range",
       "insert_table_rows",
       "delete_table_rows",
@@ -910,6 +931,10 @@
     {
       "op": "set_animation_timing",
       "reason": "The live editor exposes stable animation targets, effect order and preset metadata, and direct duration changes apply, but stock setters add zero native Undo actions. The prepared bounded engine command targets one observed effect by element, occurrence and preset identity and reuses LibreOffice's complete UndoAnimation snapshot; compiled, browser playback, save/reopen and PowerPoint verification remain required."
+    },
+    {
+      "op": "set_object_interaction",
+      "reason": "LibreOffice can apply shape click actions and targets, but direct UNO property setters add no native Undo action. The undo-v18 engine command snapshots only interaction state, rejects the legacy case where a second-effect sound shares the same target field, and therefore cannot silently overwrite adjacent animation or sound data; compiled, browser playback, save/reopen and PowerPoint verification remain required."
     }
   ],
   "candidateOperations": [
@@ -994,6 +1019,7 @@
           "set_script_position",
           "set_shape_shadow",
           "set_object_lock",
+          "set_object_interaction",
           "replace_text_range",
           "insert_table_rows",
           "delete_table_rows",
@@ -1020,6 +1046,26 @@
         "description": "Exact slide-layout index from the current native observation. Required by set_slide_layout."
       },
       "targetSlideIndex": { "type": ["number", "null"] },
+      "interaction": {
+        "type": ["string", "null"],
+        "enum": [
+          "none",
+          "external_url",
+          "internal_slide",
+          "next_slide",
+          "previous_slide",
+          "first_slide",
+          "last_slide",
+          "end_show",
+          null
+        ],
+        "description": "Bounded PowerPoint click behavior. External URLs permit only credential-free HTTP(S); internal_slide requires targetSlideIndex."
+      },
+      "url": {
+        "type": ["string", "null"],
+        "maxLength": 2048,
+        "description": "External HTTP(S) target for set_object_interaction."
+      },
       "hidden": { "type": ["boolean", "null"] },
       "layout": { "type": ["number", "null"] },
       "transitionEffect": {
@@ -1369,6 +1415,8 @@
       "slideIndex",
       "masterIndex",
       "targetSlideIndex",
+      "interaction",
+      "url",
       "hidden",
       "layout",
       "transitionEffect",

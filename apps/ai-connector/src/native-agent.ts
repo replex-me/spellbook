@@ -8,6 +8,7 @@ import {
   nativeBatchEditSchema,
   nativeCreateOperations,
   nativeEditContract,
+  nativeEditOperationCount,
   nativeElementOperations,
   nativeIdentityReplacingOperations,
   nativeMultiElementOperations,
@@ -326,8 +327,7 @@ export async function runNativeTurn(
           {
             type: "function",
             name: "native_edit",
-            description:
-              "Change one observed object or slide in the SAME open editor with native undo. The schema includes all 62 bounded PPTX operations implemented by Spellbook: slide creation/reorder/layout/background/visibility/transition, speaker notes and animation timing; object creation/duplication/deletion/topology/geometry/style/text/range formatting/locking/cropping; table content/structure/style; and fixed-size internal chart data plus column/line/area/pie/scatter/radar chart-family changes. Operations that need a patched engine are rejected unless the live observation reports the required undo-v level. For set_chart_data, keep the observed dimensions when changing data, rowDescriptions (category labels), or columnDescriptions (series labels). An identity-replacing chart operation must be isolated in its own edit. Linked or external-workbook chart mutation and arbitrary master/theme authoring are outside this bounded schema. Observe after stale state. Do not send executable code.",
+            description: `Change one observed object or slide in the SAME open editor with native undo. The schema includes all ${nativeEditOperationCount} bounded PPTX operations implemented by Spellbook: slide creation/reorder/layout/background/visibility/transition, speaker notes and animation timing; object creation/duplication/deletion/topology/geometry/style/text/range formatting/locking/cropping and safe click interactions; table content/structure/style; and fixed-size internal chart data plus column/line/area/pie/scatter/radar chart-family changes. Operations that need a patched engine are rejected unless the live observation reports the required undo-v level. For set_chart_data, keep the observed dimensions when changing data, rowDescriptions (category labels), or columnDescriptions (series labels). An identity-replacing chart operation must be isolated in its own edit. External interactions accept credential-free HTTP(S) only; do not add one without explicit user intent. Linked or external-workbook chart mutation and arbitrary master/theme authoring are outside this bounded schema. Observe after stale state. Do not send executable code.`,
             inputSchema: nativeEditContract.toolInputSchema,
           },
           {

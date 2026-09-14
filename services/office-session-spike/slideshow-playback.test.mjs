@@ -32,6 +32,11 @@ const base = {
     frameFingerprints: 5,
     frameHashes: ["a", "b", "c", "d", "e"],
   },
+  interaction: {
+    executed: true,
+    targetSlideIndex: 1,
+    targetRendered: true,
+  },
 };
 
 test("transition playback requires metadata, activity frames and completion", () => {
@@ -94,5 +99,45 @@ test("animation playback requires exported timing and changed canvas frames", ()
         },
       ),
     /not sampled completely/,
+  );
+});
+
+test("interaction playback requires exported action and actual navigation", () => {
+  const interactionEvidence = {
+    ...base,
+    presentationInfo: {
+      ...base.presentationInfo,
+      interactions: [
+        {
+          bounds: { x: 10, y: 20, width: 100, height: 40 },
+          clickAction: { action: "bookmark", bookmark: "Slide 2" },
+        },
+      ],
+    },
+  };
+  assert.equal(
+    validatePlaybackEvidence(interactionEvidence, {
+      kind: "interaction",
+      slideIndex: 0,
+      action: "bookmark",
+      targetSlideIndex: 1,
+    }).actualWebPlayback,
+    true,
+  );
+  assert.throws(
+    () =>
+      validatePlaybackEvidence(
+        {
+          ...interactionEvidence,
+          interaction: { executed: true, targetSlideIndex: 0 },
+        },
+        {
+          kind: "interaction",
+          slideIndex: 0,
+          action: "bookmark",
+          targetSlideIndex: 1,
+        },
+      ),
+    /different slide/,
   );
 });

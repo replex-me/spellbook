@@ -5,11 +5,14 @@ import {
   type NativeObservation,
   type NativePermission,
 } from "./native-agent.js";
-import { nativeEditContract } from "./native-edit-contract.js";
+import {
+  nativeEditContract,
+  nativeEditOperationCount,
+} from "./native-edit-contract.js";
 
 const state: NativeObservation = {
   unit: "1/100mm",
-  engine: { patchLevel: "undo-v17" },
+  engine: { patchLevel: "undo-v18" },
   revision: "v2-test",
   activeSlide: 0,
   selectedElementIds: ["0/0"],
@@ -174,9 +177,10 @@ describe("shared open document agent", () => {
           "crop_image",
           "set_slide_transition",
           "set_animation_timing",
+          "set_object_interaction",
         ]),
       );
-      expect(schema.properties.op.enum).toHaveLength(62);
+      expect(schema.properties.op.enum).toHaveLength(nativeEditOperationCount);
       expect(schema.properties.op.enum).not.toContain("set_printable");
       expect(schema.properties.row.type).toContain("number");
       expect(schema.properties.column.type).toContain("number");
@@ -190,7 +194,7 @@ describe("shared open document agent", () => {
     await f.run();
   });
 
-  it("authorizes all 62 bounded operations on the verified undo-v17 engine", async () => {
+  it("authorizes every bounded operation on the verified undo-v18 engine", async () => {
     const f = fixture(async (o) => {
       await o.onTool(
         "native_observe",
@@ -225,7 +229,7 @@ describe("shared open document agent", () => {
       }
     });
     await f.run();
-    expect(f.call).toHaveBeenCalledTimes(63);
+    expect(f.call).toHaveBeenCalledTimes(nativeEditOperationCount + 1);
   });
 
   it("rejects a patched operation when the live editor is below its required patch", async () => {

@@ -6,6 +6,9 @@ interface NativeEditContract {
   version: string;
   coordinateUnit: string;
   nativeUndoRequired: boolean;
+  aiExposure: {
+    operationCount: number;
+  };
   transaction: {
     maxCommands: number;
     supportsDryRun: boolean;
@@ -81,6 +84,7 @@ const executable = Object.entries(mutationOperations)
   .map(([operation]) => operation);
 if (
   !nativeEditContract.nativeUndoRequired ||
+  nativeEditContract.aiExposure.operationCount !== executable.length ||
   new Set(grouped).size !== grouped.length ||
   new Set(declared).size !== declared.length ||
   grouped.length !== executable.length ||
@@ -114,6 +118,8 @@ export const nativeIdentityReplacingOperations = new Set(
     )
     .map(([operation]) => operation),
 );
+
+export const nativeEditOperationCount = executable.length;
 
 export const nativeMutationOperations = mutationOperations;
 

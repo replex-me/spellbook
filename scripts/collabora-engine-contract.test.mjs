@@ -99,15 +99,17 @@ test("runtime mutation contracts are generated from the public capability model"
     Number(patchVersion.groups.version),
   );
   const operations = capabilities.mutationModel.operations;
-  assert.equal(Object.keys(operations).length, 63);
+  assert.equal(Object.keys(operations).length, 64);
   assert.equal(operations.set_printable.availability, "format_excluded");
   assert.equal(
     operations.crop_image.availability,
     "runtime_validation_required",
   );
   assert.equal(operations.insert_slide.minEnginePatch, 9);
+  assert.equal(operations.set_object_interaction.minEnginePatch, 18);
+  assert.equal(operations.set_object_interaction.family, "object_interaction");
   const exposedOperations = capabilities.toolInputSchema.properties.op.enum;
-  assert.equal(exposedOperations.length, 62);
+  assert.equal(exposedOperations.length, 63);
   assert.equal(new Set(exposedOperations).size, exposedOperations.length);
   assert.deepEqual(
     exposedOperations.slice().sort(),

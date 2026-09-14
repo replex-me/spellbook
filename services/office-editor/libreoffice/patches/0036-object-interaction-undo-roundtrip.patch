@@ -1,0 +1,306 @@
+--- a/sd/source/ui/view/drviews2.cxx
++++ b/sd/source/ui/view/drviews2.cxx
+@@ -47,6 +47,7 @@
+ #include <com/sun/star/drawing/XDrawPages.hpp>
+ #include <com/sun/star/lang/XInitialization.hpp>
+ #include <com/sun/star/lang/IllegalArgumentException.hpp>
++#include <com/sun/star/presentation/ClickAction.hpp>
+ #include <com/sun/star/presentation/EffectNodeType.hpp>
+ #include <com/sun/star/text/GraphicCrop.hpp>
+ #include <model/SlideSorterModel.hxx>
+@@ -125,6 +126,7 @@
+ 
+ #include <comphelper/diagnose_ex.hxx>
+ #include <tools/json_writer.hxx>
++#include <tools/urlobj.hxx>
+ #include <tools/UnitConversion.hxx>
+ 
+ #include <o3tl/string_view.hxx>
+@@ -165,6 +167,7 @@
+ #include <strings.hrc>
+ 
+ #include <AnimationChildWindow.hxx>
++#include <anminfo.hxx>
+ #include <CustomAnimationEffect.hxx>
+ #include <DesignTemplates.hxx>
+ #include <DrawDocShell.hxx>
+@@ -1040,6 +1043,64 @@
+     }
+ }
+ 
++void lcl_SetObjectInteraction(SdrObject& rObject,
++                              presentation::ClickAction eAction,
++                              const OUString& rBookmark)
++{
++    SdAnimationInfo* pInfo = SdDrawDocument::GetShapeUserData(rObject, true);
++    pInfo->meClickAction = eAction;
++    pInfo->SetBookmark(rBookmark);
++    rObject.SetChanged();
++    rObject.BroadcastObjectChange();
++}
++
++// Interaction data lives in SdAnimationInfo rather than the ordinary drawing
++// item set, so generic attribute Undo cannot restore it. Keep this action
++// deliberately narrow: changing a link must not overwrite animation, sound,
++// dimming or other presentation state stored beside it.
++class SetObjectInteractionUndoAction final : public SdUndoAction
++{
++public:
++    SetObjectInteractionUndoAction(
++        SdDrawDocument& rDoc, SdrObject& rObject, bool bHadOldInfo,
++        presentation::ClickAction eOldAction, const OUString& rOldBookmark,
++        presentation::ClickAction eNewAction, const OUString& rNewBookmark)
++        : SdUndoAction(rDoc)
++        , mrObject(rObject)
++        , mbHadOldInfo(bHadOldInfo)
++        , meOldAction(eOldAction)
++        , maOldBookmark(rOldBookmark)
++        , meNewAction(eNewAction)
++        , maNewBookmark(rNewBookmark)
++    {
++    }
++
++    void Undo() override
++    {
++        if (mbHadOldInfo)
++            lcl_SetObjectInteraction(mrObject, meOldAction, maOldBookmark);
++        else
++        {
++            mrObject.deleteUserData(UserDataID::ID_SdAnimationInfo);
++            mrObject.SetChanged();
++            mrObject.BroadcastObjectChange();
++        }
++    }
++
++    void Redo() override
++    {
++        lcl_SetObjectInteraction(mrObject, meNewAction, maNewBookmark);
++    }
++
++private:
++    SdrObject& mrObject;
++    bool mbHadOldInfo;
++    presentation::ClickAction meOldAction;
++    OUString maOldBookmark;
++    presentation::ClickAction meNewAction;
++    OUString maNewBookmark;
++};
++
+ // Owns the native history boundary of one document transform. Command
+ // handlers only contribute typed Undo actions; this guard is the sole owner of
+ // list-action lifetime, commit and failure rollback.
+@@ -1889,6 +1950,106 @@
+     rCtx.touch(pPage);
+ }
+ 
++void handleSetObjectInteraction(SlideCommandContext& rCtx, const std::string& rKey,
++                                const boost::property_tree::ptree& rValue)
++{
++    static const std::set<std::string> aAllowedKeys = {
++        "Action",
++        "Target",
++        "TargetSlideIndex",
++    };
++    for (const auto& rEntry : rValue)
++    {
++        if (!aAllowedKeys.contains(rEntry.first))
++            throw lang::IllegalArgumentException(
++                u"Unsupported object interaction field: "_ustr
++                    + OUString::fromUtf8(rEntry.first),
++                nullptr, 0);
++    }
++
++    const auto oAction = rValue.get_optional<std::string>("Action");
++    const auto oTarget = rValue.get_optional<std::string>("Target");
++    const auto oTargetSlide = rValue.get_optional<sal_Int32>("TargetSlideIndex");
++    if (!oAction)
++        throw lang::IllegalArgumentException(u"Object interaction action is required"_ustr,
++                                              nullptr, 0);
++
++    SdPage* pPage = rCtx.mpDoc->GetSdPage(rCtx.mnActPageId, PageKind::Standard);
++    if (!pPage)
++        throw lang::IllegalArgumentException(u"Object interaction slide is unavailable"_ustr,
++                                              nullptr, 0);
++    SdrObject* pObject = lcl_ResolveObjectPath(*pPage, rKey.substr(21));
++
++    presentation::ClickAction eNewAction = presentation::ClickAction_NONE;
++    OUString aNewBookmark;
++    if (*oAction == "external_url")
++    {
++        if (!oTarget || oTargetSlide || oTarget->empty() || oTarget->size() > 2048)
++            throw lang::IllegalArgumentException(u"External link target is invalid"_ustr,
++                                                  nullptr, 0);
++        INetURLObject aUrl(OUString::fromUtf8(*oTarget));
++        if (aUrl.HasError()
++            || (aUrl.GetProtocol() != INetProtocol::Http
++                && aUrl.GetProtocol() != INetProtocol::Https)
++            || aUrl.HasUserData() || aUrl.GetHost().isEmpty())
++            throw lang::IllegalArgumentException(u"Only credential-free HTTP links are allowed"_ustr,
++                                                  nullptr, 0);
++        eNewAction = presentation::ClickAction_DOCUMENT;
++        aNewBookmark = aUrl.GetMainURL(INetURLObject::DecodeMechanism::NONE);
++    }
++    else if (*oAction == "internal_slide")
++    {
++        if (oTarget || !oTargetSlide || *oTargetSlide < 0
++            || *oTargetSlide >= rCtx.mnPageCount)
++            throw lang::IllegalArgumentException(u"Internal slide target is invalid"_ustr,
++                                                  nullptr, 0);
++        SdPage* pTarget = rCtx.mpDoc->GetSdPage(
++            static_cast<sal_uInt16>(*oTargetSlide), PageKind::Standard);
++        if (!pTarget)
++            throw lang::IllegalArgumentException(u"Internal slide target is unavailable"_ustr,
++                                                  nullptr, 0);
++        eNewAction = presentation::ClickAction_BOOKMARK;
++        aNewBookmark = pTarget->GetName();
++    }
++    else
++    {
++        if (oTarget || oTargetSlide)
++            throw lang::IllegalArgumentException(u"Navigation action has an unexpected target"_ustr,
++                                                  nullptr, 0);
++        static const std::map<std::string, presentation::ClickAction> aNavigationActions = {
++            { "none", presentation::ClickAction_NONE },
++            { "next_slide", presentation::ClickAction_NEXTPAGE },
++            { "previous_slide", presentation::ClickAction_PREVPAGE },
++            { "first_slide", presentation::ClickAction_FIRSTPAGE },
++            { "last_slide", presentation::ClickAction_LASTPAGE },
++            { "end_show", presentation::ClickAction_STOPPRESENTATION },
++        };
++        const auto it = aNavigationActions.find(*oAction);
++        if (it == aNavigationActions.end())
++            throw lang::IllegalArgumentException(u"Unsupported object interaction action"_ustr,
++                                                  nullptr, 0);
++        eNewAction = it->second;
++    }
++
++    SdAnimationInfo* pOldInfo = SdDrawDocument::GetAnimationInfo(pObject);
++    if (pOldInfo && pOldInfo->mbSecondSoundOn)
++        throw lang::IllegalArgumentException(
++            u"Object interaction cannot replace a shared second-effect sound target"_ustr,
++            nullptr, 0);
++    const bool bHadOldInfo = pOldInfo != nullptr;
++    const presentation::ClickAction eOldAction
++        = pOldInfo ? pOldInfo->meClickAction : presentation::ClickAction_NONE;
++    const OUString aOldBookmark = pOldInfo ? pOldInfo->GetBookmark() : OUString();
++    if (eOldAction == eNewAction && aOldBookmark == aNewBookmark)
++        return;
++
++    rCtx.addUndo(std::make_unique<SetObjectInteractionUndoAction>(
++        *rCtx.mpDoc, *pObject, bHadOldInfo, eOldAction, aOldBookmark,
++        eNewAction, aNewBookmark));
++    lcl_SetObjectInteraction(*pObject, eNewAction, aNewBookmark);
++    rCtx.touch(pPage);
++}
++
+ void handleDuplicateObject(SlideCommandContext& rCtx, const std::string& rKey,
+                            const boost::property_tree::ptree& rValue)
+ {
+@@ -2552,6 +2713,7 @@
+     { "SetSlideIntent", false, false, &handleSetSlideIntent },
+     { "SetNotes", false, false, &handleSetNotes },
+     { "SetObjectProperties.", true, false, &handleSetObjectProperties },
++    { "SetObjectInteraction.", true, false, &handleSetObjectInteraction },
+     { "DuplicateObject.", true, false, &handleDuplicateObject },
+     { "SetTextProperties.", true, false, &handleSetTextProperties },
+     { "SetGraphicCrop.", true, false, &handleSetGraphicCrop },
+--- a/sd/qa/unit/uiimpress.cxx
++++ b/sd/qa/unit/uiimpress.cxx
+@@ -40,6 +40,7 @@
+ #include <com/sun/star/document/XDocumentProperties.hpp>
+ #include <com/sun/star/frame/Desktop.hpp>
+ #include <com/sun/star/frame/XStorable.hpp>
++#include <com/sun/star/presentation/ClickAction.hpp>
+ #include <com/sun/star/presentation/EffectNodeType.hpp>
+ #include <com/sun/star/uno/Reference.hxx>
+ #include <com/sun/star/drawing/LineStyle.hpp>
+@@ -112,6 +113,7 @@
+ #include <docmodel/color/ComplexColorJSON.hxx>
+ 
+ #include <drawdoc.hxx>
++#include <anminfo.hxx>
+ #include <CustomAnimationEffect.hxx>
+ #include <DrawDocShell.hxx>
+ #include <DesignTemplates.hxx>
+@@ -631,6 +633,81 @@
+     CPPUNIT_ASSERT_EQUAL(sal_Int32(321), nLeft);
+     CPPUNIT_ASSERT(bShadow);
+     CPPUNIT_ASSERT(bMoveProtect);
++}
++
++CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectInteractionUndoRedo)
++{
++    createSdImpressDoc();
++    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
++    CPPUNIT_ASSERT(pImpressDocument);
++    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
++    SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
++    CPPUNIT_ASSERT(pPage && pPage->GetObjCount() > 0);
++    SdrObject* pObject = pPage->GetObj(0);
++
++    SdAnimationInfo* pOldInfo = SdDrawDocument::GetShapeUserData(*pObject, true);
++    pOldInfo->mbDimHide = true;
++    pOldInfo->mnVerb = 42;
++    const presentation::ClickAction eOldAction
++        = pOldInfo ? pOldInfo->meClickAction : presentation::ClickAction_NONE;
++    const OUString aOldBookmark = pOldInfo ? pOldInfo->GetBookmark() : OUString();
++
++    static constexpr OUString aJson = uR"json(
++{
++    "Transforms": {
++        "SlideCommands": [
++            {"JumpToSlide": 0},
++            {"SetObjectInteraction.0": {
++                "Action": "external_url",
++                "Target": "https://example.invalid/presentation"
++            }}
++        ]
++    }
++}
++)json"_ustr;
++    auto* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
++    const size_t nUndoBefore = pUndoManager->GetUndoActionCount();
++    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
++                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
++
++    auto getInteraction = [&]() {
++        SdAnimationInfo* pInfo = SdDrawDocument::GetAnimationInfo(pObject);
++        return std::pair(
++            pInfo ? pInfo->meClickAction : presentation::ClickAction_NONE,
++            pInfo ? pInfo->GetBookmark() : OUString());
++    };
++    auto assertAdjacentState = [&]() {
++        SdAnimationInfo* pInfo = SdDrawDocument::GetAnimationInfo(pObject);
++        CPPUNIT_ASSERT(pInfo);
++        CPPUNIT_ASSERT(pInfo->mbDimHide);
++        CPPUNIT_ASSERT_EQUAL(sal_uInt16(42), pInfo->mnVerb);
++    };
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount() - nUndoBefore);
++    auto [eAction, aBookmark] = getInteraction();
++    CPPUNIT_ASSERT_EQUAL(presentation::ClickAction_DOCUMENT, eAction);
++    CPPUNIT_ASSERT_EQUAL(u"https://example.invalid/presentation"_ustr, aBookmark);
++    assertAdjacentState();
++
++    pUndoManager->Undo();
++    std::tie(eAction, aBookmark) = getInteraction();
++    CPPUNIT_ASSERT_EQUAL(eOldAction, eAction);
++    CPPUNIT_ASSERT_EQUAL(aOldBookmark, aBookmark);
++    assertAdjacentState();
++    pUndoManager->Redo();
++    std::tie(eAction, aBookmark) = getInteraction();
++    CPPUNIT_ASSERT_EQUAL(presentation::ClickAction_DOCUMENT, eAction);
++    CPPUNIT_ASSERT_EQUAL(u"https://example.invalid/presentation"_ustr, aBookmark);
++    assertAdjacentState();
++
++    saveAndReload(TestFilter::PPTX);
++    pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
++    CPPUNIT_ASSERT(pImpressDocument);
++    pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
++    CPPUNIT_ASSERT(pPage && pPage->GetObjCount() > 0);
++    pObject = pPage->GetObj(0);
++    std::tie(eAction, aBookmark) = getInteraction();
++    CPPUNIT_ASSERT_EQUAL(presentation::ClickAction_DOCUMENT, eAction);
++    CPPUNIT_ASSERT_EQUAL(u"https://example.invalid/presentation"_ustr, aBookmark);
+ }
+ 
+ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRedo)

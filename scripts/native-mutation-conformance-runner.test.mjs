@@ -48,7 +48,7 @@ test("execution plan assigns a real PPTX and bounded operation routes to every s
   const plan = buildConformancePlan(capabilities, conformance);
   const scenarios = buildScenarioExecutionPlan(capabilities, conformance, plan);
 
-  assert.equal(scenarios.length, 9);
+  assert.equal(scenarios.length, 10);
   assert.equal(scenarios[0].name, "table-structure");
   assert.equal(scenarios.at(-1).name, "general-native-surface");
   scenarios.forEach(assertPinnedPublicSource);
@@ -56,13 +56,18 @@ test("execution plan assigns a real PPTX and bounded operation routes to every s
     scenarios.every((scenario) => /^[0-9a-f]{64}$/.test(scenario.sourceSha256)),
   );
   assert.ok(
-    scenarios.every((scenario) => scenario.expectedPatchLevel === "undo-v17"),
+    scenarios.every((scenario) => scenario.expectedPatchLevel === "undo-v18"),
   );
   assert.ok(scenarios.every((scenario) => scenario.allowedOperations.length));
   assert.deepEqual(
     scenarios.find((scenario) => scenario.name === "animation-timing")
       .allowedOperations,
     ["set_animation_timing"],
+  );
+  assert.deepEqual(
+    scenarios.find((scenario) => scenario.name === "object-interaction")
+      .allowedOperations,
+    ["set_object_interaction"],
   );
 });
 

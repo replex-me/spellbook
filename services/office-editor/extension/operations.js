@@ -21,6 +21,7 @@ function spellbookDocumentOperation(request) {
   const patchedAnimationTimingEngine = hasEnginePatch(8);
   const patchedSlideInsertionEngine = hasEnginePatch(9);
   const patchedObjectLifecycleEngine = hasEnginePatch(14);
+  const patchedObjectInteractionEngine = hasEnginePatch(18);
   if (request.expiresAt && Date.now() > request.expiresAt)
     throw new Error("expired_operation");
   const mutationContracts = request.mutationContracts;
@@ -1142,6 +1143,7 @@ function spellbookDocumentOperation(request) {
             description: safeProperty(shape, "Description"),
             decorative: safeProperty(shape, "Decorative"),
             hyperlink: safeProperty(shape, "Hyperlink"),
+            bookmark: safeProperty(shape, "Bookmark"),
             clickAction: enumName(safeProperty(shape, "OnClick")),
             presentationOrder: safeProperty(shape, "PresentationOrder"),
             moveProtected: safeProperty(shape, "MoveProtect"),
@@ -1348,6 +1350,42 @@ function spellbookDocumentOperation(request) {
         elements,
         layoutIssues,
       });
+    }
+    const actionByUnoName = {
+      NONE: "none",
+      DOCUMENT: "external_url",
+      BOOKMARK: "internal_slide",
+      NEXTPAGE: "next_slide",
+      PREVPAGE: "previous_slide",
+      FIRSTPAGE: "first_slide",
+      LASTPAGE: "last_slide",
+      STOPPRESENTATION: "end_show",
+    };
+    const slideIndexByName = new Map(
+      slides.map((slide) => [slide.name, slide.slideIndex]),
+    );
+    for (const slide of slides) {
+      for (const element of slide.elements) {
+        const unoAction = String(element.clickAction ?? "")
+          .split(/[.:]/u)
+          .at(-1)
+          ?.toUpperCase();
+        const mappedAction = actionByUnoName[unoAction] ?? "unsupported";
+        const targetSlideIndex =
+          mappedAction === "internal_slide"
+            ? (slideIndexByName.get(element.bookmark) ?? null)
+            : null;
+        const action =
+          mappedAction === "internal_slide" && targetSlideIndex === null
+            ? "unsupported"
+            : mappedAction;
+        element.interaction = {
+          action,
+          url: action === "external_url" ? element.bookmark || null : null,
+          targetSlideIndex:
+            action === "internal_slide" ? targetSlideIndex : null,
+        };
+      }
     }
     const issues = slides.flatMap((slide) =>
       slide.layoutIssues.map((issue) => ({
@@ -2315,6 +2353,119 @@ function spellbookDocumentOperation(request) {
       (permission.mode === "selection" &&
         permission.elementIds.includes(command.elementId));
     if (!allowed) throw new Error("outside_edit_permission");
+
+    if (command.op === "set_object_interaction") {
+      if (!patchedObjectInteractionEngine)
+        throw new Error("native_engine_object_interaction_patch_required");
+      const actions = new Set([
+        "none",
+        "external_url",
+        "internal_slide",
+        "next_slide",
+        "previous_slide",
+        "first_slide",
+        "last_slide",
+        "end_show",
+      ]);
+      if (!actions.has(command.interaction))
+        throw new Error("invalid_object_interaction");
+      let normalizedUrl = null;
+      let targetSlideIndex = null;
+      if (command.interaction === "external_url") {
+        if (
+          typeof command.url !== "string" ||
+          !command.url ||
+          command.url.length > 2048 ||
+          (command.targetSlideIndex !== null &&
+            command.targetSlideIndex !== undefined)
+        )
+          throw new Error("invalid_external_link");
+        let parsed;
+        try {
+          parsed = new URL(command.url);
+        } catch (_) {
+          throw new Error("invalid_external_link");
+        }
+        if (
+          !["http:", "https:"].includes(parsed.protocol) ||
+          parsed.username ||
+          parsed.password ||
+          !parsed.hostname
+        )
+          throw new Error("unsafe_external_link");
+        normalizedUrl = parsed.href;
+      } else if (command.interaction === "internal_slide") {
+        if (
+          (command.url !== null && command.url !== undefined) ||
+          !Number.isInteger(command.targetSlideIndex) ||
+          command.targetSlideIndex < 0 ||
+          command.targetSlideIndex >= before.slides.length
+        )
+          throw new Error("invalid_internal_slide_link");
+        targetSlideIndex = command.targetSlideIndex;
+      } else if (
+        (command.url !== null && command.url !== undefined) ||
+        (command.targetSlideIndex !== null &&
+          command.targetSlideIndex !== undefined)
+      ) {
+        throw new Error("unexpected_interaction_target");
+      }
+      const expectedInteraction = {
+        action: command.interaction,
+        url: normalizedUrl,
+        targetSlideIndex,
+      };
+      if (stableJson(element.interaction) === stableJson(expectedInteraction))
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, before.activeSlide);
+
+      const objectPath = command.elementId.split("/").slice(1).join("/");
+      const payload = { Action: command.interaction };
+      if (normalizedUrl !== null) payload.Target = normalizedUrl;
+      if (targetSlideIndex !== null)
+        payload.TargetSlideIndex = targetSlideIndex;
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        { [`SetObjectInteraction.${objectPath}`]: payload },
+      ]);
+      const after = read();
+      const target = after.slides[slideIndex]?.elements.find(
+        (candidate) => candidate.elementId === command.elementId,
+      );
+      const stripInteractions = (slides) =>
+        slides.map((slide) => ({
+          ...slide,
+          elements: slide.elements.map(
+            ({ interaction, bookmark, clickAction, ...candidate }) => candidate,
+          ),
+        }));
+      const unrelatedChanged =
+        documentStateJson(after.masters) !==
+          documentStateJson(before.masters) ||
+        documentStateJson(stripInteractions(after.slides)) !==
+          documentStateJson(stripInteractions(before.slides));
+      const applied =
+        target &&
+        stableJson(target.interaction) === stableJson(expectedInteraction);
+      if (
+        !applied ||
+        unrelatedChanged ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length <= undoCount)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          unrelatedChanged
+            ? "unexpected_edit_scope"
+            : !applied
+              ? "native_command_not_applied"
+              : "native_undo_not_recorded",
+        );
+      }
+      return result(after, slideIndex);
+    }
 
     if (command.op === "set_animation_timing") {
       if (!patchedAnimationTimingEngine)

@@ -13,10 +13,10 @@ const conformance = JSON.parse(
 test("native mutation plan covers every operation through family fixtures", () => {
   const plan = buildConformancePlan(capabilities, conformance);
 
-  assert.equal(plan.summary.operations, 62);
-  assert.equal(plan.summary.families, 15);
-  assert.equal(plan.summary.scenarios, 9);
-  assert.equal(plan.summary.nativeTests, 18);
+  assert.equal(plan.summary.operations, 63);
+  assert.equal(plan.summary.families, 16);
+  assert.equal(plan.summary.scenarios, 10);
+  assert.equal(plan.summary.nativeTests, 19);
   assert.equal(Object.keys(plan.scenarios)[0], "table-structure");
   assert.equal(Object.keys(plan.scenarios).at(-1), "general-native-surface");
   assert.deepEqual(
@@ -69,6 +69,7 @@ test("engine patch selection removes unavailable operations without hand-maintai
   );
   assert.equal(stock.families.animation, undefined);
   assert.equal(stock.families.slide_transition, undefined);
+  assert.equal(stock.families.object_interaction, undefined);
 });
 
 test("plan maps every required evidence gate to a scoped provider", () => {
@@ -77,8 +78,12 @@ test("plan maps every required evidence gate to a scoped provider", () => {
   assert.deepEqual(plan.families.object_text.missingGates, []);
   assert.deepEqual(plan.families.slide_transition.missingGates, []);
   assert.deepEqual(plan.families.animation.missingGates, []);
+  assert.deepEqual(plan.families.object_interaction.missingGates, []);
   assert.equal(plan.summary.missingGates, 0);
   assert.equal(plan.summary.complete, true);
   assert.ok(plan.families.animation.providedGates.includes("playback"));
+  assert.ok(
+    plan.families.object_interaction.providedGates.includes("playback"),
+  );
   assert.ok(!plan.families.object_text.providedGates.includes("playback"));
 });
