@@ -69,6 +69,46 @@ function withoutMergedContinuationFormatting(slides) {
   return slides;
 }
 
+const AUTOMATIC_UNO_PLACEHOLDER_NAME =
+  /^unnamed-com\.sun\.star\.presentation\.[A-Za-z]+Shape$/u;
+const SERIALIZED_PLACEHOLDER_NAME = /^PlaceHolder [1-9][0-9]*$/u;
+
+/**
+ * A newly applied Impress layout creates empty presentation placeholders with
+ * transient UNO defaults. OOXML save/reopen gives those same placeholders an
+ * automatic package name and resolves inherited text-flow defaults, without
+ * changing a rendered pixel. These fields are not stable identity until the
+ * placeholder contains text or receives a user-assigned name.
+ */
+function withoutTransientEmptyPlaceholderDefaults(slides) {
+  for (const slide of slides) {
+    for (const element of slide.elements ?? []) {
+      const automaticInMemoryName =
+        AUTOMATIC_UNO_PLACEHOLDER_NAME.test(element.name ?? "") &&
+        (element.objectName ?? "") === "";
+      const automaticSerializedName =
+        SERIALIZED_PLACEHOLDER_NAME.test(element.name ?? "") &&
+        element.objectName === element.name;
+      if (
+        element.text !== "" ||
+        !String(element.kind ?? "").startsWith("com.sun.star.presentation.") ||
+        (!automaticInMemoryName && !automaticSerializedName)
+      )
+        continue;
+      for (const field of [
+        "name",
+        "objectName",
+        "fontFamily",
+        "color",
+        "textAutoGrowWidth",
+        "textWordWrap",
+      ])
+        delete element[field];
+    }
+  }
+  return slides;
+}
+
 /**
  * Captures the persisted slide/master model while using the detailed UNO text
  * enumeration as the source of truth for the requested slide. The compact
@@ -116,19 +156,21 @@ export function normalizeDocumentPersistenceState(state) {
       const rightIdentity = `${right.name ?? ""}\u0000${right.layout ?? ""}\u0000${stableJson(right)}`;
       return leftIdentity.localeCompare(rightIdentity, "en");
     });
-  const slides = withoutMergedContinuationFormatting(
-    (state?.slides ?? []).map(({ masterIndex: _masterIndex, ...slide }) => {
-      const normalized = withoutObservationOnlyFields(structuredClone(slide));
-      if (normalized.transition) {
-        const {
-          effect: _effect,
-          speed: _speed,
-          ...persistedTransition
-        } = normalized.transition;
-        normalized.transition = persistedTransition;
-      }
-      return normalized;
-    }),
+  const slides = withoutTransientEmptyPlaceholderDefaults(
+    withoutMergedContinuationFormatting(
+      (state?.slides ?? []).map(({ masterIndex: _masterIndex, ...slide }) => {
+        const normalized = withoutObservationOnlyFields(structuredClone(slide));
+        if (normalized.transition) {
+          const {
+            effect: _effect,
+            speed: _speed,
+            ...persistedTransition
+          } = normalized.transition;
+          normalized.transition = persistedTransition;
+        }
+        return normalized;
+      }),
+    ),
   );
   return { slides, masters };
 }

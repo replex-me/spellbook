@@ -273,6 +273,99 @@ test("document persistence excludes regenerated observation diagnostics but not 
   );
 });
 
+test("document persistence canonicalizes only empty engine-generated layout placeholders", () => {
+  const placeholder = (name, objectName, defaults) => ({
+    elementId: "0/0",
+    name,
+    objectName,
+    kind: "com.sun.star.presentation.OutlinerShape",
+    text: "",
+    fontFamily: defaults.fontFamily,
+    color: defaults.color,
+    textAutoGrowWidth: defaults.textAutoGrowWidth,
+    textWordWrap: defaults.textWordWrap,
+    width: 100,
+    height: 50,
+  });
+  const before = {
+    masters: [],
+    slides: [
+      {
+        elements: [
+          placeholder("Subtitle 2", "Subtitle 2", {
+            fontFamily: "Calibri",
+            color: 0,
+            textAutoGrowWidth: false,
+            textWordWrap: true,
+          }),
+        ],
+      },
+    ],
+  };
+  const expected = {
+    masters: [],
+    slides: [
+      {
+        elements: [
+          placeholder("unnamed-com.sun.star.presentation.OutlinerShape", "", {
+            fontFamily: "Calibri",
+            color: 0,
+            textAutoGrowWidth: true,
+            textWordWrap: false,
+          }),
+        ],
+      },
+    ],
+  };
+  const serialized = {
+    masters: [],
+    slides: [
+      {
+        elements: [
+          placeholder("PlaceHolder 2", "PlaceHolder 2", {
+            fontFamily: "Calibri",
+            color: 0,
+            textAutoGrowWidth: false,
+            textWordWrap: true,
+          }),
+        ],
+      },
+    ],
+  };
+  assert.doesNotThrow(() =>
+    assertDocumentPersistenceDelta(
+      {
+        persistenceBefore: before,
+        persistenceExpected: expected,
+        persistenceBaseline: before,
+      },
+      serialized,
+      "Persistence failed.",
+    ),
+  );
+
+  const userNamed = structuredClone(serialized);
+  userNamed.slides[0].elements[0].name = "Revenue placeholder";
+  userNamed.slides[0].elements[0].objectName = "Revenue placeholder";
+  assert.equal(
+    normalizeDocumentPersistenceState(userNamed).slides[0].elements[0].name,
+    "Revenue placeholder",
+  );
+  assert.throws(
+    () =>
+      assertDocumentPersistenceDelta(
+        {
+          persistenceBefore: serialized,
+          persistenceExpected: serialized,
+          persistenceBaseline: serialized,
+        },
+        userNamed,
+        "Persistence failed.",
+      ),
+    /Persistence failed/u,
+  );
+});
+
 test("document persistence compares standard transition state, not derived UI projections", () => {
   const expected = normalizeDocumentPersistenceState({
     slides: [
