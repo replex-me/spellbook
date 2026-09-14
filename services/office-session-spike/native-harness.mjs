@@ -71,7 +71,7 @@ export function createNativeHarness({ probeEnabled = false } = {}) {
     const chunks = [];
     for await (const chunk of req) {
       size += chunk.length;
-      if (size > 3_000_000) throw new Error("요청이 너무 큽니다.");
+      if (size > 16_000_000) throw new Error("요청이 너무 큽니다.");
       chunks.push(chunk);
     }
     return JSON.parse(Buffer.concat(chunks).toString());
@@ -116,6 +116,16 @@ export function createNativeHarness({ probeEnabled = false } = {}) {
             reply(409, { error: "expired_task" });
             return true;
           }
+          if (Array.isArray(body.value?.images))
+            body.value.images = body.value.images.map((image) =>
+              typeof image?.pngBase64 === "string"
+                ? {
+                    ...image,
+                    pngBytes: [...Buffer.from(image.pngBase64, "base64")],
+                    pngBase64: undefined,
+                  }
+                : image,
+            );
           task.finish(
             body.error ? new Error(String(body.error)) : null,
             body.value,

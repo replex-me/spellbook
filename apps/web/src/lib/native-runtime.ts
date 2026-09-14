@@ -261,13 +261,37 @@ function validObservation(value: unknown): boolean {
   if (!Array.isArray(item.images) || item.images.length > 10) return false;
   return item.images.every((image) => {
     const candidate = image as Record<string, unknown>;
-    return (
-      Number.isInteger(candidate.slideIndex) &&
-      Array.isArray(candidate.pngBytes) &&
-      candidate.pngBytes.length <= 12_000_000 &&
-      candidate.pngBytes.every(
+    if (!Number.isInteger(candidate.slideIndex)) return false;
+    const base64 = candidate.pngBase64;
+    if (typeof base64 === "string") {
+      if (
+        base64.length === 0 ||
+        base64.length > 16_000_000 ||
+        base64.length % 4 !== 0 ||
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)
+      )
+        return false;
+      const decoded = Buffer.from(base64, "base64");
+      return (
+        decoded.length >= 8 &&
+        decoded.length <= 12_000_000 &&
+        decoded
+          .subarray(0, 8)
+          .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      );
+    }
+    if (
+      !Array.isArray(candidate.pngBytes) ||
+      candidate.pngBytes.length < 8 ||
+      candidate.pngBytes.length > 12_000_000 ||
+      !candidate.pngBytes.every(
         (byte) => Number.isInteger(byte) && byte >= -128 && byte <= 255,
       )
+    )
+      return false;
+    return [137, 80, 78, 71, 13, 10, 26, 10].every(
+      (byte, index) =>
+        ((candidate.pngBytes as number[])[index]! & 255) === byte,
     );
   });
 }

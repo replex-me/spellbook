@@ -46,7 +46,11 @@ export interface NativeObservation {
       }>;
     }>;
   };
-  images: Array<{ slideIndex: number; pngBytes: number[] }>;
+  images: Array<{
+    slideIndex: number;
+    pngBytes?: number[];
+    pngBase64?: string;
+  }>;
   changedSlideIndexes: number[];
   visualEvidenceComplete: boolean;
   layoutAudit?: {
@@ -119,6 +123,10 @@ export async function runNativeTurn(
     required: ["detailSlideIndex"],
     additionalProperties: false,
   };
+  const imageBytes = (image: NativeObservation["images"][number]) =>
+    typeof image.pngBase64 === "string"
+      ? Buffer.from(image.pngBase64, "base64")
+      : Buffer.from((image.pngBytes ?? []).map((value) => value & 255));
   const content = (state: NativeObservation): ToolResult => ({
     success: true,
     contentItems: [
@@ -132,7 +140,7 @@ export async function runNativeTurn(
       },
       ...state.images.map((image) => ({
         type: "inputImage" as const,
-        imageUrl: `data:image/png;base64,${Buffer.from(image.pngBytes.map((x) => x & 255)).toString("base64")}`,
+        imageUrl: `data:image/png;base64,${imageBytes(image).toString("base64")}`,
       })),
     ],
   });
@@ -157,14 +165,15 @@ export async function runNativeTurn(
       .sort((left, right) => left - right);
     if (
       JSON.stringify(imageSlideIndexes) !== JSON.stringify(slideIndexes) ||
-      state.images.some(
-        (image) =>
-          image.pngBytes.length < 4 ||
-          image.pngBytes[0] !== 137 ||
-          image.pngBytes[1] !== 80 ||
-          image.pngBytes[2] !== 78 ||
-          image.pngBytes[3] !== 71,
-      )
+      state.images.some((image) => {
+        const bytes = imageBytes(image);
+        return (
+          bytes.length < 8 ||
+          !bytes
+            .subarray(0, 8)
+            .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        );
+      })
     )
       throw new Error(
         "Mutation result does not include one fresh PNG for every changed slide.",

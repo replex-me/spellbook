@@ -12,6 +12,7 @@ import { ModelControl } from "./model-control";
 import { SpellbookBrand, SpellbookIcon } from "./spellbook-ui";
 import type { AvailableModel, ModelSettings } from "@/lib/ai-models";
 import { normalizeQuotedStrongMarkdown } from "@/lib/markdown";
+import { compactNativeTaskResultForTransport } from "@/lib/native-image-transport";
 import { CHATGPT_SECURITY_URL, useAiAccount } from "@/lib/use-ai-account";
 import type { AiConnectorConfig } from "@/lib/ai-connector-config";
 import "./native-workspace.css";
@@ -266,13 +267,15 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
             return;
           }
           if (typeof result.data?.id === "string")
-            void api("result", result.data).catch((e) => setError(e.message));
+            void api(
+              "result",
+              compactNativeTaskResultForTransport(result.data),
+            ).catch((e) => setError(e.message));
         };
         (event.source as Window).postMessage(
           {
             type: "spellbook.connect",
-            bridgeSessionId:
-              sessionId === "legacy" ? undefined : sessionId,
+            bridgeSessionId: sessionId === "legacy" ? undefined : sessionId,
           },
           origin,
           [channel.port2],

@@ -21,7 +21,7 @@ const state: NativeObservation = {
       ],
     },
   ],
-  images: [{ slideIndex: 0, pngBytes: [137, 80, 78, 71] }],
+  images: [{ slideIndex: 0, pngBytes: [137, 80, 78, 71, 13, 10, 26, 10] }],
   changedSlideIndexes: [],
   visualEvidenceComplete: true,
 };

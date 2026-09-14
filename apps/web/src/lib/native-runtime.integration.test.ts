@@ -115,7 +115,7 @@ const observation = {
   activeSlide: 0,
   selectedElementIds: ["0/0"],
   slides: [{ slideIndex: 0, elements: [{ elementId: "0/0", text: "현재" }] }],
-  images: [{ slideIndex: 0, pngBytes: [137, 80, 78, 71] }],
+  images: [{ slideIndex: 0, pngBytes: [137, 80, 78, 71, 13, 10, 26, 10] }],
 };
 
 describe.skipIf(!enabled)("durable native editor orchestration", () => {
