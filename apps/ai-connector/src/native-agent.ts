@@ -1,5 +1,5 @@
 import type {
-  AppServerClient,
+  AgentTurnClient,
   GeneratedImage,
   ToolResult,
 } from "./app-server-client.js";
@@ -84,7 +84,7 @@ interface NativeEditCommand {
 // The same subscription client used by the current product; only the document
 // tool transport changes from offline PPTX patch jobs to the open editor session.
 export async function runNativeTurn(
-  client: AppServerClient,
+  client: AgentTurnClient,
   input: {
     requestText: string;
     conversationHistory?: Array<{

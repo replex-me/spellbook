@@ -24,6 +24,7 @@
     "connector:build": "pnpm --filter @spellbook/ai-connector build",
     "connector:package:macos": "node scripts/build-macos-connector.mjs",
     "connector:start": "pnpm connector:build && node --env-file-if-exists=.env scripts/start-local-connector.mjs",
+    "connector:verify:claude": "pnpm connector:build && node scripts/verify-claude-code-connector.mjs",
     "office:engine:audit": "node services/office-editor/libreoffice/audit-all.mjs",
     "office:engine:build": "bash services/office-editor/libreoffice/build-engine.sh",
     "office:engine:verify-patches": "bash services/office-editor/libreoffice/verify-patch.sh",

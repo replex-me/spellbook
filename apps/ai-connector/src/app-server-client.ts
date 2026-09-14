@@ -68,6 +68,15 @@ export interface AppServerStartOptions {
   processHome?: string;
 }
 
+export interface AgentTurnClient {
+  runStructuredTurn(
+    input: Array<Record<string, unknown>>,
+    outputSchema: Record<string, unknown>,
+    timeoutMs?: number,
+    options?: AgentTurnOptions,
+  ): Promise<string>;
+}
+
 export class AppServerClient {
   private readonly process: ChildProcessWithoutNullStreams;
   private readonly pending = new Map<number, PendingRequest>();
