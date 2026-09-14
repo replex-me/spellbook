@@ -1,4 +1,8 @@
 import { createRequire } from "node:module";
+import {
+  installNativeBridgeTrace,
+  nativeBridgeDiagnostics,
+} from "./native-bridge-probe.mjs";
 
 const require = createRequire(
   new URL("../../apps/web/package.json", import.meta.url),
@@ -9,6 +13,7 @@ const browser = await chromium.launch({ headless: true });
 
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await installNativeBridgeTrace(page);
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !document.body.innerText.includes("편집기 연결 중"),
@@ -33,7 +38,9 @@ try {
     return { status: result.status, value: await result.json() };
   }, launch);
   if (response.status !== 200 || !Array.isArray(response.value.slides))
-    throw new Error(`Hidden extension bridge failed: ${JSON.stringify(response)}`);
+    throw new Error(
+      `Hidden extension bridge failed: ${JSON.stringify({ response, bridge: await nativeBridgeDiagnostics(page), frames: page.frames().map((frame) => frame.url()) })}`,
+    );
   const nodes = await office.evaluate(() =>
     [...document.querySelectorAll("[id*='sidebar'], [class*='sidebar'], .extension-panel")]
       .map((element) => {
