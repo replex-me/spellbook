@@ -174,7 +174,7 @@
 +        eNewAction = it->second;
 +    }
 +
-+    SdAnimationInfo* pOldInfo = SdDrawDocument::GetAnimationInfo(pObject);
++    SdAnimationInfo* pOldInfo = SdDrawDocument::GetShapeUserData(*pObject, false);
 +    if (pOldInfo && pOldInfo->mbSecondSoundOn)
 +        throw lang::IllegalArgumentException(
 +            u"Object interaction cannot replace a shared second-effect sound target"_ustr,
@@ -264,13 +264,13 @@
 +                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
 +
 +    auto getInteraction = [&]() {
-+        SdAnimationInfo* pInfo = SdDrawDocument::GetAnimationInfo(pObject);
++        SdAnimationInfo* pInfo = SdDrawDocument::GetShapeUserData(*pObject, false);
 +        return std::pair(
 +            pInfo ? pInfo->meClickAction : presentation::ClickAction_NONE,
 +            pInfo ? pInfo->GetBookmark() : OUString());
 +    };
 +    auto assertAdjacentState = [&]() {
-+        SdAnimationInfo* pInfo = SdDrawDocument::GetAnimationInfo(pObject);
++        SdAnimationInfo* pInfo = SdDrawDocument::GetShapeUserData(*pObject, false);
 +        CPPUNIT_ASSERT(pInfo);
 +        CPPUNIT_ASSERT(pInfo->mbDimHide);
 +        CPPUNIT_ASSERT_EQUAL(sal_uInt16(42), pInfo->mnVerb);
