@@ -86,7 +86,13 @@ trap cleanup EXIT
 
 source_root="$build_root/source"
 patched_repository="$build_root/patched.git"
-git clone --quiet --depth=1 --branch "$source_ref" "$source_repository" "$source_root"
+git init --quiet "$source_root"
+git -C "$source_root" remote add origin "$source_repository"
+# Release branches are discovery labels and can advance after publication.
+# Fetch the manifest's immutable commit directly so a later upstream branch
+# update cannot change or block a reproducible build.
+git -C "$source_root" fetch --quiet --depth=1 origin "$source_commit"
+git -C "$source_root" checkout --quiet --detach FETCH_HEAD
 actual_commit="$(git -C "$source_root" rev-parse HEAD)"
 if [[ "$actual_commit" != "$source_commit" ]]; then
   echo "Expected Collabora $source_ref at $source_commit, got $actual_commit." >&2

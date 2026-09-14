@@ -57,6 +57,21 @@ test("runtime environment is generated only from a digest-pinned manifest", () =
   }
 });
 
+test("engine admission and build fetch the immutable source commit", () => {
+  for (const script of [
+    "services/office-editor/libreoffice/build-engine.sh",
+    "services/office-editor/libreoffice/verify-patch.sh",
+  ]) {
+    const source = readFileSync(script, "utf8");
+    assert.match(
+      source,
+      /fetch --quiet --depth=1 origin "\$source_commit"/u,
+    );
+    assert.match(source, /checkout --quiet --detach FETCH_HEAD/u);
+    assert.doesNotMatch(source, /clone .*--branch "\$source_ref"/u);
+  }
+});
+
 test("Collabora release refs use numeric ordering", () => {
   assert.ok(compareCollaboraRefs("cp-26.04.10-1", "cp-26.04.9-9") > 0);
   assert.equal(

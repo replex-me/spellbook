@@ -36,7 +36,10 @@ trap cleanup EXIT
 if [[ -z "$provided_source" ]]; then
   temporary_root="$(mktemp -d /tmp/spellbook-collabora-patch.XXXXXX)"
   provided_source="$temporary_root/source"
-  git clone --quiet --depth=1 --branch "$source_ref" "$source_repository" "$provided_source"
+  git init --quiet "$provided_source"
+  git -C "$provided_source" remote add origin "$source_repository"
+  git -C "$provided_source" fetch --quiet --depth=1 origin "$source_commit"
+  git -C "$provided_source" checkout --quiet --detach FETCH_HEAD
 fi
 
 actual_commit="$(git -C "$provided_source" rev-parse HEAD)"
