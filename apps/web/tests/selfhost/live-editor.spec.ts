@@ -117,7 +117,7 @@ test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
     );
   expect(editorBridge).toBeDefined();
 
-  const replacement = "Spellbook round trip verified";
+  const replacement = `Spellbook round trip ${Date.now()}`;
   const changed = await editorBridge!.evaluate(async (nextText) => {
     const native = (
       window as typeof window & {
@@ -130,7 +130,8 @@ test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
     const before = await native.observe();
     const target = before.slides[0].elements.find(
       (element: { text?: string }) =>
-        element.text === "Typical Presentation" || element.text === nextText,
+        element.text === "Typical Presentation" ||
+        element.text?.startsWith("Spellbook round trip "),
     );
     if (!target) throw new Error("first_slide_title_not_found");
     const after = await native.edit({
