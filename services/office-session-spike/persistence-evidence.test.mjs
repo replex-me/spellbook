@@ -181,8 +181,8 @@ test("document persistence compares masters by semantics rather than relationshi
   };
   assert.deepEqual(normalizeDocumentPersistenceState(before), {
     masters: [
-      { name: "Blank", layout: 20, shapeCount: 3 },
-      { name: "Title", layout: 0, shapeCount: 4 },
+      { name: "Blank", layout: 20 },
+      { name: "Title", layout: 0 },
     ],
     slides: [{ masterName: "Blank", name: "page1" }],
   });
@@ -191,9 +191,17 @@ test("document persistence compares masters by semantics rather than relationshi
   );
 });
 
-test("document persistence still rejects semantic master changes and extras", () => {
+test("document persistence ignores materialized master counts but rejects stable semantic changes and extras", () => {
   const state = {
-    masters: [{ masterIndex: 0, name: "Blank", layout: 20, shapeCount: 3 }],
+    masters: [
+      {
+        masterIndex: 0,
+        name: "Blank",
+        layout: 20,
+        shapeCount: 3,
+        backgroundColor: 16777215,
+      },
+    ],
     slides: [{ masterIndex: 0, masterName: "Blank", name: "page1" }],
   };
   const report = {
@@ -203,13 +211,15 @@ test("document persistence still rejects semantic master changes and extras", ()
   };
   const modified = structuredClone(state);
   modified.masters[0].shapeCount = 5;
+  assert.deepEqual(documentPersistenceDeltaDifferences(report, modified), []);
+  modified.masters[0].backgroundColor = 0;
   assert.deepEqual(
     documentPersistenceDeltaDifferences(report, modified).map(
       ({ path, invariant }) => ({ path, invariant }),
     ),
     [
       {
-        path: "$.masters[0].shapeCount",
+        path: "$.masters[0].backgroundColor",
         invariant: "unchanged-after-normalization",
       },
     ],
@@ -220,6 +230,7 @@ test("document persistence still rejects semantic master changes and extras", ()
     name: "Default",
     layout: 20,
     shapeCount: 5,
+    backgroundColor: 16777215,
   });
   assert.throws(
     () => assertDocumentPersistenceDelta(report, extra, "Persistence failed."),

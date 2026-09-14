@@ -266,8 +266,14 @@ export function persistenceStateFromObservation(observation) {
 /**
  * Removes serialization order from the document state without removing any
  * user-visible master or theme data. PPTX import/export may reorder master
- * relationships and consequently renumber the UNO masterIndex. Slides retain
- * masterName, while every semantic master field is compared as a sorted
+ * relationships and consequently renumber the UNO masterIndex. It may also
+ * materialize title/body placeholders on a LibreOffice master-page projection
+ * when a sibling OOXML layout becomes used by a slide. That changes UNO's
+ * getCount() even though the persisted slide-layout part, slide relationship,
+ * rendered slide and editable slide objects are unchanged. Package change
+ * budgets compare the actual master/layout XML, so shapeCount is diagnostic
+ * runtime state rather than a persistence invariant here. Slides retain
+ * masterName, while every stable semantic master field is compared as a sorted
  * multiset so extra, missing or modified masters still fail the gate.
  */
 export function normalizeDocumentPersistenceState(
@@ -275,7 +281,7 @@ export function normalizeDocumentPersistenceState(
   { authoredBy = state } = {},
 ) {
   const masters = (state?.masters ?? [])
-    .map(({ masterIndex: _masterIndex, ...master }) =>
+    .map(({ masterIndex: _masterIndex, shapeCount: _shapeCount, ...master }) =>
       withoutObservationOnlyFields(structuredClone(master)),
     )
     .sort((left, right) => {

@@ -222,6 +222,10 @@ try {
       actual: backgroundColor,
     });
   const reopenedPersistence = persistenceStateFromObservation(observed);
+  await writeFile(
+    path.resolve(path.dirname(reportPath), "reopen-observation.json"),
+    `${JSON.stringify(reopenedPersistence, null, 2)}\n`,
+  );
   const persistenceDifferences = documentPersistenceDeltaDifferences(
     report,
     reopenedPersistence,
