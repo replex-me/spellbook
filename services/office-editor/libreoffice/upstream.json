@@ -12,8 +12,8 @@
   "patchLevel": "undo-v18",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "eb0c9c74a0ee0de69f097f58117c4b9a85935a105dcfa160f56fe6be7c4a8c7c",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v18-r3-candidate",
+  "patchSeriesSha256": "42761c290ed9f152484139a2f9a65b104ac86cde2fb4731b4836a9ef91659cfb",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v18-r4-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -50,7 +50,8 @@
     "patches/0033-text-layout-cache-invalidation.patch",
     "patches/0034-insert-slide-preserves-sparse-master.patch",
     "patches/0035-preserve-nonlayout-undo-and-content-placeholder.patch",
-    "patches/0036-object-interaction-undo-roundtrip.patch"
+    "patches/0036-object-interaction-undo-roundtrip.patch",
+    "patches/0037-pptx-placeholder-local-properties.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
