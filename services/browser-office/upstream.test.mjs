@@ -14,6 +14,10 @@ test("browser Office runtime is reproducible and remains unapproved by default",
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.javascriptBridge.commit, /^[0-9a-f]{40}$/u);
+  assert.equal(
+    manifest.javascriptBridge.runtimeAsset.url,
+    `https://raw.githubusercontent.com/allotropia/zetajs/${manifest.javascriptBridge.commit}/source/zeta.js`,
+  );
   assert.ok(!manifest.runtimeBaseUrl.includes("spellbook"));
   assert.deepEqual(
     manifest.runtimeAssets.map(({ path }) => path),
@@ -23,6 +27,12 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     assert.match(asset.sha256, /^[0-9a-f]{64}$/u);
     assert.ok(Number.isSafeInteger(asset.bytes) && asset.bytes > 0);
   }
+  assert.equal(manifest.javascriptBridge.runtimeAsset.storedPath, "zeta.js");
+  assert.match(
+    manifest.javascriptBridge.runtimeAsset.sha256,
+    /^[0-9a-f]{64}$/u,
+  );
+  assert.ok(manifest.javascriptBridge.runtimeAsset.bytes > 0);
   assert.equal(
     manifest.requiredDocumentHeaders["Cross-Origin-Opener-Policy"],
     "same-origin",

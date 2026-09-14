@@ -10,7 +10,15 @@
   "javascriptBridge": {
     "repository": "https://github.com/allotropia/zetajs.git",
     "commit": "b3dec98af5dc4c059a260afd6db0bf0fe38c6384",
-    "version": "1.2.0"
+    "version": "1.2.0",
+    "runtimeAsset": {
+      "url": "https://raw.githubusercontent.com/allotropia/zetajs/b3dec98af5dc4c059a260afd6db0bf0fe38c6384/source/zeta.js",
+      "storedPath": "zeta.js",
+      "requestEncoding": "identity",
+      "contentType": "text/javascript; charset=utf-8",
+      "bytes": 42951,
+      "sha256": "ee633709bfa1de3221e8f68beb395f68fd5ff00cab9e33ba22e97e8271b348b4"
+    }
   },
   "runtimeBaseUrl": "https://cdn.zetaoffice.net/zetaoffice_latest/",
   "runtimeAssets": [

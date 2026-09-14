@@ -7,12 +7,21 @@ settings:
 importers:
   .:
     devDependencies:
+      "@playwright/test":
+        specifier: 1.62.1
+        version: 1.62.1
+      "@xmldom/xmldom":
+        specifier: 0.9.12
+        version: 0.9.12
       ajv:
         specifier: 8.20.0
         version: 8.20.0
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       postject:
         specifier: 1.0.0-alpha.6
         version: 1.0.0-alpha.6
@@ -1031,6 +1040,13 @@ packages:
         integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==,
       }
 
+  "@xmldom/xmldom@0.9.12":
+    resolution:
+      {
+        integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==,
+      }
+    engines: { node: ">=14.6" }
+
   accepts@2.0.0:
     resolution:
       {
@@ -1418,6 +1434,12 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution:
+      {
+        integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==,
+      }
 
   finalhandler@2.1.1:
     resolution:
@@ -3078,6 +3100,8 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
 
+  "@xmldom/xmldom@0.9.12": {}
+
   accepts@2.0.0:
     dependencies:
       mime-types: 3.0.2
@@ -3306,6 +3330,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   finalhandler@2.1.1:
     dependencies:

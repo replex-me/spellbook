@@ -96,6 +96,26 @@ public sealed class ExtendedEditingTests : IDisposable
         Assert.Contains(validation.Errors, error => error.Contains("table payload"));
     }
     [Fact]
+    public void StandaloneOpenXmlValidationReportsSchemaErrors()
+    {
+        var source = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "../../../../../../../eval/public/fixtures/general-native-surface.pptx"));
+        Assert.True(new PptxValidator().ValidateOpenXml(source).Valid);
+        var broken = Path.Combine(directory, "invalid-slide-attribute.pptx");
+        File.Copy(source, broken);
+        using (var zip = ZipFile.Open(broken, ZipArchiveMode.Update))
+        {
+            var part = zip.GetEntry("ppt/slides/slide1.xml")!;
+            XDocument xml; using (var input = part.Open()) xml = XDocument.Load(input);
+            xml.Root!.SetAttributeValue("show", "not-a-boolean");
+            part.Delete(); using var output = zip.CreateEntry("ppt/slides/slide1.xml").Open(); xml.Save(output);
+        }
+        var report = new PptxValidator().ValidateOpenXml(broken);
+        Assert.False(report.Valid);
+        Assert.NotEmpty(report.Errors);
+    }
+    [Fact]
     public void StructureCannotBeMixedWithStaleIndexedCommands()
     {
         var source = TestPresentationFactory.Create(directory);

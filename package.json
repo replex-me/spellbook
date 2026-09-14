@@ -11,6 +11,10 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "browser-office:fetch": "node services/browser-office/fetch-runtime.mjs",
+    "browser-office:build": "node services/browser-office/build-harness.mjs",
+    "browser-office:prepare": "pnpm browser-office:fetch && pnpm browser-office:build",
+    "browser-office:serve": "pnpm browser-office:prepare && node services/browser-office/server.mjs",
+    "browser-office:verify": "pnpm browser-office:prepare && node services/browser-office/verify-harness.mjs",
     "corpus:discover": "node scripts/create-corpus-manifest.mjs",
     "corpus:fetch-public": "node scripts/fetch-public-corpus.mjs",
     "corpus:roundtrip-public": "node scripts/evaluate-public-roundtrip.mjs",
@@ -54,8 +58,11 @@
     "selfhost:down": "docker compose down"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@xmldom/xmldom": "0.9.12",
     "ajv": "8.20.0",
     "esbuild": "0.28.2",
+    "fflate": "0.8.3",
     "postject": "1.0.0-alpha.6",
     "prettier": "3.6.2"
   }

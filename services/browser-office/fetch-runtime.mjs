@@ -14,7 +14,15 @@ const outputRoot = path.resolve(
 );
 
 await mkdir(outputRoot, { recursive: true });
-for (const asset of manifest.runtimeAssets) {
+const downloadableAssets = [
+  ...manifest.runtimeAssets.map((asset) => ({
+    ...asset,
+    url: new URL(asset.path, manifest.runtimeBaseUrl),
+  })),
+  manifest.javascriptBridge.runtimeAsset,
+];
+
+for (const asset of downloadableAssets) {
   const destination = path.join(outputRoot, asset.storedPath);
   if (await matches(destination, asset)) {
     process.stdout.write(`verified ${asset.storedPath}\n`);
@@ -23,14 +31,10 @@ for (const asset of manifest.runtimeAssets) {
   const temporary = `${destination}.partial`;
   await rm(temporary, { force: true });
   try {
-    await download(
-      new URL(asset.path, manifest.runtimeBaseUrl),
-      temporary,
-      asset.requestEncoding,
-    );
+    await download(new URL(asset.url), temporary, asset.requestEncoding);
     if (!(await matches(temporary, asset)))
       throw new Error(
-        `${asset.path} does not match the pinned ${asset.bytes}-byte ${asset.sha256} artifact.`,
+        `${asset.url} does not match the pinned ${asset.bytes}-byte ${asset.sha256} artifact.`,
       );
     await rename(temporary, destination);
     process.stdout.write(`downloaded ${asset.storedPath}\n`);

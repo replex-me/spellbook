@@ -17,6 +17,8 @@ manifest before it can be hosted.
 
 ```sh
 pnpm browser-office:fetch
+pnpm browser-office:serve
+pnpm browser-office:verify
 ```
 
 The command writes ignored runtime artifacts to `runtime/`. The `.wasm` and
@@ -24,12 +26,34 @@ The command writes ignored runtime artifacts to `runtime/`. The `.wasm` and
 original request names with the declared `Content-Type`, `Content-Encoding:
 br`, CORS, CORP, and immutable cache headers.
 
-Promotion requires a self-hosted immutable asset origin, a Spellbook-owned
-worker and canvas shell, the shared native edit-command conformance suite,
-Korean IME and accessibility checks, OPFS recovery, public corpus render and
-round-trip comparison, and PowerPoint reopen evidence. Until those gates pass,
-`status` stays `viability_probe_only` and the server editor remains the runtime
-fallback.
+The tracked shell now owns the canvas and two distinct workers. ZetaOffice is
+the visual interaction engine; `ooxml-worker-source.mjs` applies the first
+structure-preserving browser command directly to the original package. This
+separation is mandatory. A stock ZetaOffice `store()` round trip was valid XML
+and reopened in PowerPoint, but rewrote untouched slide, layout, master, theme
+and font data. Spellbook therefore never promotes that whole-file output as
+the authoritative PPTX.
+
+Promotion still requires the shared edit-command contract beyond `add_slide`,
+Korean IME and accessibility checks, OPFS recovery, a current patched browser
+LibreOffice build, public-corpus render comparison and a PowerPoint platform
+matrix. Until those gates pass, `status` stays `viability_probe_only` and the
+server editor remains the runtime fallback.
+
+The Spellbook-owned conformance shell is available at
+`http://127.0.0.1:4173/?autorun=1`. It loads the tracked public PPTX fixture,
+adds a slide through the OOXML worker, reopens the candidate in the canvas,
+restores the original for Undo and reopens it again. The page reaches
+`body[data-state="complete"]` only when the slide-count and saved-hash
+invariants pass. This is a development gate, not yet the product editor.
+
+`browser-office:verify` launches a headless local browser, asserts isolation,
+slide counts and a strict logical package-change budget, and writes both PPTX
+files, a screenshot and machine-readable timing evidence to
+`artifacts/browser-office/latest/`. Untouched ZIP parts must retain identical
+uncompressed bytes and Undo must restore every original part. It does not
+promote the browser runtime; the screenshot and PPTX outputs still need the
+same visual and PowerPoint inspection required of the server engine.
 
 Upstream references:
 

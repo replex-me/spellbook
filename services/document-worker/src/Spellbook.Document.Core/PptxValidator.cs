@@ -41,8 +41,8 @@ public sealed class PptxValidator
             }
         }
 
-        var baseValidation = TryOpenXmlErrors(basePath);
-        var candidateValidation = TryOpenXmlErrors(candidatePath);
+        var baseValidation = ValidateOpenXml(basePath);
+        var candidateValidation = ValidateOpenXml(candidatePath);
         foreach (var newError in candidateValidation.Errors.Except(baseValidation.Errors, StringComparer.Ordinal))
         {
             errors.Add($"Open XML validation: {newError}");
@@ -125,7 +125,7 @@ public sealed class PptxValidator
         return hashes;
     }
 
-    private static ValidationAttempt TryOpenXmlErrors(string path)
+    public OpenXmlPackageValidation ValidateOpenXml(string path)
     {
         try
         {
@@ -144,7 +144,10 @@ public sealed class PptxValidator
                     index++;
                 }
             }
-            return new ValidationAttempt(issues, null);
+            return new OpenXmlPackageValidation(
+                issues.Count == 0,
+                issues.Order(StringComparer.Ordinal).ToList(),
+                null);
         }
         catch (Exception exception) when (
             exception is InvalidDataException or
@@ -153,11 +156,12 @@ public sealed class PptxValidator
             ArgumentException or
             DocumentFormat.OpenXml.Packaging.OpenXmlPackageException)
         {
-            return new ValidationAttempt([], exception.GetType().Name);
+            return new OpenXmlPackageValidation(false, [], exception.GetType().Name);
         }
     }
-
-    private sealed record ValidationAttempt(
-        HashSet<string> Errors,
-        string? Failure);
 }
+
+public sealed record OpenXmlPackageValidation(
+    bool Valid,
+    IReadOnlyList<string> Errors,
+    string? Failure);
