@@ -86,11 +86,20 @@ try {
           undo.leaveUndoContext();
           const after = shape.getPropertyValue(name);
           const undoAdded = undo.getAllUndoActionTitles().length - undoBefore;
-          undo.undo();
-          const restored = shape.getPropertyValue(name);
-          undo.redo();
-          const redone = shape.getPropertyValue(name);
-          undo.undo();
+          let restored = after;
+          let redone = after;
+          let undoError = null;
+          if (undoAdded > 0) {
+            try {
+              undo.undo();
+              restored = shape.getPropertyValue(name);
+              undo.redo();
+              redone = shape.getPropertyValue(name);
+              undo.undo();
+            } catch (error) {
+              undoError = error.message;
+            }
+          }
           results.push({
             name,
             before,
@@ -100,6 +109,7 @@ try {
             applied: equal(after, value),
             undoExact: equal(restored, before),
             redoExact: equal(redone, after),
+            undoError,
           });
         }
         return results;
