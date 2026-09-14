@@ -62,9 +62,19 @@ else
   build_root="$(mktemp -d /tmp/spellbook-collabora-build.XXXXXX)"
 fi
 
+build_completed=false
 cleanup() {
-  if [[ "$build_root" == /tmp/spellbook-collabora-build.* || "$build_root" == "/workspace/.spellbook-collabora-build" ]]; then
+  if [[ "$build_root" == "/workspace/.spellbook-collabora-build" ]]; then
+    # Cloud Build workers are disposable and this exact path is recreated on
+    # every run, so leaving a partial tree there cannot provide an incremental
+    # recovery path.
     rm -rf -- "$build_root"
+  elif [[ "$build_root" == /tmp/spellbook-collabora-build.* ]]; then
+    if [[ "$build_completed" == true ]]; then
+      rm -rf -- "$build_root"
+    else
+      echo "Integrated build failed; preserving $build_root for diagnosis and incremental target rebuilds." >&2
+    fi
   fi
 }
 trap cleanup EXIT
@@ -107,4 +117,5 @@ engine_build_root="$source_root/docker/from-source/builddir/online/engine"
 make -C "$engine_build_root" "${cppunit_targets[@]}"
 
 docker image inspect "$image_repository:$image_tag" >/dev/null
+build_completed=true
 echo "Built and engine-tested $image_repository:$image_tag from $source_ref with the verified patch series."

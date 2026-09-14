@@ -47,6 +47,12 @@ Undo/Redo, failure rollback, save/reopen, OOXML change-budget, visual corpus and
 PowerPoint checks must all point to the same source commit, patch hash and image
 digest before `runtimeImage` and `runtimePatchLevel` are promoted.
 
+On a regular Linux host, a failed integrated build preserves its printed
+temporary build root. Diagnose the exact failure and use that tree for focused
+incremental target rebuilds; do not relaunch the clean integrated build for
+each source correction. A successful build removes the temporary tree. Cloud
+Build uses a disposable fixed workspace and cleans it on exit.
+
 Build the thin Spellbook editor image only from the approved runtime manifest:
 
 ```bash

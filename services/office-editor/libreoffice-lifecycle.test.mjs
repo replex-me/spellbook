@@ -22,6 +22,9 @@ test("source build admission and candidate promotion are separate evidence state
   assert.match(sourceBuild, /\$EUID/u);
   assert.match(sourceBuild, /docker info/u);
   assert.match(sourceBuild, /refuses root compilation/u);
+  assert.match(sourceBuild, /build_completed=false/u);
+  assert.match(sourceBuild, /Integrated build failed; preserving/u);
+  assert.match(sourceBuild, /build_completed=true/u);
   assert.match(candidateWrapper, /manifest\.sourceCandidateReady/u);
   assert.doesNotMatch(candidateWrapper, /sourcePatchSeriesReady/u);
 });
