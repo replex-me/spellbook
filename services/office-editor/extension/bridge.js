@@ -22,6 +22,7 @@ window.presentNative = {
     }),
 };
 let connection;
+let readyTimer;
 const imageSignatureIsValid = (bytes, mediaType) => {
   const view = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 8));
   const png =
@@ -129,6 +130,7 @@ window.addEventListener("message", (event) => {
     return;
   if (connection) return;
   connection = event.ports[0];
+  clearInterval(readyTimer);
   const completed = new Map();
   let tail = Promise.resolve();
   connection.onmessage = (event) => {
@@ -162,7 +164,15 @@ window.addEventListener("message", (event) => {
   };
   connection.postMessage({ type: "ready" });
 });
-window.top.postMessage({ type: "spellbook.extension-ready" }, "*");
+const announceReady = () => {
+  if (connection) {
+    clearInterval(readyTimer);
+    return;
+  }
+  window.top.postMessage({ type: "spellbook.extension-ready" }, "*");
+};
+announceReady();
+readyTimer = setInterval(announceReady, 250);
 window.presentNative
   .observe()
   .then((state) => {
