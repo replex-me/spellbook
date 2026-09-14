@@ -46,6 +46,10 @@ test("local session isolates original, rejects unauthorized writes, and versions
   assert.equal(info.Size, original.length);
   assert.equal(info.SupportsLocks, false);
   assert.equal(info.Version, "0");
+  assert.equal(info.UserCanWrite, true);
+  assert.equal(info.DisableCopy, false);
+  assert.equal(info.DisableExport, false);
+  assert.equal(info.DisablePrint, false);
   assert.equal(
     (
       await fetch(`${base}/contents`, {

@@ -289,7 +289,7 @@ office.onload=()=>send('Host_PostmessageReady');document.getElementById('launch'
           HideUserList: "true",
           DisableCopy: false,
           DisableExport: false,
-          DisablePrint: true,
+          DisablePrint: false,
         });
       }
       if (url.pathname === `${wopiFilePath}/contents` && req.method === "GET") {
