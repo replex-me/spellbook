@@ -18,6 +18,10 @@ export class NativeRemoteHost implements NativeHost {
     await this.post({ operation: "start" }, signal);
   }
 
+  async heartbeat(signal: AbortSignal): Promise<void> {
+    await this.post({ operation: "heartbeat" }, signal);
+  }
+
   async call(
     request: Record<string, unknown>,
     signal: AbortSignal,
@@ -85,6 +89,23 @@ export class NativeRemoteHost implements NativeHost {
           : `native_tool_${response.status}`,
       );
     return value;
+  }
+}
+
+export async function maintainNativeRemoteLease(
+  host: NativeRemoteHost,
+  signal: AbortSignal,
+  intervalMilliseconds = 15_000,
+): Promise<void> {
+  if (
+    !Number.isSafeInteger(intervalMilliseconds) ||
+    intervalMilliseconds < 1 ||
+    intervalMilliseconds > 30_000
+  )
+    throw new Error("invalid_native_heartbeat_interval");
+  while (!signal.aborted) {
+    await wait(intervalMilliseconds, signal);
+    await host.heartbeat(signal);
   }
 }
 

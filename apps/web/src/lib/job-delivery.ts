@@ -3,9 +3,9 @@ const MIN_JOB_REDELIVERY_SECONDS = 5;
 const MAX_JOB_REDELIVERY_SECONDS = 900;
 
 // Native AI tools can mutate the live canvas before the final callback. A
-// different process may take over a managed queue delivery after this lease,
-// but a browser-dispatched local connector must fail visibly instead of
-// replaying the user's edit and possibly applying it twice.
+// different process may take over a delivery only before the native worker
+// claims it. Once any connector starts a native turn, an expired lease must
+// fail visibly instead of replaying a possibly applied canvas edit.
 export const NATIVE_AGENT_LEASE_SECONDS = 60;
 
 export function jobRedeliverySeconds(

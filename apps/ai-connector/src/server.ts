@@ -6,7 +6,10 @@ import { SessionManager } from "./session-manager.js";
 import { JobResultStore } from "./job-result-store.js";
 import type { AiJob, AiWorkerCallback, NativeJob } from "./types.js";
 import { runNativeTurn } from "./native-agent.js";
-import { NativeRemoteHost } from "./native-remote-host.js";
+import {
+  maintainNativeRemoteLease,
+  NativeRemoteHost,
+} from "./native-remote-host.js";
 import { createLocalConnectorHandler } from "./local-connector-server.js";
 import { LocalPairingAuthority } from "./local-pairing.js";
 
@@ -189,8 +192,18 @@ async function executeNativeJob(
   );
   const controller = new AbortController();
   let events: Promise<void> = Promise.resolve();
+  let heartbeat: Promise<void> | null = null;
+  let heartbeatFailure: unknown = null;
   try {
     await host.start(controller.signal);
+    heartbeat = maintainNativeRemoteLease(host, controller.signal).catch(
+      (error) => {
+        if (!controller.signal.aborted) {
+          heartbeatFailure = error;
+          controller.abort(error);
+        }
+      },
+    );
     const initial = await host.call(
       { operation: "observe" },
       controller.signal,
@@ -225,6 +238,7 @@ async function executeNativeJob(
       },
     });
     await events;
+    if (heartbeatFailure) throw heartbeatFailure;
     return {
       jobId: job.jobId,
       status: "succeeded",
@@ -233,6 +247,7 @@ async function executeNativeJob(
     };
   } catch (error) {
     controller.abort();
+    const failure = heartbeatFailure ?? error;
     console.error(
       JSON.stringify({
         event: "native_ai_turn_failed",
@@ -240,17 +255,17 @@ async function executeNativeJob(
         provider:
           job.modelSettings?.provider ?? job.modelSettings?.model ?? "default",
         error:
-          error instanceof Error
-            ? error.message.slice(0, 1_000)
+          failure instanceof Error
+            ? failure.message.slice(0, 1_000)
             : "unknown_error",
       }),
     );
     const message =
-      error instanceof Error &&
+      failure instanceof Error &&
       /not connected|timed out|rate limit|permission|cancel|native_/i.test(
-        error.message,
+        failure.message,
       )
-        ? error.message
+        ? failure.message
         : "Native AI editing failed. Check worker logs with the job id.";
     return {
       jobId: job.jobId,
@@ -258,6 +273,9 @@ async function executeNativeJob(
       mode: "native",
       error: message,
     };
+  } finally {
+    controller.abort();
+    await heartbeat?.catch(() => undefined);
   }
 }
 
