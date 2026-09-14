@@ -80,7 +80,7 @@
         "undoProvider": "page_property_snapshot",
         "fixture": "slide-properties",
         "verification": ["structure", "save_reopen", "change_budget", "visual"],
-        "changeBudget": ["presentation", "slide_parts"]
+        "changeBudget": ["presentation", "slide_parts", "slide_relationships"]
       },
       "speaker_notes": {
         "domain": "slide_transform",

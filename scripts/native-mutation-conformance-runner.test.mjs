@@ -111,6 +111,11 @@ test("change budgets are derived from executed operation families and identity e
   assert.ok(budget.allowedCategories.includes("presentation"));
   assert.ok(budget.allowedCategories.includes("notes_parts"));
   assert.ok(!budget.allowedCategories.includes("unknown"));
+  assert.ok(
+    capabilities.mutationModel.families.slide_properties.changeBudget.includes(
+      "slide_relationships",
+    ),
+  );
 });
 
 test("the public document tool implements the change-budget contract used by the runner", () => {
