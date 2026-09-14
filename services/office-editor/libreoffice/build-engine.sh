@@ -13,6 +13,11 @@ if ! docker info >/dev/null 2>&1; then
   echo "The build user cannot reach the Docker daemon. Grant that user Docker socket access without running the compiler as root." >&2
   exit 1
 fi
+node_major="$(node --version 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/' || true)"
+if [[ ! "$node_major" =~ ^[0-9]+$ || "$node_major" -lt 20 ]]; then
+  echo "Collabora Online requires Node.js 20 or newer; verify the release toolchain before compiling LibreOffice." >&2
+  exit 1
+fi
 
 # Release-candidate boundary only. Patch development belongs in
 # A failed source candidate must return to a persistent incremental worktree;
