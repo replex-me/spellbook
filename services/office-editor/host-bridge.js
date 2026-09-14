@@ -5,6 +5,24 @@
   let requested = false;
   let attempts = 0;
   let timer;
+  const rootClass = "spellbook-extension-bridge-active";
+  const panelSelector =
+    '.extension-panel[data-extension-id="org.spellbook.editor"]';
+
+  function synchronizeBridgeVisibility() {
+    const active = Boolean(document.querySelector(panelSelector));
+    const changed =
+      document.documentElement.classList.contains(rootClass) !== active;
+    document.documentElement.classList.toggle(rootClass, active);
+    if (changed)
+      requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+  }
+
+  new MutationObserver(synchronizeBridgeVisibility).observe(
+    document.documentElement,
+    { childList: true, subtree: true },
+  );
+  synchronizeBridgeVisibility();
 
   function openExtension() {
     if (!requested) return;
@@ -12,6 +30,7 @@
     if (control) {
       attempts = 0;
       if (!control._panel) control.toggle();
+      synchronizeBridgeVisibility();
       return;
     }
     if (attempts++ < 120) timer = setTimeout(openExtension, 250);

@@ -7,10 +7,10 @@ import test from "node:test";
 
 const patcher = path.resolve("services/office-editor/patch-host-bridge.mjs");
 
-test("installs the host bridge once before body close", () => {
+test("installs the host bridge assets once in the document shell", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "spellbook-host-"));
   const target = path.join(directory, "cool.html");
-  fs.writeFileSync(target, "<html><body>editor</body></html>");
+  fs.writeFileSync(target, "<html><head></head><body>editor</body></html>");
 
   const result = spawnSync(process.execPath, [patcher, target], {
     encoding: "utf8",
@@ -19,6 +19,10 @@ test("installs the host bridge once before body close", () => {
   assert.match(
     fs.readFileSync(target, "utf8"),
     /spellbook-host\.js"><\/script>\n<\/body>/,
+  );
+  assert.match(
+    fs.readFileSync(target, "utf8"),
+    /spellbook-host\.css">\n<\/head>/,
   );
 
   const duplicate = spawnSync(process.execPath, [patcher, target], {

@@ -9,19 +9,6 @@ const browser = await chromium.launch({ headless: true });
 
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-  await page.addInitScript(() => {
-    window.addEventListener(
-      "message",
-      (event) => {
-        try {
-          const data =
-            typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-          if (data?.MessageId === "Hide_Sidebar") event.stopImmediatePropagation();
-        } catch {}
-      },
-      true,
-    );
-  });
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !document.body.innerText.includes("편집기 연결 중"),
@@ -32,13 +19,6 @@ try {
     .frames()
     .find((frame) => frame.url().includes("/browser/"));
   if (!office) throw new Error("Office frame is missing.");
-  await office.evaluate(() => {
-    const style = document.createElement("style");
-    style.textContent =
-      ".spellbook-extension-bridge-active #sidebar-dock-wrapper, .spellbook-extension-bridge-active #sidebar-panel { display: none !important; }";
-    document.head.appendChild(style);
-    document.documentElement.classList.add("spellbook-extension-bridge-active");
-  });
   await page.waitForTimeout(1_000);
   const launch = await page.evaluate(() => window.__spellbookLaunch);
   const response = await page.evaluate(async ({ accessToken }) => {
@@ -87,6 +67,11 @@ try {
     `${JSON.stringify(
       {
         hiddenBridgeWorked: true,
+        bridgeClassActive: await office.evaluate(() =>
+          document.documentElement.classList.contains(
+            "spellbook-extension-bridge-active",
+          ),
+        ),
         observedSlides: response.value.slides.length,
         extensionFrameAlive: page
           .frames()

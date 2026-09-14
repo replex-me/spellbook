@@ -37,6 +37,7 @@ COPY services/office-editor/mutation-contract.mjs /tmp/mutation-contract.mjs
 COPY services/office-editor/extensions-index.json /upstream/browser/dist/extensions/index.json
 COPY services/office-editor/extension /upstream/browser/dist/extensions/org.spellbook.editor
 COPY services/office-editor/host-bridge.js /upstream/browser/dist/spellbook-host.js
+COPY services/office-editor/host-bridge.css /upstream/browser/dist/spellbook-host.css
 RUN node /tmp/mutation-contract.mjs \
       --contract /tmp/native-edit-capabilities.json \
       --output /upstream/browser/dist/extensions/org.spellbook.editor/mutation-contract.generated.js \

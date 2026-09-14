@@ -263,7 +263,6 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           if (port.current !== channel.port1) return;
           if (result.data?.type === "ready") {
             setBridgeReady(true);
-            sendOffice("Hide_Sidebar");
             return;
           }
           if (typeof result.data?.id === "string")

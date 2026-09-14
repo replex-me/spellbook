@@ -1,0 +1,4 @@
+.spellbook-extension-bridge-active #sidebar-dock-wrapper,
+.spellbook-extension-bridge-active #sidebar-panel {
+  display: none !important;
+}
