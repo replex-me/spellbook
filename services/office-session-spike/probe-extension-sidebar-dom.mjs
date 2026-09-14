@@ -12,7 +12,9 @@ const url = process.argv[2] ?? "http://localhost:3190";
 const browser = await chromium.launch({ headless: true });
 
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const page = await browser.newPage({
+    viewport: { width: 1440, height: 1000 },
+  });
   await installNativeBridgeTrace(page);
   if (process.env.SPELLBOOK_PROBE_BLOCK_LEGACY_HIDE === "1")
     await page.addInitScript(() => {
@@ -73,7 +75,11 @@ try {
       `Hidden extension bridge failed: ${JSON.stringify({ response, bridge: await nativeBridgeDiagnostics(page), frames: page.frames().map((frame) => frame.url()) })}`,
     );
   const nodes = await office.evaluate(() =>
-    [...document.querySelectorAll("[id*='sidebar'], [class*='sidebar'], .extension-panel")]
+    [
+      ...document.querySelectorAll(
+        "[id*='sidebar'], [class*='sidebar'], .extension-panel",
+      ),
+    ]
       .map((element) => {
         const rect = element.getBoundingClientRect();
         const style = getComputedStyle(element);

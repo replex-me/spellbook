@@ -727,11 +727,7 @@
       "set_slide_hidden",
       "set_slide_transition"
     ],
-    "create": [
-      "add_text_box",
-      "add_shape",
-      "add_table"
-    ],
+    "create": ["add_text_box", "add_shape", "add_table"],
     "multiElement": ["align", "distribute", "group"],
     "element": [
       "replace_text",

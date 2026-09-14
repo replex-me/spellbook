@@ -240,11 +240,7 @@ async function closeServer(server) {
 export async function waitForSavedFile(
   probe,
   output,
-  {
-    timeoutMs = SAVE_TIMEOUT_MS,
-    settleMs = SAVE_SETTLE_MS,
-    pollMs = 100,
-  } = {},
+  { timeoutMs = SAVE_TIMEOUT_MS, settleMs = SAVE_SETTLE_MS, pollMs = 100 } = {},
 ) {
   const deadline = Date.now() + timeoutMs;
   let latestVersion = 0;

@@ -63,10 +63,7 @@ test("engine admission and build fetch the immutable source commit", () => {
     "services/office-editor/libreoffice/verify-patch.sh",
   ]) {
     const source = readFileSync(script, "utf8");
-    assert.match(
-      source,
-      /fetch --quiet --depth=1 origin "\$source_commit"/u,
-    );
+    assert.match(source, /fetch --quiet --depth=1 origin "\$source_commit"/u);
     assert.match(source, /checkout --quiet --detach FETCH_HEAD/u);
     assert.doesNotMatch(source, /clone .*--branch "\$source_ref"/u);
   }
@@ -119,7 +116,10 @@ test("runtime mutation contracts are generated from the public capability model"
       .map(([operation]) => operation)
       .sort(),
   );
-  assert.equal(capabilities.aiExposure.operationCount, exposedOperations.length);
+  assert.equal(
+    capabilities.aiExposure.operationCount,
+    exposedOperations.length,
+  );
   const operationGroups = capabilities.operationGroups;
   for (const operation of operationGroups.slide)
     assert.equal(operations[operation].target, "slide");

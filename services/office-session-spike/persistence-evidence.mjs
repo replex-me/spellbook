@@ -195,9 +195,7 @@ function withCanonicalShapeIdentity(slides) {
         element.kind = "com.sun.star.drawing.CustomShape";
       if (
         !element.objectName &&
-        /^unnamed-com\.sun\.star\.[A-Za-z0-9.]+Shape$/u.test(
-          element.name ?? "",
-        )
+        /^unnamed-com\.sun\.star\.[A-Za-z0-9.]+Shape$/u.test(element.name ?? "")
       )
         delete element.name;
     }

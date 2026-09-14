@@ -87,7 +87,8 @@ if (
   declared.length !== executable.length ||
   grouped.some((operation) => !declared.includes(operation)) ||
   executable.some(
-    (operation) => !grouped.includes(operation) || !declared.includes(operation),
+    (operation) =>
+      !grouped.includes(operation) || !declared.includes(operation),
   )
 )
   throw new Error("Invalid native edit capability contract.");

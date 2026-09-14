@@ -185,9 +185,9 @@
           "SPELLBOOK_PROBE_PATCHED_ENGINE": "1"
         }
       },
-    "reopen": {
-      "script": "services/office-session-spike/probe-uno-reopen.mjs"
-    },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-reopen.mjs"
+      },
       "proves": [
         "structure",
         "preflight_no_mutation",
