@@ -15,8 +15,13 @@ const DOCUMENT_TOOL_DLL =
   "services/document-worker/tools/Spellbook.Document.Tool/bin/Release/net10.0/Spellbook.Document.Tool.dll";
 const SAVE_TIMEOUT_MS = 30_000;
 const PROCESS_TIMEOUT_MS = 180_000;
+export const CONTAINER_REACHABLE_PROBE_BIND_ADDRESS = "0.0.0.0";
 
 const sortedUnique = (values) => [...new Set(values)].sort();
+
+export function dotnetHostCommand(environment = process.env) {
+  return environment.DOTNET_HOST_PATH?.trim() || "dotnet";
+}
 
 export function localProbeBrowserOrigin(port) {
   if (!Number.isInteger(port) || port < 1 || port > 65_535)
@@ -256,7 +261,12 @@ export async function runHostedProbe({
   });
   await new Promise((resolve, reject) => {
     probe.server.once("error", reject);
-    probe.server.listen(0, "127.0.0.1", resolve);
+    // The browser reaches this probe through localhost, while Collabora runs
+    // in a separate container and reaches the same ephemeral server through
+    // host.docker.internal. Binding only loopback works in Docker Desktop but
+    // is unreachable from a native Linux bridge. createProbe still enforces
+    // an exact Host allowlist and a random one-hour bearer token.
+    probe.server.listen(0, CONTAINER_REACHABLE_PROBE_BIND_ADDRESS, resolve);
   });
   const url = localProbeBrowserOrigin(probe.server.address().port);
   try {
@@ -459,7 +469,7 @@ async function runScenario({
   const budgetPath = path.join(scenarioDirectory, "change-budget.json");
   await fs.writeFile(budgetPath, `${JSON.stringify(budget, null, 2)}\n`);
   const validation = await runProcess(
-    "dotnet",
+    dotnetHostCommand(),
     [
       documentToolDll,
       "validate-change-budget",
@@ -539,8 +549,17 @@ export async function runConformance(options = {}) {
   await ensureNewDirectory(outputRoot);
   const editorOrigin = options.editorOrigin ?? "http://localhost:9980";
   await ensureEditor(editorOrigin);
-  const build = await runProcess(
-    "dotnet",
+  const editorAssetsBuild = await runProcess(
+    process.execPath,
+    ["services/office-editor/build.mjs"],
+    {
+      cwd: root,
+      timeoutMs: PROCESS_TIMEOUT_MS,
+      logPath: path.join(outputRoot, "editor-assets-build.log"),
+    },
+  );
+  const documentToolBuild = await runProcess(
+    dotnetHostCommand(),
     ["build", DOCUMENT_TOOL_PROJECT, "--configuration", "Release", "--nologo"],
     {
       cwd: root,
@@ -556,7 +575,16 @@ export async function runConformance(options = {}) {
     output: path.relative(root, outputRoot),
     startedAt: new Date().toISOString(),
     definitionCoverage: plan.summary,
-    build: { exitCode: build.exitCode, durationMs: build.durationMs },
+    build: {
+      editorAssets: {
+        exitCode: editorAssetsBuild.exitCode,
+        durationMs: editorAssetsBuild.durationMs,
+      },
+      documentTool: {
+        exitCode: documentToolBuild.exitCode,
+        durationMs: documentToolBuild.durationMs,
+      },
+    },
     scenarios: [],
     status: "running",
   };

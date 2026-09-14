@@ -71,10 +71,10 @@ RUN node /tmp/patch-localization.mjs \
 FROM collabora AS runtime
 ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL
 USER root
-COPY --from=browser-assets --chown=1001:1001 /upstream/browser/dist /usr/share/coolwsd/browser/dist
-COPY --from=browser-assets --chown=1001:1001 /minimal /opt/spellbook/coolwsd
-COPY --from=gateway-builder --chown=1001:1001 /out/spellbook-office-gateway /usr/local/bin/spellbook-office-gateway
-USER 1001
+COPY --from=browser-assets --chown=cool:cool /upstream/browser/dist /usr/share/coolwsd/browser/dist
+COPY --from=browser-assets --chown=cool:cool /minimal /opt/spellbook/coolwsd
+COPY --from=gateway-builder --chown=cool:cool /out/spellbook-office-gateway /usr/local/bin/spellbook-office-gateway
+USER cool
 EXPOSE 9980
 ENTRYPOINT ["/usr/local/bin/spellbook-office-gateway"]
 LABEL org.spellbook.collabora-patch-level=${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}

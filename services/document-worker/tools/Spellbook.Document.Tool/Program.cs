@@ -63,6 +63,22 @@ switch (args[0])
         foreach (var path in paths) Console.WriteLine(path);
         break;
     }
+    case "validate-change-budget" when args.Length == 4:
+    {
+        await using var stream = File.OpenRead(args[3]);
+        var budget = await JsonSerializer.DeserializeAsync(
+            stream,
+            DocumentJsonContext.Default.PackageChangeBudgetRequest)
+            ?? throw new InvalidDataException("Package change budget JSON is empty.");
+        var report = new PptxPackageChangeBudgetValidator().Validate(args[1], args[2], budget);
+        await JsonSerializer.SerializeAsync(
+            Console.OpenStandardOutput(),
+            report,
+            DocumentJsonContext.Default.PackageChangeBudgetReport);
+        Console.WriteLine();
+        if (!report.Valid) return 1;
+        break;
+    }
     default:
         Usage();
         return 2;
@@ -77,4 +93,4 @@ static async Task WriteJson<T>(string path, T value, System.Text.Json.Serializat
 }
 
 static void Usage() => Console.Error.WriteLine(
-    "Usage: inspect <source.pptx> <graph.json> | patch <source.pptx> <command.json> <candidate.pptx> | smoke-replace-first-text <source.pptx> <candidate.pptx> <text> | render <source.pptx> <output-dir> | extract-embedded-fonts <source.pptx> <output-dir>");
+    "Usage: inspect <source.pptx> <graph.json> | patch <source.pptx> <command.json> <candidate.pptx> | smoke-replace-first-text <source.pptx> <candidate.pptx> <text> | render <source.pptx> <output-dir> | extract-embedded-fonts <source.pptx> <output-dir> | validate-change-budget <baseline.pptx> <candidate.pptx> <budget.json>");

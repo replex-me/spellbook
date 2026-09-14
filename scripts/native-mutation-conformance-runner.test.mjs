@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   buildChangeBudget,
   buildScenarioExecutionPlan,
+  CONTAINER_REACHABLE_PROBE_BIND_ADDRESS,
+  dotnetHostCommand,
   isTransientEditorConnectionFailure,
   localProbeBrowserOrigin,
   operationsFromReport,
@@ -111,9 +113,46 @@ test("change budgets are derived from executed operation families and identity e
   assert.ok(!budget.allowedCategories.includes("unknown"));
 });
 
+test("the public document tool implements the change-budget contract used by the runner", () => {
+  const tool = fs.readFileSync(
+    "services/document-worker/tools/Spellbook.Document.Tool/Program.cs",
+    "utf8",
+  );
+  const validator = fs.readFileSync(
+    "services/document-worker/src/Spellbook.Document.Core/PptxPackageChangeBudgetValidator.cs",
+    "utf8",
+  );
+  assert.match(tool, /case "validate-change-budget"/u);
+  const categoryBlock =
+    /Categories \{ get; \} = new HashSet<string>\(StringComparer\.Ordinal\)\s*\{(?<body>[\s\S]*?)\n\s*\};/u.exec(
+      validator,
+    );
+  const implemented = [
+    ...(categoryBlock?.groups?.body ?? "").matchAll(/"([a-z_]+)"/gu),
+  ]
+    .map(([, category]) => category)
+    .sort();
+  assert.deepEqual(
+    implemented,
+    [...capabilities.mutationModel.changeBudgetContract.categories].sort(),
+  );
+});
+
 test("browser origin matches the WOPI PostMessageOrigin contract", () => {
   assert.equal(localProbeBrowserOrigin(31_907), "http://localhost:31907");
   assert.throws(() => localProbeBrowserOrigin(0), /port is invalid/);
+});
+
+test("the native runner exposes its ephemeral probe to the Linux editor container", () => {
+  assert.equal(CONTAINER_REACHABLE_PROBE_BIND_ADDRESS, "0.0.0.0");
+});
+
+test("the runner honors the SDK host path used by clean-machine installs", () => {
+  assert.equal(dotnetHostCommand({}), "dotnet");
+  assert.equal(
+    dotnetHostCommand({ DOTNET_HOST_PATH: "/opt/dotnet/dotnet" }),
+    "/opt/dotnet/dotnet",
+  );
 });
 
 test("baseline probe output keeps only comparable persistence state", () => {

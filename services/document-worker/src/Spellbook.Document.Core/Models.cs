@@ -81,10 +81,33 @@ public sealed record ValidationReport(
     IReadOnlyList<string> Errors,
     IReadOnlyList<string> Warnings);
 
+public sealed record PackageChangeBudgetRequest(
+    string ContractVersion,
+    IReadOnlyList<string> AllowedCategories,
+    IReadOnlyList<int>? TargetSlideIndexes = null,
+    IReadOnlyList<string>? AllowedExactParts = null,
+    bool AllowPartCreationOrDeletion = false);
+
+public sealed record PackagePartChange(
+    string Part,
+    string Category,
+    string ChangeKind,
+    bool InTargetScope);
+
+public sealed record PackageChangeBudgetReport(
+    string ContractVersion,
+    bool Valid,
+    string BaselineDocumentSha256,
+    string CandidateDocumentSha256,
+    IReadOnlyList<PackagePartChange> Changes,
+    IReadOnlyList<string> Errors);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DocumentScan))]
 [JsonSerializable(typeof(ElementGraph))]
 [JsonSerializable(typeof(EditCommandBatch))]
 [JsonSerializable(typeof(PatchResult))]
 [JsonSerializable(typeof(ValidationReport))]
+[JsonSerializable(typeof(PackageChangeBudgetRequest))]
+[JsonSerializable(typeof(PackageChangeBudgetReport))]
 public partial class DocumentJsonContext : JsonSerializerContext;
