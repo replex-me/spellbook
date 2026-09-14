@@ -9,10 +9,10 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v13",
+  "patchLevel": "undo-v14",
   "sourceCandidateReady": true,
-  "patchSeriesSha256": "8613d1b5e2724f3153f6a9252d3aca358b383abc3154987a29c29da274d726ff",
-  "engineImageTag": "26.04.3.3-spellbook-undo-v13-r8-candidate",
+  "patchSeriesSha256": "b386d7fa1a794d0078495448898842787e95f748522ae8c56299c5f84ff0fbaf",
+  "engineImageTag": "26.04.3.3-spellbook-undo-v14-r1-candidate",
   "impressUiUnoCommandCount": 804,
   "impressUiUnoCommandsSha256": "cafedc6b8c621afbb8399d76fc498c1e86273c2c290bb914e41298df0b203cd1",
   "patches": [
@@ -43,7 +43,9 @@
     "patches/0027-table-api-format-inheritance.patch",
     "patches/0028-table-text-cursor-undo.patch",
     "patches/0029-layout-selects-existing-master.patch",
-    "patches/0030-text-formatting-all-scripts.patch"
+    "patches/0030-text-formatting-all-scripts.patch",
+    "patches/0031-observable-text-and-layout-identity.patch",
+    "patches/0032-native-object-lifecycle.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
@@ -64,6 +66,8 @@
     "CppunitTest_sd_uiimpress:testTypedLayoutSelectsExistingMaster",
     "CppunitTest_sd_uiimpress:testTypedLayoutUndoRestoresAnimationTree",
     "CppunitTest_sd_uiimpress:testTypedTextFormattingAppliesToAllScripts",
+    "CppunitTest_sd_uiimpress:testUnoShapeCreationRegistersNativeUndo",
+    "CppunitTest_sd_uiimpress:testTypedDuplicateObjectPreservesSemanticsAndUndo",
     "CppunitTest_sd_uiimpress:testDocumentStructureGraphicCropUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureSlideTransitionUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureAnimationTimingUndoRedo",

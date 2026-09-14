@@ -235,16 +235,16 @@
         "target": "slide",
         "execution": "editor_dispatch",
         "identityEffect": "create",
-        "availability": "runtime_verified",
-        "minEnginePatch": 0
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 14
       },
       "add_shape": {
         "family": "object_creation",
         "target": "slide",
         "execution": "editor_dispatch",
         "identityEffect": "create",
-        "availability": "runtime_verified",
-        "minEnginePatch": 0
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 14
       },
       "add_table": {
         "family": "object_creation",
@@ -308,7 +308,7 @@
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
         "availability": "engine_patch_ready",
-        "minEnginePatch": 13
+        "minEnginePatch": 14
       },
       "bold": {
         "family": "object_text",
@@ -316,7 +316,7 @@
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
         "availability": "engine_patch_ready",
-        "minEnginePatch": 13
+        "minEnginePatch": 14
       },
       "italic": {
         "family": "object_text",
@@ -324,7 +324,7 @@
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
         "availability": "engine_patch_ready",
-        "minEnginePatch": 13
+        "minEnginePatch": 14
       },
       "underline": {
         "family": "object_text",
@@ -356,7 +356,7 @@
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
         "availability": "engine_patch_ready",
-        "minEnginePatch": 13
+        "minEnginePatch": 14
       },
       "font_color": {
         "family": "object_text",
@@ -459,8 +459,8 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "create",
-        "availability": "runtime_verified",
-        "minEnginePatch": 0
+        "availability": "engine_patch_ready",
+        "minEnginePatch": 14
       },
       "delete_element": {
         "family": "object_topology",
@@ -492,7 +492,7 @@
         "execution": "native_transform",
         "identityEffect": "preserve",
         "availability": "engine_patch_ready",
-        "minEnginePatch": 12
+        "minEnginePatch": 14
       },
       "set_background": {
         "family": "slide_properties",
@@ -703,7 +703,7 @@
       "move_slide",
       "set_speaker_notes"
     ],
-    "create": ["add_text_box", "add_shape", "add_table"],
+    "create": ["add_table"],
     "multiElement": ["align", "distribute", "group"],
     "element": [
       "replace_text",
@@ -723,7 +723,6 @@
       "paragraph_alignment",
       "flip",
       "ungroup",
-      "duplicate_element",
       "delete_element",
       "set_chart_data",
       "set_chart_type"
@@ -732,19 +731,19 @@
   "knownUnsafeOperations": [
     {
       "op": "font_size",
-      "reason": "The stock editor applies only the western-script height consistently. The undo-v13 typed command synchronizes western, Asian and complex-script heights and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
+      "reason": "The stock editor applies only the western-script height consistently. The undo-v14 typed command synchronizes western, Asian and complex-script heights with a point-based wire contract and observable browser readback, and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
     },
     {
       "op": "bold",
-      "reason": "The stock editor can leave Asian and complex-script weight values different from the western run. The undo-v13 typed command synchronizes all three script families and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
+      "reason": "The stock editor can leave Asian and complex-script weight values different from the western run. The undo-v14 typed command synchronizes all three script families with observable browser readback and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
     },
     {
       "op": "italic",
-      "reason": "The stock editor can leave Asian and complex-script posture values different from the western run. The undo-v13 typed command synchronizes all three script families and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
+      "reason": "The stock editor can leave Asian and complex-script posture values different from the western run. The undo-v14 typed command synchronizes all three script families with observable browser readback and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
     },
     {
       "op": "font_family",
-      "reason": "The stock editor can change only the western font family, so mixed Korean and Latin text is exported and reopened with different metrics. The undo-v13 typed command synchronizes western, Asian and complex-script families and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
+      "reason": "The stock editor can change only the western font family, so mixed Korean and Latin text is exported and reopened with different metrics. The undo-v14 typed command synchronizes western, Asian and complex-script families with observable browser readback and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
     },
     {
       "op": "insert_slide",
@@ -901,15 +900,12 @@
           "paragraph_alignment",
           "flip",
           "ungroup",
-          "duplicate_element",
           "delete_element",
           "set_chart_data",
           "set_chart_type",
           "align",
           "distribute",
           "group",
-          "add_text_box",
-          "add_shape",
           "add_table",
           "duplicate_slide",
           "delete_slide",

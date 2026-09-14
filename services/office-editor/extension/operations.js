@@ -20,6 +20,7 @@ function spellbookDocumentOperation(request) {
   const patchedSlideTransitionEngine = hasEnginePatch(7);
   const patchedAnimationTimingEngine = hasEnginePatch(8);
   const patchedSlideInsertionEngine = hasEnginePatch(9);
+  const patchedObjectLifecycleEngine = hasEnginePatch(14);
   if (request.expiresAt && Date.now() > request.expiresAt)
     throw new Error("expired_operation");
   const mutationContracts = request.mutationContracts;
@@ -149,6 +150,31 @@ function spellbookDocumentOperation(request) {
       return shape.createTextCursor().getPropertyValue(name);
     } catch (_) {
       return safeProperty(shape, name);
+    }
+  };
+  const wholeTextFormatting = (shape, text) => {
+    if (text === null) return null;
+    try {
+      const cursor = shape.createTextCursor();
+      cursor.gotoEnd(true);
+      return {
+        fontFamily: cursor.getPropertyValue("CharFontName"),
+        fontFamilyAsian: cursor.getPropertyValue("CharFontNameAsian"),
+        fontFamilyComplex: cursor.getPropertyValue("CharFontNameComplex"),
+        fontSize: cursor.getPropertyValue("CharHeight"),
+        fontSizeAsian: cursor.getPropertyValue("CharHeightAsian"),
+        fontSizeComplex: cursor.getPropertyValue("CharHeightComplex"),
+        fontWeight: cursor.getPropertyValue("CharWeight"),
+        fontWeightAsian: cursor.getPropertyValue("CharWeightAsian"),
+        fontWeightComplex: cursor.getPropertyValue("CharWeightComplex"),
+        fontStyle: enumName(cursor.getPropertyValue("CharPosture")),
+        fontStyleAsian: enumName(cursor.getPropertyValue("CharPostureAsian")),
+        fontStyleComplex: enumName(
+          cursor.getPropertyValue("CharPostureComplex"),
+        ),
+      };
+    } catch (_) {
+      return null;
     }
   };
   // The public command contract follows PowerPoint and expresses character
@@ -895,6 +921,7 @@ function spellbookDocumentOperation(request) {
             objectName,
             kind: shapeKind,
             text,
+            wholeTextFormatting: wholeTextFormatting(shape, text),
             x: position.X,
             y: position.Y,
             width: size.Width,
@@ -1813,41 +1840,136 @@ function spellbookDocumentOperation(request) {
           Height: Math.round(command.height),
         }),
       );
-      if (command.op === "add_text_box") shape.setString(command.text);
-      else if (command.geometry === "line")
+      if (command.op !== "add_text_box" && command.geometry === "line")
         shape.setPropertyValue(
           "LineColor",
           new uno.Any(uno.type.long, command.color),
         );
-      else
+      else if (command.op !== "add_text_box")
         shape.setPropertyValue(
           "FillColor",
           new uno.Any(uno.type.long, command.color),
         );
       const undo = model.getUndoManager();
       const undoCount = undo.getAllUndoActionTitles().length;
+      const ownsUndoContext = !request.transactionActive;
+      let undoContextOpen = false;
       activateSlide(slideIndex);
-      page.add(shape);
-      controller.select(shape);
-      // Direct XShapes.add is not represented in Impress' native undo stack.
-      // Use it only to build an in-memory clipboard template, remove it again,
-      // then let the editor's Paste command create the user-visible object.
-      dispatch(".uno:Copy");
-      page.remove(shape);
-      dispatch(".uno:Paste");
+      const beforeStableIds = new Set(
+        before.slides[slideIndex].elements
+          .filter((element) => element.parentElementId === null)
+          .map((element) => element.stableId),
+      );
+      try {
+        if (ownsUndoContext) {
+          undo.enterUndoContext(
+            command.op === "add_text_box" ? "AI add text box" : "AI add shape",
+          );
+          undoContextOpen = true;
+        }
+        if (patchedObjectLifecycleEngine) {
+          // The patched Impress XShapes.add boundary records one native
+          // creation action. Text must be assigned after insertion because an
+          // unattached UNO TextShape does not retain its text model.
+          page.add(shape);
+          if (command.op === "add_text_box") shape.setString(command.text);
+        } else {
+          page.add(shape);
+          if (command.op === "add_text_box") shape.setString(command.text);
+          controller.select(shape);
+          // Compatibility path for older engines. The strict semantic check
+          // below rejects the command if clipboard paste changes its content
+          // or geometry, so an old runtime fails closed.
+          dispatch(".uno:Copy");
+          page.remove(shape);
+          dispatch(".uno:Paste");
+        }
+        if (undoContextOpen) {
+          undo.leaveUndoContext();
+          undoContextOpen = false;
+        }
+      } catch (error) {
+        if (!ownsUndoContext) throw error;
+        if (undoContextOpen) {
+          try {
+            undo.leaveUndoContext();
+          } catch (_) {}
+        }
+        while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        const rolledBack = read();
+        if (
+          documentStateJson(rolledBack.slides) !==
+          documentStateJson(before.slides)
+        )
+          throw new Error(
+            `${command.op}_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}`,
+          );
+        throw error;
+      }
       const after = read();
+      const created = after.slides[slideIndex].elements.find(
+        (element) =>
+          element.parentElementId === null &&
+          !beforeStableIds.has(element.stableId),
+      );
+      const geometryApplied =
+        created?.x === Math.round(command.x) &&
+        created?.y === Math.round(command.y) &&
+        created?.width === Math.round(command.width) &&
+        created?.height === Math.round(command.height);
+      const contentApplied =
+        command.op === "add_text_box"
+          ? created?.text === command.text
+          : command.geometry === "line"
+            ? created?.lineColor === Math.round(command.color)
+            : created?.fill === Math.round(command.color);
       const applied =
         after.slides[slideIndex].topLevelElementCount ===
-        before.slides[slideIndex].topLevelElementCount + 1;
+          before.slides[slideIndex].topLevelElementCount + 1 &&
+        geometryApplied &&
+        contentApplied;
       if (
         !applied ||
         (!request.transactionActive &&
-          undo.getAllUndoActionTitles().length <= undoCount)
+          undo.getAllUndoActionTitles().length - undoCount !== 1)
       ) {
-        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
-        throw new Error(
-          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        const error = new Error(
+          !applied
+            ? `native_command_not_applied:${stableJson({
+                expected: {
+                  x: Math.round(command.x),
+                  y: Math.round(command.y),
+                  width: Math.round(command.width),
+                  height: Math.round(command.height),
+                  text:
+                    command.op === "add_text_box" ? command.text : undefined,
+                  color: command.op === "add_shape" ? command.color : undefined,
+                },
+                actual: created
+                  ? {
+                      x: created.x,
+                      y: created.y,
+                      width: created.width,
+                      height: created.height,
+                      text: created.text,
+                      fill: created.fill,
+                      lineColor: created.lineColor,
+                    }
+                  : null,
+              })}`
+            : "native_undo_not_recorded",
         );
+        if (!ownsUndoContext) throw error;
+        while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        const rolledBack = read();
+        if (
+          documentStateJson(rolledBack.slides) !==
+          documentStateJson(before.slides)
+        )
+          throw new Error(
+            `${command.op}_rollback_failed:${error.message}:${firstDifferencePath(before.slides, rolledBack.slides) ?? "unknown"}`,
+          );
+        throw error;
       }
       return result(after, slideIndex);
     }
@@ -3933,7 +4055,9 @@ function spellbookDocumentOperation(request) {
     )
       throw new Error("invalid_flip_axis");
     if (
-      ["duplicate_element", "delete_element"].includes(command.op) &&
+      (command.op === "delete_element" ||
+        (command.op === "duplicate_element" &&
+          !patchedObjectLifecycleEngine)) &&
       (element.parentElementId !== null || element.childElementIds.length)
     )
       throw new Error("unsupported_structural_target");
@@ -3985,44 +4109,40 @@ function spellbookDocumentOperation(request) {
       throw new Error("native_engine_text_formatting_patch_required");
     if (usesTypedTextFormatting && element.text === null)
       throw new Error("unsupported_text_target");
-    const textPortions = (state) =>
-      state.textDetails.elements
-        .find((candidate) => candidate.elementId === command.elementId)
-        ?.paragraphs.flatMap((paragraph) => paragraph.portions) ?? [];
+    const wholeTextFormat = (state) =>
+      state.slides[slideIndex]?.elements.find(
+        (candidate) => candidate.elementId === command.elementId,
+      )?.wholeTextFormatting;
     const expectedFontSize =
       command.op === "font_size" ? Math.round(command.size * 20) / 20 : null;
     const typedTextFormattingMatches = (state) => {
       if (!usesTypedTextFormatting) return false;
-      const portions = textPortions(state);
+      const formatting = wholeTextFormat(state);
       return (
-        portions.length > 0 &&
-        portions.every((portion) =>
-          command.op === "font_size"
+        formatting !== null &&
+        (command.op === "font_size"
+          ? [
+              formatting.fontSize,
+              formatting.fontSizeAsian,
+              formatting.fontSizeComplex,
+            ].every((value) => Number(value) === expectedFontSize)
+          : command.op === "font_family"
             ? [
-                portion.fontSize,
-                portion.fontSizeAsian,
-                portion.fontSizeComplex,
-              ].every((value) => Number(value) === expectedFontSize)
-            : command.op === "font_family"
+                formatting.fontFamily,
+                formatting.fontFamilyAsian,
+                formatting.fontFamilyComplex,
+              ].every((value) => value === command.family.trim())
+            : command.op === "bold"
               ? [
-                  portion.fontFamily,
-                  portion.fontFamilyAsian,
-                  portion.fontFamilyComplex,
-                ].every((value) => value === command.family.trim())
-              : command.op === "bold"
-                ? [
-                    portion.fontWeight,
-                    portion.fontWeightAsian,
-                    portion.fontWeightComplex,
-                  ].every(
-                    (value) => Number(value) === (command.bold ? 150 : 100),
-                  )
-                : [
-                    portion.fontStyle,
-                    portion.fontStyleAsian,
-                    portion.fontStyleComplex,
-                  ].every((value) => italic(value) === command.italic),
-        )
+                  formatting.fontWeight,
+                  formatting.fontWeightAsian,
+                  formatting.fontWeightComplex,
+                ].every((value) => Number(value) === (command.bold ? 150 : 100))
+              : [
+                  formatting.fontStyle,
+                  formatting.fontStyleAsian,
+                  formatting.fontStyleComplex,
+                ].every((value) => italic(value) === command.italic))
       );
     };
     const unchanged =
@@ -4082,7 +4202,7 @@ function spellbookDocumentOperation(request) {
       const objectPath = command.elementId.split("/").slice(1).join("/");
       const properties =
         command.op === "font_size"
-          ? { FontHeightTwips: Math.round(command.size * 20) }
+          ? { FontHeightPoints: command.size }
           : command.op === "font_family"
             ? { FontFamily: command.family.trim() }
             : command.op === "bold"
@@ -4201,14 +4321,51 @@ function spellbookDocumentOperation(request) {
       );
     else if (command.op === "ungroup") dispatch(".uno:FormatUngroup");
     else if (command.op === "duplicate_element") {
-      dispatch(".uno:Copy");
-      dispatch(".uno:Paste");
+      if (patchedObjectLifecycleEngine) {
+        const objectPath = command.elementId.split("/").slice(1).join("/");
+        transformSlides([
+          { JumpToSlide: slideIndex },
+          { [`DuplicateObject.${objectPath}`]: {} },
+        ]);
+      } else {
+        dispatch(".uno:Copy");
+        dispatch(".uno:Paste");
+      }
     } else if (command.op === "delete_element") dispatch(".uno:Delete");
 
     const after = usesTypedTextFormatting ? read(slideIndex) : read();
     const target = after.slides[slideIndex].elements.find(
       (candidate) => candidate.elementId === command.elementId,
     );
+    const beforeElementIds = new Set(
+      before.slides[slideIndex].elements.map((candidate) => candidate.stableId),
+    );
+    const duplicate =
+      command.op === "duplicate_element"
+        ? after.slides[slideIndex].elements.find(
+            (candidate) =>
+              !beforeElementIds.has(candidate.stableId) &&
+              candidate.parentElementId === element.parentElementId,
+          )
+        : null;
+    const duplicateComparable = (value) => {
+      if (!value) return null;
+      const copy = { ...value };
+      for (const key of [
+        "elementId",
+        "stableId",
+        "parentElementId",
+        "childElementIds",
+        "zIndex",
+        "name",
+        "objectName",
+        "selected",
+        "alignedWith",
+        "overlapsWith",
+      ])
+        delete copy[key];
+      return stableJson(copy);
+    };
     const structuralOrDispatch = [
       "z_order",
       "paragraph_alignment",
@@ -4266,11 +4423,11 @@ function spellbookDocumentOperation(request) {
                                               ) !==
                                               documentStateJson(after.slides)
                                             : command.op === "duplicate_element"
-                                              ? after.slides[slideIndex]
-                                                  .topLevelElementCount ===
-                                                before.slides[slideIndex]
-                                                  .topLevelElementCount +
-                                                  1
+                                              ? duplicate !== null &&
+                                                duplicateComparable(
+                                                  duplicate,
+                                                ) ===
+                                                  duplicateComparable(element)
                                               : !target &&
                                                 after.slides[slideIndex]
                                                   .topLevelElementCount ===
