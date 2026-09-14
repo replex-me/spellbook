@@ -29,10 +29,13 @@ br`, CORS, CORP, and immutable cache headers.
 
 The tracked shell now owns the canvas and two distinct workers. ZetaOffice is
 the visual interaction engine; `ooxml-worker-source.mjs` applies the slide
-topology command family (`add_slide`, `duplicate_slide`, `move_slide`, and
-`delete_slide`) directly to the original package. All four commands share one
+structure command family (`add_slide`, `duplicate_slide`, `move_slide`,
+`delete_slide`, `rename_slide`, and `set_slide_hidden`) directly to the
+original package. The four topology commands share one
 relationship-graph implementation: owned dependencies are cloned, reusable
 layout/theme/media parts stay shared, and unreachable owned parts are removed.
+The two metadata commands modify only the selected slide part and remain safe
+when sections or custom shows prevent topology changes.
 This separation is mandatory. A stock ZetaOffice `store()` round trip was valid XML
 and reopened in PowerPoint, but rewrote untouched slide, layout, master, theme
 and font data. Spellbook therefore never promotes that whole-file output as
@@ -46,9 +49,10 @@ server editor remains the runtime fallback.
 
 The Spellbook-owned conformance shell is available at
 `http://127.0.0.1:4173/?autorun=1`. It loads the tracked public PPTX fixture,
-adds, duplicates, moves, and deletes slides through the OOXML worker, reopening
-every candidate in the canvas. It then undoes all four mutations and reopens
-the restored original. The page reaches `body[data-state="complete"]` only when
+adds, duplicates, moves, deletes, renames, and hides slides through the OOXML
+worker, reopening every candidate in the canvas. It then undoes all six
+mutations and reopens the restored original. The page reaches
+`body[data-state="complete"]` only when
 the slide-count, saved-hash, and lifecycle invariants pass. This is a
 development gate, not yet the product editor.
 

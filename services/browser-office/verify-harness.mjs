@@ -66,6 +66,7 @@ try {
     addedSha256: document.body.dataset.addedSha256 ?? null,
     restoredSha256: document.body.dataset.restoredSha256 ?? null,
     topologyOperations: document.body.dataset.topologyOperations ?? null,
+    metadataOperations: document.body.dataset.metadataOperations ?? null,
     status: document.querySelector("#status")?.textContent ?? null,
     evidence: globalThis.spellbookBrowserOffice.evidence,
     crossOriginIsolated: globalThis.crossOriginIsolated,
@@ -81,6 +82,8 @@ try {
     ["after-duplicate", "after-duplicate.pptx"],
     ["after-move", "after-move.pptx"],
     ["after-delete", "after-delete.pptx"],
+    ["after-rename", "after-rename.pptx"],
+    ["after-hide", "after-hide.pptx"],
     ["after-undo", "after-undo.pptx"],
   ]) {
     const values = await page.evaluate(
@@ -116,6 +119,9 @@ try {
       : null,
     result.topologyOperations !== "add,duplicate,move,delete"
       ? "browser topology sequence is incomplete"
+      : null,
+    result.metadataOperations !== "rename,hide"
+      ? "browser metadata sequence is incomplete"
       : null,
     pageErrors.length ? `${pageErrors.length} uncaught page error(s)` : null,
     requestFailures.length
@@ -160,6 +166,14 @@ function evaluatePackageIntegrity({
   const deleted = comparePackages(
     artifactPaths.get("after-move"),
     artifactPaths.get("after-delete"),
+  );
+  const renamed = comparePackages(
+    artifactPaths.get("after-delete"),
+    artifactPaths.get("after-rename"),
+  );
+  const hidden = comparePackages(
+    artifactPaths.get("after-rename"),
+    artifactPaths.get("after-hide"),
   );
   const deleteRoundTrip = comparePackages(
     artifactPaths.get("after-insert"),
@@ -209,8 +223,24 @@ function evaluatePackageIntegrity({
     ),
     errors,
   );
+  validateBoundedDiff(
+    "rename",
+    renamed,
+    new Set(mutation("after-rename")?.changedParts ?? []),
+    new Set(),
+    new Set(),
+    errors,
+  );
+  validateBoundedDiff(
+    "hide",
+    hidden,
+    new Set(mutation("after-hide")?.changedParts ?? []),
+    new Set(),
+    new Set(),
+    errors,
+  );
   validateEmptyDiff("add/delete round trip", deleteRoundTrip, errors);
-  validateEmptyDiff("four-step undo", undone, errors);
+  validateEmptyDiff("six-step undo", undone, errors);
   return {
     valid: errors.length === 0,
     errors,
@@ -218,6 +248,8 @@ function evaluatePackageIntegrity({
     duplicated: summarizeDiff(duplicated),
     moved: summarizeDiff(moved),
     deleted: summarizeDiff(deleted),
+    renamed: summarizeDiff(renamed),
+    hidden: summarizeDiff(hidden),
     deleteRoundTrip: summarizeDiff(deleteRoundTrip),
     undone: summarizeDiff(undone),
   };

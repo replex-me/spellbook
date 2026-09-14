@@ -25,6 +25,11 @@ const topologyOperations = new Set([
   "delete_slide",
   "move_slide",
 ]);
+const slideMetadataOperations = new Set(["rename_slide", "set_slide_hidden"]);
+const browserOperations = new Set([
+  ...topologyOperations,
+  ...slideMetadataOperations,
+]);
 const sharedDependencyKinds = new Set([
   "slideLayout",
   "slideMaster",
@@ -41,19 +46,23 @@ export function applyOoxmlCommand(input, command) {
     throw new TypeError("PPTX input must be a Uint8Array.");
   if (input.byteLength > maximumInputBytes)
     throw new Error("PPTX exceeds the browser mutation limit.");
-  if (!topologyOperations.has(command?.op))
+  if (!browserOperations.has(command?.op))
     throw new Error(`Unsupported browser OOXML operation: ${command?.op}`);
-  const context = openPackage(input);
+  const context = openPackage(input, {
+    requireSimpleTopology: topologyOperations.has(command.op),
+  });
   const report =
     command.op === "add_slide" || command.op === "duplicate_slide"
       ? createSlide(context, command)
       : command.op === "delete_slide"
         ? deleteSlide(context, command)
-        : moveSlide(context, command);
+        : command.op === "move_slide"
+          ? moveSlide(context, command)
+          : updateSlideMetadata(context, command);
   return { bytes: zipSync(context.entries, { level: 6 }), report };
 }
 
-function openPackage(input) {
+function openPackage(input, { requireSimpleTopology }) {
   inspectZipPackage(input);
   const entries = unzipSync(input);
   const entryNames = Object.keys(entries);
@@ -73,10 +82,11 @@ function openPackage(input) {
       "Browser structural editing currently requires transitional PresentationML.",
     );
   if (
-    presentation.getElementsByTagNameNS(presentationNamespace, "sectionLst")
+    requireSimpleTopology &&
+    (presentation.getElementsByTagNameNS(presentationNamespace, "sectionLst")
       .length > 0 ||
-    presentation.getElementsByTagNameNS(presentationNamespace, "custShowLst")
-      .length > 0
+      presentation.getElementsByTagNameNS(presentationNamespace, "custShowLst")
+        .length > 0)
   )
     throw new Error(
       "Slides in sections or custom shows require an explicit structure migration.",
@@ -102,6 +112,72 @@ function openPackage(input) {
     slideIdList,
     slideIds,
   };
+}
+
+function updateSlideMetadata(context, command) {
+  const slideIndex = integerInRange(
+    command.slideIndex,
+    0,
+    context.slideIds.length - 1,
+    "slideIndex",
+  );
+  const target = slideInfo(context, slideIndex);
+  const slide = parseXml(context.entries, target.path);
+  const changedParts = [];
+  let previous;
+  let value;
+
+  if (command.op === "rename_slide") {
+    value = validSlideName(command.name);
+    const commonSlideData = requiredElement(
+      slide,
+      presentationNamespace,
+      "cSld",
+    );
+    previous = commonSlideData.getAttribute("name") || "";
+    if (previous !== value) {
+      commonSlideData.setAttribute("name", value);
+      context.entries[target.path] = serializeXml(slide);
+      changedParts.push(target.path);
+    }
+  } else {
+    if (typeof command.hidden !== "boolean")
+      throw new TypeError("hidden must be a boolean.");
+    previous = slideHidden(slide.documentElement);
+    value = command.hidden;
+    if (previous !== value) {
+      if (value) slide.documentElement.setAttribute("show", "0");
+      else slide.documentElement.removeAttribute("show");
+      context.entries[target.path] = serializeXml(slide);
+      changedParts.push(target.path);
+    }
+  }
+
+  return {
+    operation: command.op,
+    slideIndex,
+    slideCount: context.slideIds.length,
+    previous,
+    value,
+    changedParts,
+  };
+}
+
+function validSlideName(value) {
+  if (typeof value !== "string") throw new TypeError("name must be a string.");
+  const codePoints = [...value];
+  if (codePoints.length === 0 || codePoints.length > 255)
+    throw new Error("name must contain from 1 to 255 characters.");
+  if (/[\u0000-\u001f\u007f]/u.test(value))
+    throw new Error("name contains an unsupported control character.");
+  return value;
+}
+
+function slideHidden(slideRoot) {
+  if (!slideRoot.hasAttribute("show")) return false;
+  return ["0", "false", "off", "no"].includes(
+    slideRoot.getAttribute("show").trim().toLowerCase(),
+  );
 }
 
 function createSlide(context, command) {

@@ -24,6 +24,8 @@ const expectedSlides = new Map([
   ["after-duplicate", 3],
   ["after-move", 3],
   ["after-delete", 2],
+  ["after-rename", 2],
+  ["after-hide", 1],
   ["after-undo", 1],
 ]);
 const decks = [...expectedSlides].map(([id]) => ({
@@ -71,6 +73,12 @@ if (imageMagick && exported.failures.length === 0)
   for (const [label, left, right] of [
     ["delete-round-trip-slide-1", ["after-insert", 1], ["after-delete", 1]],
     ["delete-round-trip-slide-2", ["after-insert", 2], ["after-delete", 2]],
+    ["rename-is-nonvisual", ["after-delete", 1], ["after-rename", 1]],
+    [
+      "hidden-slide-keeps-visible-slide",
+      ["after-rename", 1],
+      ["after-hide", 1],
+    ],
     ["undo-original-slide-1", ["after-insert", 1], ["after-undo", 1]],
     [
       "duplicate-slide-identity",

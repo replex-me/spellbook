@@ -19,6 +19,8 @@ const observed = { marks: {}, events: [], runs: [] };
 const savedArtifacts = new Map();
 const upstreamUiSettleMs = 1_000;
 const history = [];
+const verifiedTopologyOperations = "add,duplicate,move,delete";
+const verifiedMetadataOperations = "rename,hide";
 let currentBytes;
 let currentSlideCount = 0;
 
@@ -210,7 +212,33 @@ async function runConformance() {
     deleteMutation,
   );
 
+  const renameMutation = await mutate({
+    op: "rename_slide",
+    slideIndex: 0,
+    name: "Browser 검증 슬라이드",
+  });
+  await recordBytes(
+    "after-rename",
+    currentBytes,
+    currentSlideCount,
+    renameMutation,
+  );
+
+  const hideMutation = await mutate({
+    op: "set_slide_hidden",
+    slideIndex: 1,
+    hidden: true,
+  });
+  const hidden = await recordBytes(
+    "after-hide",
+    currentBytes,
+    currentSlideCount,
+    hideMutation,
+  );
+
   const undoCounts = [
+    initial.slideCount + 1,
+    initial.slideCount + 1,
     initial.slideCount + 2,
     initial.slideCount + 2,
     initial.slideCount + 1,
@@ -240,13 +268,14 @@ async function runConformance() {
   await waitForUiPaint("reopen");
   body.dataset.initialSlides = String(initial.slideCount);
   body.dataset.reopenedSlides = String(reopened.slideCount);
-  body.dataset.mutatedSha256 = deleted.entry.sha256;
+  body.dataset.mutatedSha256 = hidden.entry.sha256;
   body.dataset.restoredSha256 = restored.entry.sha256;
   body.dataset.addedSha256 = added.entry.sha256;
-  body.dataset.topologyOperations = "add,duplicate,move,delete";
+  body.dataset.topologyOperations = verifiedTopologyOperations;
+  body.dataset.metadataOperations = verifiedMetadataOperations;
   setState(
     "complete",
-    "Browser slide topology, four-step Undo and reopen passed",
+    "Browser slide topology and metadata, six-step Undo and reopen passed",
   );
 }
 

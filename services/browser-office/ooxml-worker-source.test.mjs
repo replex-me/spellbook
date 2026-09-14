@@ -114,6 +114,130 @@ test("browser OOXML worker duplicates, moves, and deletes through one package to
   );
 });
 
+test("browser OOXML worker changes slide metadata without rewriting unrelated package parts", async () => {
+  const source = new Uint8Array(await readFile(fixtureUrl));
+  const original = unzipSync(source);
+  const renamed = applyOoxmlCommand(source, {
+    op: "rename_slide",
+    slideIndex: 0,
+    name: "Browser 검증 슬라이드",
+  });
+  const renamedEntries = unzipSync(renamed.bytes);
+  assert.equal(renamed.report.previous, "");
+  assert.equal(renamed.report.value, "Browser 검증 슬라이드");
+  assert.deepEqual(renamed.report.changedParts, ["ppt/slides/slide1.xml"]);
+  assert.deepEqual(changedLogicalParts(original, renamedEntries), [
+    "ppt/slides/slide1.xml",
+  ]);
+  assert.match(
+    strFromU8(renamedEntries["ppt/slides/slide1.xml"]),
+    /<p:cSld\b[^>]*name="Browser 검증 슬라이드"/u,
+  );
+
+  const hidden = applyOoxmlCommand(renamed.bytes, {
+    op: "set_slide_hidden",
+    slideIndex: 0,
+    hidden: true,
+  });
+  const hiddenEntries = unzipSync(hidden.bytes);
+  assert.equal(hidden.report.previous, false);
+  assert.equal(hidden.report.value, true);
+  assert.deepEqual(hidden.report.changedParts, ["ppt/slides/slide1.xml"]);
+  assert.match(
+    strFromU8(hiddenEntries["ppt/slides/slide1.xml"]),
+    /<p:sld\b[^>]*show="0"/u,
+  );
+  for (const part of Object.keys(original))
+    if (part !== "ppt/slides/slide1.xml")
+      assert.equal(hash(hiddenEntries[part]), hash(original[part]), part);
+
+  const visible = applyOoxmlCommand(hidden.bytes, {
+    op: "set_slide_hidden",
+    slideIndex: 0,
+    hidden: false,
+  });
+  assert.equal(visible.report.previous, true);
+  assert.equal(visible.report.value, false);
+  assert.doesNotMatch(
+    strFromU8(unzipSync(visible.bytes)["ppt/slides/slide1.xml"]),
+    /<p:sld\b[^>]*show=/u,
+  );
+});
+
+test("browser slide metadata validates values and treats identical values as a no-op", async () => {
+  const source = new Uint8Array(await readFile(fixtureUrl));
+  const named = applyOoxmlCommand(source, {
+    op: "rename_slide",
+    slideIndex: 0,
+    name: "Stable name",
+  });
+  const repeated = applyOoxmlCommand(named.bytes, {
+    op: "rename_slide",
+    slideIndex: 0,
+    name: "Stable name",
+  });
+  assert.deepEqual(repeated.report.changedParts, []);
+  assert.deepEqual(
+    changedLogicalParts(unzipSync(named.bytes), unzipSync(repeated.bytes)),
+    [],
+  );
+  assert.throws(
+    () =>
+      applyOoxmlCommand(source, {
+        op: "rename_slide",
+        slideIndex: 0,
+        name: "",
+      }),
+    /1 to 255 characters/iu,
+  );
+  assert.throws(
+    () =>
+      applyOoxmlCommand(source, {
+        op: "rename_slide",
+        slideIndex: 0,
+        name: "bad\u0000name",
+      }),
+    /control character/iu,
+  );
+  assert.throws(
+    () =>
+      applyOoxmlCommand(source, {
+        op: "set_slide_hidden",
+        slideIndex: 0,
+        hidden: "yes",
+      }),
+    /hidden must be a boolean/iu,
+  );
+});
+
+test("browser metadata edits remain available when topology has sections", async () => {
+  const source = new Uint8Array(await readFile(fixtureUrl));
+  const entries = unzipSync(source);
+  entries["ppt/presentation.xml"] = strToU8(
+    strFromU8(entries["ppt/presentation.xml"]).replace(
+      "</p:presentation>",
+      '<p:sectionLst><p:section name="Section" id="{00000000-0000-0000-0000-000000000001}"><p:sldIdLst/></p:section></p:sectionLst></p:presentation>',
+    ),
+  );
+  const sectioned = zipSync(entries, { level: 6 });
+  assert.doesNotThrow(() =>
+    applyOoxmlCommand(sectioned, {
+      op: "rename_slide",
+      slideIndex: 0,
+      name: "Section-safe name",
+    }),
+  );
+  assert.throws(
+    () =>
+      applyOoxmlCommand(sectioned, {
+        op: "move_slide",
+        slideIndex: 0,
+        insertIndex: 0,
+      }),
+    /sections or custom shows/iu,
+  );
+});
+
 test("browser OOXML worker clones and garbage-collects owned dependency graphs", async () => {
   const source = withOwnedDependencyGraph(
     new Uint8Array(await readFile(fixtureUrl)),
