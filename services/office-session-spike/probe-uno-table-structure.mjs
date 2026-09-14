@@ -163,10 +163,12 @@ try {
   try {
     observed = await settleObservation();
   } catch (error) {
-    error.message += ` Bridge trace: ${JSON.stringify(
-      await nativeBridgeDiagnostics(page),
-    )}`;
-    throw error;
+    throw new Error(
+      `${error.message} Bridge trace: ${JSON.stringify(
+        await nativeBridgeDiagnostics(page),
+      )}`,
+      { cause: error },
+    );
   }
   const persistenceBefore = {
     slides: structuredClone(observed.slides),
