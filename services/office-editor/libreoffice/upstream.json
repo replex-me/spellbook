@@ -11,7 +11,24 @@
   "runtimePatchLevel": "stock",
   "patchLevel": "undo-v18",
   "sourcePatchSeriesReady": true,
-  "sourceCandidateReady": false,
+  "sourceCandidateReady": true,
+  "sourceCandidateEvidence": {
+    "provider": "Google Cloud Build",
+    "buildId": "29840711-2392-4193-b7e6-a9ca4a70469b",
+    "completedAt": "2026-09-14T23:42:59.277118Z",
+    "engineImage": "asia-northeast3-docker.pkg.dev/moai-fbdfc/moai/present-collabora-engine@sha256:b191b085f79b4d8faf09d26527215e44f22ab0077131118ba07df37fe142eab3",
+    "nativeEvidenceSha256": "215ac983dedd3a86f621b9f3b2aeb46186022627d0a9fdb8fa4f10fa71a1283c",
+    "buildResultSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "requiredCppunitStatuses": {
+      "CppunitTest_sd_uiimpress": 0,
+      "CppunitTest_sd_misc_tests": 0
+    },
+    "impressCommandSurface": {
+      "count": 725,
+      "sha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
+      "exact": true
+    }
+  },
   "patchSeriesSha256": "714283bc5d289b98f6fe1727a0e06fd8892f38846675bf6206eaf7bc2c103c37",
   "engineImageTag": "26.04.4.1-spellbook-undo-v18-r5-candidate",
   "impressUiUnoCommandCount": 725,

@@ -33,6 +33,28 @@ test("browser engine source, patches and runtime are locked in one manifest", ()
   assert.equal(computePatchSeriesSha256(), upstreamManifest.patchSeriesSha256);
   assert.ok(upstreamManifest.requiredCppunitTargets.length > 0);
   assert.ok(upstreamManifest.focusedCppunitTests.length > 0);
+  if (upstreamManifest.sourceCandidateReady) {
+    const evidence = upstreamManifest.sourceCandidateEvidence;
+    assert.match(evidence.buildId, /^[0-9a-f-]{36}$/u);
+    assert.ok(Number.isFinite(Date.parse(evidence.completedAt)));
+    assert.match(evidence.engineImage, /@sha256:[0-9a-f]{64}$/u);
+    assert.match(evidence.nativeEvidenceSha256, /^[0-9a-f]{64}$/u);
+    assert.match(evidence.buildResultSha256, /^[0-9a-f]{64}$/u);
+    assert.deepEqual(
+      Object.keys(evidence.requiredCppunitStatuses).sort(),
+      upstreamManifest.requiredCppunitTargets.slice().sort(),
+    );
+    assert.ok(
+      Object.values(evidence.requiredCppunitStatuses).every(
+        (status) => status === 0,
+      ),
+    );
+    assert.deepEqual(evidence.impressCommandSurface, {
+      count: upstreamManifest.impressUiUnoCommandCount,
+      sha256: upstreamManifest.impressUiUnoCommandsSha256,
+      exact: true,
+    });
+  }
 });
 
 test("runtime environment is generated only from a digest-pinned manifest", () => {
