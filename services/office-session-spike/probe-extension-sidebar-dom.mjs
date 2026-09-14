@@ -14,6 +14,23 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   await installNativeBridgeTrace(page);
+  if (process.env.SPELLBOOK_PROBE_BLOCK_LEGACY_HIDE === "1")
+    await page.addInitScript(() => {
+      window.addEventListener(
+        "message",
+        (event) => {
+          try {
+            const data =
+              typeof event.data === "string"
+                ? JSON.parse(event.data)
+                : event.data;
+            if (data?.MessageId === "Hide_Sidebar")
+              event.stopImmediatePropagation();
+          } catch {}
+        },
+        true,
+      );
+    });
   if (process.env.SPELLBOOK_PROBE_HOST_CSS)
     await page.route("**/spellbook-host.css", (route) =>
       route.fulfill({
