@@ -3,7 +3,14 @@
  * the same open Collabora document the user is editing.
  */
 function spellbookDocumentOperation(request) {
-  const enginePatchLevel = "__SPELLBOOK_ENGINE_PATCH_LEVEL__";
+  const engineIdentity = {
+    patchLevel: "__SPELLBOOK_ENGINE_PATCH_LEVEL__",
+    publicCommit: "__SPELLBOOK_PUBLIC_SOURCE_REVISION__",
+    engineImage: "__SPELLBOOK_COLLABORA_ENGINE_IMAGE__",
+    patchSeriesSha256: "__SPELLBOOK_COLLABORA_PATCH_SERIES_SHA256__",
+    collaboraSourceCommit: "__SPELLBOOK_COLLABORA_SOURCE_COMMIT__",
+  };
+  const enginePatchLevel = engineIdentity.patchLevel;
   const patchLevelMatch = /^undo-v([1-9][0-9]*)$/.exec(enginePatchLevel);
   const enginePatchVersion = patchLevelMatch ? Number(patchLevelMatch[1]) : 0;
   const hasEnginePatch = (minimumVersion) =>
@@ -1417,7 +1424,7 @@ function spellbookDocumentOperation(request) {
       : [];
     return {
       unit: "1/100mm",
-      engine: { patchLevel: enginePatchLevel },
+      engine: engineIdentity,
       revision: revisionOf({ slides, masters }),
       masters,
       slides,

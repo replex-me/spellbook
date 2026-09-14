@@ -6,6 +6,11 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { createProbe } from "../services/office-session-spike/host.mjs";
 import { buildConformancePlan } from "./native-mutation-conformance.mjs";
+import {
+  assertObservedEngineIdentity,
+  loadOfficeRuntimeRelease,
+  verifyRunningRuntimeContainer,
+} from "./office-runtime-identity.mjs";
 
 const DEFAULT_CAPABILITIES = "contracts/native-edit-capabilities.json";
 const DEFAULT_CONFORMANCE = "contracts/native-mutation-conformance.json";
@@ -45,7 +50,7 @@ export function operationsFromReport(report) {
   );
 }
 
-export function persistenceStateFromProbeOutput(output) {
+export function stateFromProbeOutput(output) {
   let state;
   try {
     state = JSON.parse(output);
@@ -58,7 +63,19 @@ export function persistenceStateFromProbeOutput(output) {
     throw new Error(
       "The baseline persistence probe returned no slide/master state.",
     );
+  return state;
+}
+
+export function persistenceStateFromProbeOutput(output) {
+  const state = stateFromProbeOutput(output);
   return { slides: state.slides, masters: state.masters };
+}
+
+export function engineIdentityFromProbeOutput(output) {
+  const identity = stateFromProbeOutput(output).engine;
+  if (!identity || typeof identity !== "object")
+    throw new Error("The browser runtime returned no engine identity.");
+  return identity;
 }
 
 export function isTransientEditorConnectionFailure(error) {
@@ -398,6 +415,7 @@ async function runScenario({
   capabilities,
   scenario,
   documentToolDll,
+  expectedRelease,
 }) {
   const startedAt = new Date().toISOString();
   const started = Date.now();
@@ -456,6 +474,9 @@ async function runScenario({
   const persistenceBaseline = persistenceStateFromProbeOutput(
     baselineReopened.stdout,
   );
+  const engineIdentity = engineIdentityFromProbeOutput(baselineReopened.stdout);
+  if (expectedRelease)
+    assertObservedEngineIdentity(engineIdentity, expectedRelease);
   const mutationReport = JSON.parse(await fs.readFile(reportPath, "utf8"));
   mutationReport.persistenceBaseline = persistenceBaseline;
   await fs.writeFile(
@@ -543,11 +564,34 @@ async function runScenario({
     routedFamilies: scenario.routedFamilies,
     gates: sortedUnique([...scenario.proves, "change_budget"]),
     changeBudget: changeBudgetReport,
+    engineIdentity,
   };
 }
 
 export async function runConformance(options = {}) {
   const root = path.resolve(options.root ?? ".");
+  const releaseEvidence = options.runtimeReleasePath
+    ? loadOfficeRuntimeRelease(path.resolve(root, options.runtimeReleasePath))
+    : null;
+  const releasePatchLevel = releaseEvidence
+    ? Number(releaseEvidence.release.runtime.patchLevel.replace(/^undo-v/u, ""))
+    : undefined;
+  if (
+    releaseEvidence &&
+    options.enginePatchLevel !== undefined &&
+    options.enginePatchLevel !== releasePatchLevel
+  )
+    throw new Error(
+      "The requested patch level does not match the runtime release.",
+    );
+  if (releaseEvidence && !options.runtimeContainer)
+    throw new Error("A runtime container is required for release conformance.");
+  const containerVerification = releaseEvidence
+    ? verifyRunningRuntimeContainer(
+        releaseEvidence.release,
+        options.runtimeContainer,
+      )
+    : null;
   const capabilities = JSON.parse(
     await fs.readFile(
       path.resolve(root, options.capabilitiesPath ?? DEFAULT_CAPABILITIES),
@@ -561,7 +605,7 @@ export async function runConformance(options = {}) {
     ),
   );
   const plan = buildConformancePlan(capabilities, conformance, {
-    enginePatchLevel: options.enginePatchLevel,
+    enginePatchLevel: releasePatchLevel ?? options.enginePatchLevel,
     families: options.families,
   });
   if (!plan.summary.complete)
@@ -601,6 +645,19 @@ export async function runConformance(options = {}) {
     contractVersion: conformance.version,
     mutationContractVersion: capabilities.mutationModel.version,
     enginePatchLevel: plan.enginePatchLevel,
+    runtime: releaseEvidence
+      ? {
+          releaseSha256: releaseEvidence.sha256,
+          publicCommit: releaseEvidence.release.publicSource.commit,
+          runtimeImage: releaseEvidence.release.runtime.image,
+          engineImage: releaseEvidence.release.runtime.engineImage,
+          patchLevel: releaseEvidence.release.runtime.patchLevel,
+          patchSeriesSha256: releaseEvidence.release.runtime.patchSeriesSha256,
+          collaboraSourceCommit:
+            releaseEvidence.release.runtime.collaboraSourceCommit,
+          container: containerVerification,
+        }
+      : null,
     editorOrigin,
     output: path.relative(root, outputRoot),
     startedAt: new Date().toISOString(),
@@ -629,6 +686,7 @@ export async function runConformance(options = {}) {
         capabilities,
         scenario,
         documentToolDll: path.resolve(root, DOCUMENT_TOOL_DLL),
+        expectedRelease: releaseEvidence?.release,
       });
       report.scenarios.push(evidence);
       await fs.writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
@@ -689,6 +747,10 @@ function parseArguments(argv) {
     else if (value === "--editor-origin") parsed.editorOrigin = argv[++index];
     else if (value === "--engine-patch-level")
       parsed.enginePatchLevel = Number(argv[++index]);
+    else if (value === "--runtime-release")
+      parsed.runtimeReleasePath = argv[++index];
+    else if (value === "--runtime-container")
+      parsed.runtimeContainer = argv[++index];
     else if (value === "--families")
       parsed.families = argv[++index].split(",").filter(Boolean);
     else throw new Error(`Unknown argument: ${value}`);

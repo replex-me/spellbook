@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { buildOfficeRuntimeValidation } from "./write-office-runtime-validation.mjs";
+import { loadOfficeRuntimeRelease } from "./office-runtime-identity.mjs";
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "spellbook-validation-"));
@@ -29,9 +30,26 @@ function fixture() {
     },
     nativeVerification: { requiredCppunitTargets: [target] },
   });
+  const releaseEvidence = loadOfficeRuntimeRelease(releasePath);
   const browserReportPath = write(root, "browser.json", {
     status: "browser_runtime_passed",
     enginePatchLevel: 17,
+    runtime: {
+      releaseSha256: releaseEvidence.sha256,
+      publicCommit: releaseEvidence.release.publicSource.commit,
+      runtimeImage: releaseEvidence.release.runtime.image,
+      engineImage: releaseEvidence.release.runtime.engineImage,
+      patchLevel: releaseEvidence.release.runtime.patchLevel,
+      patchSeriesSha256: releaseEvidence.release.runtime.patchSeriesSha256,
+      collaboraSourceCommit:
+        releaseEvidence.release.runtime.collaboraSourceCommit,
+      container: {
+        status: "passed",
+        configuredImage: releaseEvidence.release.runtime.image,
+        localImageId: `sha256:${"1".repeat(64)}`,
+        containerId: "3".repeat(64),
+      },
+    },
     selectedOperations: ["replace_text", "set_background"],
     executedOperations: ["replace_text", "set_background"],
     missingOperations: [],
@@ -41,6 +59,14 @@ function fixture() {
         status: "passed",
         reopen: { verified: true },
         changeBudget: { valid: true },
+        engineIdentity: {
+          patchLevel: releaseEvidence.release.runtime.patchLevel,
+          publicCommit: releaseEvidence.release.publicSource.commit,
+          engineImage: releaseEvidence.release.runtime.engineImage,
+          patchSeriesSha256: releaseEvidence.release.runtime.patchSeriesSha256,
+          collaboraSourceCommit:
+            releaseEvidence.release.runtime.collaboraSourceCommit,
+        },
       },
     ],
   });
@@ -100,6 +126,36 @@ test("requires every browser scenario to pass reopen and change-budget checks", 
     assert.throws(
       () => buildOfficeRuntimeValidation(value),
       /browser_runtime_validation_failed/u,
+    );
+  } finally {
+    fs.rmSync(value.root, { recursive: true, force: true });
+  }
+});
+
+test("rejects a browser report from a different runtime artifact", () => {
+  const value = fixture();
+  try {
+    const report = JSON.parse(fs.readFileSync(value.browserReportPath, "utf8"));
+    report.runtime.runtimeImage = `registry/runtime@sha256:${"9".repeat(64)}`;
+    fs.writeFileSync(value.browserReportPath, JSON.stringify(report));
+    assert.throws(
+      () => buildOfficeRuntimeValidation(value),
+      /browser_runtime_validation_failed/u,
+    );
+  } finally {
+    fs.rmSync(value.root, { recursive: true, force: true });
+  }
+});
+
+test("rejects browser observations from a different engine artifact", () => {
+  const value = fixture();
+  try {
+    const report = JSON.parse(fs.readFileSync(value.browserReportPath, "utf8"));
+    report.scenarios[0].engineIdentity.publicCommit = "9".repeat(40);
+    fs.writeFileSync(value.browserReportPath, JSON.stringify(report));
+    assert.throws(
+      () => buildOfficeRuntimeValidation(value),
+      /observed_engine_identity_mismatch/u,
     );
   } finally {
     fs.rmSync(value.root, { recursive: true, force: true });

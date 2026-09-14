@@ -27,6 +27,10 @@ RUN CGO_ENABLED=0 go test ./... && \
 
 FROM node:24-alpine AS browser-assets
 ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL
+ARG SPELLBOOK_PUBLIC_SOURCE_REVISION=development
+ARG SPELLBOOK_COLLABORA_ENGINE_IMAGE=stock
+ARG SPELLBOOK_COLLABORA_PATCH_SERIES_SHA256=development
+ARG SPELLBOOK_COLLABORA_SOURCE_COMMIT=development
 RUN apk add --no-cache gzip
 COPY --from=collabora /usr/share/coolwsd /upstream
 COPY services/office-editor/patch-localization.mjs /tmp/patch-localization.mjs
@@ -34,6 +38,7 @@ COPY services/office-editor/patch-host-bridge.mjs /tmp/patch-host-bridge.mjs
 COPY services/office-editor/localization-ko-overrides.json /tmp/localization-ko-overrides.json
 COPY contracts/native-edit-capabilities.json /tmp/native-edit-capabilities.json
 COPY services/office-editor/mutation-contract.mjs /tmp/mutation-contract.mjs
+COPY services/office-editor/inject-runtime-identity.mjs /tmp/inject-runtime-identity.mjs
 COPY services/office-editor/extensions-index.json /upstream/browser/dist/extensions/index.json
 COPY services/office-editor/extension /upstream/browser/dist/extensions/org.spellbook.editor
 COPY services/office-editor/host-bridge.js /upstream/browser/dist/spellbook-host.js
@@ -44,10 +49,13 @@ RUN node /tmp/mutation-contract.mjs \
     && if [ "${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}" != stock ]; then \
       printf '%s\n' "${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}" | grep -Eq '^undo-v[1-9][0-9]*$'; \
     fi \
-    && sed -i "s/__SPELLBOOK_ENGINE_PATCH_LEVEL__/${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}/g" \
+    && node /tmp/inject-runtime-identity.mjs \
       /upstream/browser/dist/extensions/org.spellbook.editor/operations.js \
-    && ! grep -q '__SPELLBOOK_ENGINE_PATCH_LEVEL__' \
-      /upstream/browser/dist/extensions/org.spellbook.editor/operations.js
+      "${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}" \
+      "${SPELLBOOK_PUBLIC_SOURCE_REVISION}" \
+      "${SPELLBOOK_COLLABORA_ENGINE_IMAGE}" \
+      "${SPELLBOOK_COLLABORA_PATCH_SERIES_SHA256}" \
+      "${SPELLBOOK_COLLABORA_SOURCE_COMMIT}"
 RUN node /tmp/patch-localization.mjs \
       /upstream/browser/dist/l10n/ui-ko.json \
       /tmp/localization-ko-overrides.json && \

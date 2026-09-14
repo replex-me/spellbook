@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import { engineIdentityFromProbeOutput } from "./native-mutation-conformance-runner.mjs";
 import { buildConformancePlan } from "./native-mutation-conformance.mjs";
 
 const capabilities = JSON.parse(
@@ -86,4 +87,20 @@ test("plan maps every required evidence gate to a scoped provider", () => {
     plan.families.object_interaction.providedGates.includes("playback"),
   );
   assert.ok(!plan.families.object_text.providedGates.includes("playback"));
+});
+
+test("reads the exact engine identity observed through the browser runtime", () => {
+  const engine = {
+    patchLevel: "undo-v18",
+    publicCommit: "c".repeat(40),
+    engineImage: `registry/engine@sha256:${"a".repeat(64)}`,
+    patchSeriesSha256: "b".repeat(64),
+    collaboraSourceCommit: "d".repeat(40),
+  };
+  assert.deepEqual(
+    engineIdentityFromProbeOutput(
+      JSON.stringify({ engine, slides: [], masters: [] }),
+    ),
+    engine,
+  );
 });

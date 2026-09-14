@@ -47,6 +47,10 @@ docker build \
   --file="$spellbook_repo_root/services/office-editor/Dockerfile" \
   --build-arg="SPELLBOOK_COLLABORA_BASE_IMAGE=$COLLABORA_CANDIDATE_IMAGE" \
   --build-arg="SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL=$COLLABORA_CANDIDATE_PATCH_LEVEL" \
+  --build-arg="SPELLBOOK_PUBLIC_SOURCE_REVISION=$source_revision" \
+  --build-arg="SPELLBOOK_COLLABORA_ENGINE_IMAGE=$COLLABORA_CANDIDATE_IMAGE" \
+  --build-arg="SPELLBOOK_COLLABORA_PATCH_SERIES_SHA256=$COLLABORA_CANDIDATE_PATCH_SERIES_SHA256" \
+  --build-arg="SPELLBOOK_COLLABORA_SOURCE_COMMIT=$COLLABORA_CANDIDATE_SOURCE_COMMIT" \
   --label="org.opencontainers.image.source=https://github.com/replex-me/spellbook" \
   --label="org.opencontainers.image.revision=$source_revision" \
   --label="org.spellbook.collabora-engine-image=$COLLABORA_CANDIDATE_IMAGE" \

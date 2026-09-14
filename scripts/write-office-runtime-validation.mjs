@@ -2,8 +2,11 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-const digestPattern = /@sha256:[0-9a-f]{64}$/u;
+import {
+  assertObservedEngineIdentity,
+  loadOfficeRuntimeRelease,
+  requireOfficeRuntimeRelease,
+} from "./office-runtime-identity.mjs";
 
 export function buildOfficeRuntimeValidation({
   releasePath,
@@ -12,8 +15,8 @@ export function buildOfficeRuntimeValidation({
   visualReviewPath,
   powerPointEvidencePath,
 }) {
-  const release = readJson(releasePath);
-  requireReleaseIdentity(release);
+  const releaseEvidence = loadOfficeRuntimeRelease(releasePath);
+  const release = releaseEvidence.release;
 
   const nativeTargets = release.nativeVerification.requiredCppunitTargets.map(
     (target) => verifyNativeTarget(nativeDirectory, target),
@@ -22,7 +25,12 @@ export function buildOfficeRuntimeValidation({
   const expectedPatchLevel = Number(
     release.runtime.patchLevel.replace(/^undo-v/u, ""),
   );
-  const browser = verifyBrowserReport(browserReport, expectedPatchLevel);
+  const browser = verifyBrowserReport(
+    browserReport,
+    release,
+    releaseEvidence.sha256,
+    expectedPatchLevel,
+  );
   const visualReview = verifyVisualReview(
     readJson(visualReviewPath),
     browser.scenarios,
@@ -59,19 +67,6 @@ export function buildOfficeRuntimeValidation({
   };
 }
 
-function requireReleaseIdentity(release) {
-  if (
-    release?.kind !== "spellbook-office-runtime" ||
-    !/^[0-9a-f]{40}$/u.test(release?.publicSource?.commit ?? "") ||
-    !digestPattern.test(release?.runtime?.image ?? "") ||
-    !digestPattern.test(release?.runtime?.engineImage ?? "") ||
-    !/^undo-v[1-9][0-9]*$/u.test(release?.runtime?.patchLevel ?? "") ||
-    !Array.isArray(release?.nativeVerification?.requiredCppunitTargets) ||
-    release.nativeVerification.requiredCppunitTargets.length === 0
-  )
-    throw new Error("invalid_office_runtime_release");
-}
-
 function verifyNativeTarget(directory, target) {
   if (!/^[A-Za-z0-9_]+$/u.test(target))
     throw new Error(`invalid_native_target:${target}`);
@@ -90,7 +85,13 @@ function verifyNativeTarget(directory, target) {
   };
 }
 
-function verifyBrowserReport(report, expectedPatchLevel) {
+function verifyBrowserReport(
+  report,
+  release,
+  releaseSha256,
+  expectedPatchLevel,
+) {
+  requireOfficeRuntimeRelease(release);
   const selected = new Set(report?.selectedOperations ?? []);
   const executed = new Set(report?.executedOperations ?? []);
   const scenarios = Array.isArray(report?.scenarios) ? report.scenarios : [];
@@ -98,6 +99,20 @@ function verifyBrowserReport(report, expectedPatchLevel) {
   if (
     report?.status !== "browser_runtime_passed" ||
     report?.enginePatchLevel !== expectedPatchLevel ||
+    report?.runtime?.releaseSha256 !== releaseSha256 ||
+    report?.runtime?.publicCommit !== release.publicSource.commit ||
+    report?.runtime?.runtimeImage !== release.runtime.image ||
+    report?.runtime?.engineImage !== release.runtime.engineImage ||
+    report?.runtime?.patchLevel !== release.runtime.patchLevel ||
+    report?.runtime?.patchSeriesSha256 !== release.runtime.patchSeriesSha256 ||
+    report?.runtime?.collaboraSourceCommit !==
+      release.runtime.collaboraSourceCommit ||
+    report?.runtime?.container?.status !== "passed" ||
+    report?.runtime?.container?.configuredImage !== release.runtime.image ||
+    !/^sha256:[0-9a-f]{64}$/u.test(
+      report?.runtime?.container?.localImageId ?? "",
+    ) ||
+    !/^[0-9a-f]{64}$/u.test(report?.runtime?.container?.containerId ?? "") ||
     selected.size === 0 ||
     executed.size !== selected.size ||
     missing.length > 0 ||
@@ -111,6 +126,8 @@ function verifyBrowserReport(report, expectedPatchLevel) {
     )
   )
     throw new Error("browser_runtime_validation_failed");
+  for (const scenario of scenarios)
+    assertObservedEngineIdentity(scenario.engineIdentity, release);
   return {
     status: "passed",
     sourceSha256: sha256Json(report),
@@ -118,6 +135,7 @@ function verifyBrowserReport(report, expectedPatchLevel) {
     operationCount: selected.size,
     scenarioCount: scenarios.length,
     scenarios: scenarios.map((scenario) => scenario.scenario).sort(),
+    runtime: report.runtime,
   };
 }
 

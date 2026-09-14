@@ -81,8 +81,20 @@ node services/office-editor/libreoffice/write-runtime-release.mjs \
 ```
 
 That file pins runtime identity; it does not claim that named tests ran. Create
-a separate validation receipt from the actual native-suite logs, browser
-conformance report and visual review:
+a browser conformance report against a container started from that exact
+runtime digest. The runner reads the container image configured by Docker and
+the engine identity observed through the open document, so a matching patch
+name from a different image cannot pass:
+
+```bash
+pnpm office:conformance:run -- \
+  --runtime-release /secure/path/spellbook-office-runtime.release.json \
+  --runtime-container spellbook-office-candidate \
+  --output /secure/path/conformance
+```
+
+Then create a separate validation receipt from the actual native-suite logs,
+that browser conformance report and visual review:
 
 ```bash
 pnpm office:runtime:validate -- \
