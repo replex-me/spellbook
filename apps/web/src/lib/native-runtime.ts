@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { db, ensureSchema } from "./db";
 import { HttpError } from "./http";
-import type { Session, WorkerCallback } from "./models";
+import type {
+  ElementGraph,
+  PackageChangeBudgetReport,
+  Session,
+  WorkerCallback,
+} from "./models";
 import {
   parseModelSettings,
   supportsSettings,
@@ -10,7 +15,7 @@ import {
 } from "./ai-models";
 import { callAiAccount, enqueueWorkerJob } from "./workers";
 import { saveImageAsset } from "./image-assets";
-import { storageNamespace } from "./storage";
+import { getJsonObject, storageNamespace } from "./storage";
 import { internalAppBaseUrl, publicAppBaseUrl } from "./runtime-urls";
 import {
   boundedNativeConversationHistory,
@@ -65,6 +70,8 @@ export async function submitNativeTurn(
   },
 ) {
   const native = await ownedSession(session, documentId);
+  if (native.status !== "active")
+    throw new HttpError(409, "native_save_validation_in_progress");
   const text = typeof input.text === "string" ? input.text.trim() : "";
   if (!text || text.length > 2_000)
     throw new HttpError(400, "invalid_native_request");
@@ -303,7 +310,12 @@ function validObservation(value: unknown): boolean {
     return false;
   if (
     !Array.isArray(item.selectedElementIds) ||
-    !Number.isInteger(item.activeSlide)
+    !Number.isInteger(item.activeSlide) ||
+    !Array.isArray(item.changedSlideIndexes) ||
+    item.changedSlideIndexes.some(
+      (index) => !Number.isSafeInteger(index) || Number(index) < 0,
+    ) ||
+    typeof item.visualEvidenceComplete !== "boolean"
   )
     return false;
   if (!Array.isArray(item.images) || item.images.length > 10) return false;
@@ -445,8 +457,17 @@ export async function executeNativeTool(input: Record<string, unknown>) {
     if (serialized.length > 200_000)
       throw new HttpError(400, "native_request_too_large");
     const id = randomUUID();
-    await db()`insert into spellbook_native_tasks (id,session_id,turn_id,request,status,expires_at)
-      values (${id},${sessionId},${turnId},${db().json(input.request as never)},'queued',now()+interval '25 seconds')`;
+    const [created] = await db()`
+      insert into spellbook_native_tasks
+        (id,session_id,turn_id,request,status,save_revision_at_create,expires_at)
+      select ${id},s.id,${turnId},${db().json(input.request as never)},'queued',s.save_revision,now()+interval '25 seconds'
+      from spellbook_native_sessions s
+      join spellbook_native_turns t on t.id=${turnId} and t.session_id=s.id
+      where s.id=${sessionId} and s.status='active' and s.expires_at > now()
+        and t.status='running'
+      returning id
+    `;
+    if (!created) throw new HttpError(409, "native_session_not_active");
     return { taskId: id };
   }
   if (input.operation === "task_status") {
@@ -560,15 +581,42 @@ export async function completeNativeScan(
   callback: WorkerCallback,
 ) {
   const outputs = callback.outputs;
-  if (!outputs?.graphObject || !outputs.documentSha256 || !outputs.slideCount)
-    throw new Error("native_scan_outputs_missing");
+  if (
+    !outputs?.graphObject ||
+    !outputs.validationObject ||
+    !outputs.documentSha256 ||
+    !outputs.slideCount
+  )
+    throw new NativeScanValidationError("native_scan_outputs_missing");
+  const expectedValidationObject = `${job.payload.outputPrefix}/validation.json`;
+  if (outputs.validationObject !== expectedValidationObject)
+    throw new NativeScanValidationError(
+      "native_scan_validation_identity_mismatch",
+    );
+  const [graph, validation] = await Promise.all([
+    getJsonObject<ElementGraph>(outputs.graphObject),
+    getJsonObject<PackageChangeBudgetReport>(outputs.validationObject),
+  ]);
+  if (
+    validation.valid !== true ||
+    validation.candidateDocumentSha256 !== outputs.documentSha256 ||
+    graph.documentSha256 !== outputs.documentSha256 ||
+    !graph.slides.length ||
+    graph.slides.some((slide) => !slide.previewObject)
+  )
+    throw new NativeScanValidationError("native_scan_validation_failed");
+  const graphObject = outputs.graphObject;
+  const scanObject = outputs.scanObject ?? null;
+  const validationObject = outputs.validationObject;
+  const documentSha256 = outputs.documentSha256;
+  const slideCount = outputs.slideCount;
   await db().begin(async (sql) => {
     const [claimed] =
       await sql`update spellbook_jobs set status='succeeded',outputs=${sql.json(callback as never)},updated_at=now()
       where id=${job.id} and status in ('queued','running') returning id`;
     if (!claimed) return;
-    await sql`update spellbook_versions set status='ready',graph_object=${outputs.graphObject},scan_object=${outputs.scanObject ?? null},
-      document_sha256=${outputs.documentSha256},slide_count=${outputs.slideCount} where id=${job.version_id}`;
+    await sql`update spellbook_versions set status='ready',graph_object=${graphObject},scan_object=${scanObject},validation_object=${validationObject},
+      document_sha256=${documentSha256},slide_count=${slideCount} where id=${job.version_id}`;
     const [session] =
       await sql`update spellbook_native_sessions set status='active',last_error=null,updated_at=now()
       where id=${job.payload.nativeSessionId} and working_version_id=${job.version_id}
@@ -580,11 +628,22 @@ export async function completeNativeScan(
   });
 }
 
-export async function failNativeScan(job: Record<string, any>, error: string) {
+export class NativeScanValidationError extends Error {}
+
+export async function failNativeScan(
+  job: Record<string, any>,
+  error: string,
+  callback?: WorkerCallback,
+) {
+  const expectedValidationObject = `${job.payload.outputPrefix}/validation.json`;
+  const validationObject =
+    callback?.outputs?.validationObject === expectedValidationObject
+      ? expectedValidationObject
+      : null;
   await db().begin(async (sql) => {
     await sql`update spellbook_jobs set status='failed',error=${error.slice(0, 1_000)},updated_at=now()
       where id=${job.id} and status in ('queued','running')`;
-    await sql`update spellbook_versions set status='failed',kind='abandoned' where id=${job.version_id} and status='processing'`;
+    await sql`update spellbook_versions set status='failed',kind='abandoned',validation_object=coalesce(${validationObject},validation_object) where id=${job.version_id} and status='processing'`;
     await sql`update spellbook_native_sessions set status='failed',last_error=${error.slice(0, 1_000)},updated_at=now()
       where id=${job.payload.nativeSessionId} and working_version_id=${job.version_id}`;
   });

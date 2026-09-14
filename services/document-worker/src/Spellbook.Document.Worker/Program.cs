@@ -35,10 +35,11 @@ app.MapPost("/internal/jobs/scan-render", (
         var adapter = RequireAdapter(adapters, job.FormatId);
         using var workspace = new JobWorkspace(job.JobId);
         var inputPath = Path.Combine(workspace.Path, $"source{adapter.FileExtension}");
+        string? baselinePath = null;
         if (adapter.FormatId == "pptx" && !string.IsNullOrWhiteSpace(job.BaselineInputObject))
         {
             var incomingPath = Path.Combine(workspace.Path, $"incoming{adapter.FileExtension}");
-            var baselinePath = Path.Combine(workspace.Path, $"baseline{adapter.FileExtension}");
+            baselinePath = Path.Combine(workspace.Path, $"baseline{adapter.FileExtension}");
             await storage.DownloadAsync(job.InputObject, incomingPath, cancellationToken);
             await storage.DownloadAsync(job.BaselineInputObject, baselinePath, cancellationToken);
             var preservation = new PptxUnsupportedFeaturePreserver()
@@ -53,6 +54,32 @@ app.MapPost("/internal/jobs/scan-render", (
         {
             await storage.DownloadAsync(job.InputObject, inputPath, cancellationToken);
         }
+        string? validationObject = null;
+        if (baselinePath is not null)
+        {
+            if (job.ChangeBudget is null)
+                throw new InvalidDataException("native_change_budget_missing");
+            if (job.ChangeOrigin is not ("ai" or "human"))
+                throw new InvalidDataException("native_change_origin_missing");
+            if (job.ChangeOrigin == "ai"
+                && (job.ChangeTaskIds is null
+                    || job.ChangeTaskIds.Count == 0
+                    || job.ChangeBudget.TargetSlideIndexes is null
+                    || job.ChangeBudget.TargetSlideIndexes.Count == 0))
+                throw new InvalidDataException("native_ai_change_evidence_missing");
+            var validation = new PptxPackageChangeBudgetValidator()
+                .Validate(baselinePath, inputPath, job.ChangeBudget);
+            validationObject = $"{job.OutputPrefix}/validation.json";
+            await storage.UploadJsonAsync(
+                validationObject,
+                validation,
+                DocumentJsonContext.Default.PackageChangeBudgetReport,
+                cancellationToken);
+            if (!validation.Valid)
+                throw new ChangeBudgetExceededException(
+                    validationObject,
+                    validation.CandidateDocumentSha256);
+        }
         var scan = adapter.Scan(inputPath);
         var graph = adapter.Inspect(inputPath, scan);
         var images = await adapter.RenderAsync(inputPath, Path.Combine(workspace.Path, "slides"), cancellationToken);
@@ -62,7 +89,7 @@ app.MapPost("/internal/jobs/scan-render", (
         await storage.UploadJsonAsync(graphObject, graphWithPreviews, DocumentJsonContext.Default.ElementGraph, cancellationToken);
         await storage.UploadJsonAsync(scanObject, scan, DocumentJsonContext.Default.DocumentScan, cancellationToken);
         await UploadImagesAsync(storage, job.OutputPrefix, images, cancellationToken);
-        return new WorkerOutputs(graphObject, scanObject, null, null, images.Count, scan.DocumentSha256);
+        return new WorkerOutputs(graphObject, scanObject, validationObject, null, images.Count, scan.DocumentSha256);
     }));
     return Results.Accepted(value: new { status = "accepted", jobId = job.JobId });
 });
@@ -167,6 +194,22 @@ static async Task ExecuteJob(
     {
         callback = new WorkerCallback(jobId, "succeeded", await work(cancellationToken), null);
     }
+    catch (ChangeBudgetExceededException exception)
+    {
+        Console.Error.WriteLine(JsonSerializer.Serialize(new
+        {
+            eventType = "document_job_failed",
+            jobId,
+            stage = "change_budget",
+            errorType = exception.GetType().Name,
+            error = exception.Message
+        }));
+        callback = new WorkerCallback(
+            jobId,
+            "failed",
+            new WorkerOutputs("", null, exception.ValidationObject, null, 0, exception.DocumentSha256),
+            exception.Message);
+    }
     catch (Exception exception)
     {
         Console.Error.WriteLine(JsonSerializer.Serialize(new
@@ -228,10 +271,28 @@ static async Task UploadImagesAsync(LocalObjectStore storage, string prefix, IRe
         await storage.UploadFileAsync($"{prefix}/slides/slide-{index + 1}.png", images[index], cancellationToken);
 }
 
-public sealed record ScanRenderJob(string JobId, string CallbackUrl, string StorageNamespace, string FormatId, string InputObject, string OutputPrefix, string? BaselineInputObject = null);
+public sealed record ScanRenderJob(
+    string JobId,
+    string CallbackUrl,
+    string StorageNamespace,
+    string FormatId,
+    string InputObject,
+    string OutputPrefix,
+    string? BaselineInputObject = null,
+    string? ChangeOrigin = null,
+    IReadOnlyList<string>? ChangeTaskIds = null,
+    PackageChangeBudgetRequest? ChangeBudget = null);
 public sealed record PatchRenderJob(string JobId, string CallbackUrl, string StorageNamespace, string FormatId, string InputObject, string OutputDocumentObject, string OutputPrefix, EditCommandBatch Command, Dictionary<string, string>? AssetObjects = null);
 public sealed record WorkerOutputs(string GraphObject, string? ScanObject, string? ValidationObject, string? DocumentObject, int SlideCount, string DocumentSha256);
 public sealed record WorkerCallback(string JobId, string Status, WorkerOutputs? Outputs, string? Error);
+
+public sealed class ChangeBudgetExceededException(
+    string validationObject,
+    string documentSha256) : Exception("native_change_budget_exceeded")
+{
+    public string ValidationObject { get; } = validationObject;
+    public string DocumentSha256 { get; } = documentSha256;
+}
 
 public sealed class JobWorkspace : IDisposable
 {

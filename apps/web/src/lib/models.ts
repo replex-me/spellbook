@@ -74,3 +74,17 @@ export interface WorkerCallback {
   result?: unknown;
   error?: string | null;
 }
+
+export interface PackageChangeBudgetReport {
+  contractVersion: "1.0";
+  valid: boolean;
+  baselineDocumentSha256: string;
+  candidateDocumentSha256: string;
+  changes: Array<{
+    part: string;
+    category: string;
+    changeKind: string;
+    inTargetScope: boolean;
+  }>;
+  errors: string[];
+}

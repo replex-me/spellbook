@@ -9,6 +9,17 @@ const workers = vi.hoisted(() => ({
 }));
 const storage = vi.hoisted(() => ({
   getObject: vi.fn(async () => Buffer.from("PK-test-pptx")),
+  getJsonObject: vi.fn(async (objectName: string) =>
+    objectName.includes("validation")
+      ? {
+          valid: true,
+          candidateDocumentSha256: "b".repeat(64),
+        }
+      : {
+          documentSha256: "b".repeat(64),
+          slides: [{ previewObject: "native/slide-1.png" }],
+        },
+  ),
   putObject: vi.fn(),
   deleteObject: vi.fn(),
 }));
@@ -126,6 +137,8 @@ const observation = {
   selectedElementIds: ["0/0"],
   slides: [{ slideIndex: 0, elements: [{ elementId: "0/0", text: "현재" }] }],
   images: [{ slideIndex: 0, pngBytes: [137, 80, 78, 71, 13, 10, 26, 10] }],
+  changedSlideIndexes: [],
+  visualEvidenceComplete: true,
 };
 
 describe.skipIf(!enabled)("durable native editor orchestration", () => {
@@ -253,6 +266,11 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
         ),
         baselineInputObject: "native/document.pptx",
         nativeSessionId: f.nativeSessionId,
+        changeOrigin: "human",
+        changeBudget: expect.objectContaining({
+          allowPartCreationOrDeletion: true,
+          targetSlideIndexes: null,
+        }),
       }),
     );
     expect(storage.putObject).toHaveBeenCalledWith(
@@ -366,6 +384,84 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
     });
   });
 
+  it("derives a slide-scoped package budget from the reviewed AI commands", async () => {
+    const f = await fixture();
+    const submitted = await submitNativeTurn(session, f.documentId, {
+      text: "첫 슬라이드 제목을 바꿔줘",
+      permission: "document",
+    });
+    const [turn] = await db()`
+      select job_id from spellbook_native_turns where id=${submitted.turnId}
+    `;
+    const owner = {
+      jobId: String(turn.job_id),
+      sessionId: f.nativeSessionId,
+      executionToken: "budget-worker",
+    };
+    await executeNativeTool({ ...owner, operation: "start" });
+    const task = (await executeNativeTool({
+      ...owner,
+      operation: "task_create",
+      request: {
+        operation: "edit",
+        command: { op: "replace_text", elementId: "0/0", text: "변경" },
+      },
+    })) as { taskId: string };
+    await completeNativeTask(session, f.documentId, {
+      id: task.taskId,
+      value: { ...observation, changedSlideIndexes: [0] },
+    });
+    await completeNativeTurn(
+      { id: owner.jobId },
+      {
+        jobId: owner.jobId,
+        status: "succeeded",
+        result: {
+          text: "화면까지 확인해 제목을 바꿨습니다.",
+          changed: true,
+          reviewed: true,
+          executionToken: owner.executionToken,
+        },
+      },
+    );
+
+    const token = signWopiToken({
+      version: 1,
+      sessionId: f.nativeSessionId,
+      documentId: f.documentId,
+      accountId,
+      expiresAt: Date.now() + 60_000,
+    });
+    const url = `https://spellbook.integration.invalid/api/wopi/files/${f.documentId}?access_token=${encodeURIComponent(token)}`;
+    await wopiLock(
+      new Request(url, {
+        method: "POST",
+        headers: { "x-wopi-override": "LOCK", "x-wopi-lock": "ai-save" },
+      }),
+      f.documentId,
+    );
+    const contentsUrl = new URL(url);
+    contentsUrl.pathname += "/contents";
+    await wopiPutFile(
+      new Request(contentsUrl, {
+        method: "POST",
+        headers: { "x-wopi-lock": "ai-save" },
+        body: Buffer.from("PK-reviewed-ai-save"),
+      }),
+      f.documentId,
+    );
+
+    expect(workers.enqueueWorkerJob.mock.calls.at(-1)?.[3]).toMatchObject({
+      changeOrigin: "ai",
+      changeTaskIds: [task.taskId],
+      changeBudget: {
+        allowedCategories: ["slide_parts"],
+        targetSlideIndexes: [0],
+        allowPartCreationOrDeletion: false,
+      },
+    });
+  });
+
   it("reconciles a browser candidate only against its exact owned revision", async () => {
     const f = await fixture();
     const launch = await createBrowserDocumentLaunch(session, f.documentId);
@@ -423,6 +519,7 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
         ),
         baselineInputObject: "native/document.pptx",
         nativeSessionId: f.nativeSessionId,
+        changeOrigin: "human",
       }),
     );
     const [native] = await db()`
@@ -920,7 +1017,7 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
       await sql`insert into spellbook_versions (id,document_id,parent_version_id,kind,status,document_object)
         values (${saved},${f.documentId},${f.versionId},'approved','processing','native/saved.pptx')`;
       await sql`insert into spellbook_jobs (id,job_type,document_id,version_id,status,payload)
-        values (${jobId},'scan_render',${f.documentId},${saved},'queued',${sql.json({ nativeSessionId: f.nativeSessionId })})`;
+        values (${jobId},'scan_render',${f.documentId},${saved},'queued',${sql.json({ nativeSessionId: f.nativeSessionId, outputPrefix: "native/render" })})`;
       await sql`update spellbook_native_sessions set working_version_id=${saved},status='validating' where id=${f.nativeSessionId}`;
     });
     const callback = {
@@ -929,6 +1026,7 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
       outputs: {
         graphObject: "native/graph.json",
         scanObject: "native/scan.json",
+        validationObject: "native/render/validation.json",
         documentSha256: "b".repeat(64),
         slideCount: 1,
       },
@@ -937,7 +1035,10 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
       {
         id: jobId,
         version_id: saved,
-        payload: { nativeSessionId: f.nativeSessionId },
+        payload: {
+          nativeSessionId: f.nativeSessionId,
+          outputPrefix: "native/render",
+        },
       },
       callback,
     );
@@ -951,14 +1052,17 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
       await sql`insert into spellbook_versions (id,document_id,parent_version_id,kind,status,document_object)
         values (${failed},${f.documentId},${saved},'approved','processing','native/failed.pptx')`;
       await sql`insert into spellbook_jobs (id,job_type,document_id,version_id,status,payload)
-        values (${failedJob},'scan_render',${f.documentId},${failed},'queued',${sql.json({ nativeSessionId: f.nativeSessionId })})`;
+        values (${failedJob},'scan_render',${f.documentId},${failed},'queued',${sql.json({ nativeSessionId: f.nativeSessionId, outputPrefix: "native/failed-render" })})`;
       await sql`update spellbook_native_sessions set working_version_id=${failed},status='validating' where id=${f.nativeSessionId}`;
     });
     await failNativeScan(
       {
         id: failedJob,
         version_id: failed,
-        payload: { nativeSessionId: f.nativeSessionId },
+        payload: {
+          nativeSessionId: f.nativeSessionId,
+          outputPrefix: "native/failed-render",
+        },
       },
       "invalid package",
     );

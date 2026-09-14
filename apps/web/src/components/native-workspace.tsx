@@ -33,6 +33,11 @@ type Message = {
   tools: string[];
   status: "running" | "done" | "error" | "review";
 };
+type PendingTurn = {
+  draft: string;
+  permission: "read_only" | "selection" | "slides" | "document";
+  model?: ModelSettings;
+};
 
 // Product UI, also mounted by the isolated native integration harness. The
 // launch capability is document-scoped; no provider credential enters here.
@@ -47,6 +52,8 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   const turnRequested = useRef(false),
     saveRevision = useRef(0),
     pendingSaveRevision = useRef<number | null>(null),
+    pendingTurn = useRef<PendingTurn | null>(null),
+    editorModified = useRef(false),
     downloadAfterRevision = useRef<number | null>(null);
   const dispatchedLocalJobs = useRef(new Set<string>());
   const imagePayloads = useRef(
@@ -57,7 +64,8 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   );
   const loadingImages = useRef(new Set<string>());
   const [engineReady, setEngineReady] = useState(false),
-    [bridgeReady, setBridgeReady] = useState(false);
+    [bridgeReady, setBridgeReady] = useState(false),
+    [sessionObserved, setSessionObserved] = useState(false);
   const [panel, setPanel] = useState(true),
     [text, setText] = useState("");
   const [messages, setMessages] = useState<Message[]>([]),
@@ -110,6 +118,29 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       }
     },
     [ai.localRequest, ai.mode],
+  );
+  const dispatchTurn = useCallback(
+    async (pending: PendingTurn) => {
+      turnRequested.current = true;
+      try {
+        const submitted = await api("chat", {
+          text: pending.draft,
+          permission: pending.permission,
+          modelSettings: pending.model,
+          execution: ai.mode,
+        });
+        if (submitted.localJob) await dispatchLocalJob(submitted.localJob);
+      } catch (cause) {
+        if (ai.mode === "local") await api("cancel", {}).catch(() => undefined);
+        turnRequested.current = false;
+        setBusy(false);
+        setText(pending.draft);
+        setError(
+          cause instanceof Error ? cause.message : "요청을 보내지 못했습니다.",
+        );
+      }
+    },
+    [ai.mode, api, dispatchLocalJob],
   );
   const sendOffice = useCallback(
     (MessageId: string, Values: unknown = {}) =>
@@ -297,12 +328,20 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       if (value?.MessageId === "Action_Save_Resp") {
         if (value.Values?.success) setSaveState("저장 확인 중…");
         else {
+          const waiting = pendingTurn.current;
+          pendingTurn.current = null;
           pendingSaveRevision.current = null;
           downloadAfterRevision.current = null;
           setSaveState("저장 실패");
+          if (waiting) {
+            setBusy(false);
+            setText(waiting.draft);
+            setError("AI 작업 전에 현재 편집 내용을 저장하지 못했습니다.");
+          }
         }
       }
-      if (value?.MessageId === "Doc_ModifiedStatus")
+      if (value?.MessageId === "Doc_ModifiedStatus") {
+        editorModified.current = value.Values?.Modified === true;
         setSaveState((current) =>
           value.Values?.Modified
             ? "변경 사항 있음"
@@ -310,6 +349,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
               ? current
               : "저장됨",
         );
+      }
     };
     window.addEventListener("message", onMessage);
     if (!submitted.current) {
@@ -352,6 +392,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           await dispatchLocalJob(response.localJob);
         saveRevision.current =
           response.session?.saveRevision ?? saveRevision.current;
+        setSessionObserved(true);
         if (response.session?.status === "validating")
           setSaveState("저장 검사 중…");
         else if (response.session?.status === "active") {
@@ -361,6 +402,22 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
             saveRevision.current >= completedRevision
           ) {
             pendingSaveRevision.current = null;
+            setSaveState("저장됨");
+            const waiting = pendingTurn.current;
+            if (waiting) {
+              if (editorModified.current) {
+                pendingSaveRevision.current = saveRevision.current + 1;
+                setSaveState("AI 작업 전 저장 중…");
+                sendOffice("Action_Save", {
+                  Notify: true,
+                  DontSaveIfUnmodified: false,
+                });
+              } else {
+                pendingTurn.current = null;
+                void dispatchTurn(waiting);
+              }
+            }
+          } else if (!editorModified.current) {
             setSaveState("저장됨");
           }
           if (
@@ -373,10 +430,17 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
             );
           }
         } else if (response.session?.status === "failed") {
+          const waiting = pendingTurn.current;
+          pendingTurn.current = null;
+          pendingSaveRevision.current = null;
           setSaveState("저장 실패");
           setError(
             response.session.error ?? "저장 파일을 검증하지 못했습니다.",
           );
+          if (waiting) {
+            setBusy(false);
+            setText(waiting.draft);
+          }
         }
         if (response.task) deliverTask(response.task);
         for (const event of response.events) {
@@ -465,6 +529,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     ai.mode,
     aiConnected,
     dispatchLocalJob,
+    dispatchTurn,
   ]);
   useEffect(
     () => () => {
@@ -477,32 +542,54 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   useEffect(() => {
     if (!aiConnected) setModel(undefined);
   }, [aiConnected]);
+  useEffect(() => {
+    if (
+      !aiConnected ||
+      !engineReady ||
+      !bridgeReady ||
+      !sessionObserved ||
+      saveRevision.current !== 0 ||
+      pendingSaveRevision.current !== null
+    )
+      return;
+    pendingSaveRevision.current = 1;
+    setSaveState("AI 편집 기준 준비 중…");
+    sendOffice("Action_Save", {
+      Notify: true,
+      DontSaveIfUnmodified: false,
+    });
+  }, [aiConnected, bridgeReady, engineReady, sendOffice, sessionObserved]);
   async function submit() {
     if (!text.trim() || busy || !bridgeReady || !aiConnected) return;
-    const draft = text;
-    turnRequested.current = true;
+    const pending: PendingTurn = { draft: text, permission, model };
     setText("");
     setError("");
     setBusy(true);
     setMessages((items) => [
       ...items,
-      { id: -Date.now(), role: "user", text: draft, tools: [], status: "done" },
+      {
+        id: -Date.now(),
+        role: "user",
+        text: pending.draft,
+        tools: [],
+        status: "done",
+      },
     ]);
-    try {
-      const submitted = await api("chat", {
-        text: draft,
-        permission,
-        modelSettings: model,
-        execution: ai.mode,
+    if (
+      editorModified.current ||
+      saveRevision.current === 0 ||
+      saveState !== "저장됨"
+    ) {
+      pendingTurn.current = pending;
+      pendingSaveRevision.current = saveRevision.current + 1;
+      setSaveState("AI 작업 전 저장 중…");
+      sendOffice("Action_Save", {
+        Notify: true,
+        DontSaveIfUnmodified: false,
       });
-      if (submitted.localJob) await dispatchLocalJob(submitted.localJob);
-    } catch (e) {
-      if (ai.mode === "local") await api("cancel", {}).catch(() => undefined);
-      turnRequested.current = false;
-      setBusy(false);
-      setText(draft);
-      setError(e instanceof Error ? e.message : "요청을 보내지 못했습니다.");
+      return;
     }
+    await dispatchTurn(pending);
   }
   // Collabora runs in an iframe, so these bridge values mirror the semantic
   // tokens in design-system.css rather than relying on inherited CSS vars.
@@ -874,9 +961,20 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                     <button
                       className="native-send"
                       aria-label="AI 작업 중지"
-                      onClick={() =>
-                        void api("cancel", {}).catch((e) => setError(e.message))
-                      }
+                      onClick={() => {
+                        const waiting = pendingTurn.current;
+                        if (waiting) {
+                          pendingTurn.current = null;
+                          pendingSaveRevision.current = null;
+                          setBusy(false);
+                          setText(waiting.draft);
+                          setError("AI 요청을 취소했습니다.");
+                          return;
+                        }
+                        void api("cancel", {}).catch((e) =>
+                          setError(e.message),
+                        );
+                      }}
                     >
                       <SpellbookIcon name="stop" size={16} />
                     </button>

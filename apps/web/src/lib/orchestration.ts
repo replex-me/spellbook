@@ -41,6 +41,7 @@ import {
   completeNativeTurn,
   failNativeScan,
   failNativeTurn,
+  NativeScanValidationError,
 } from "./native-runtime";
 import {
   availableDocumentFormatForFile,
@@ -583,6 +584,7 @@ export async function handleWorkerCallback(
       await failNativeScan(
         job,
         callback.error ?? "native_save_validation_failed",
+        callback,
       );
       return;
     }
@@ -606,6 +608,14 @@ export async function handleWorkerCallback(
       dispatch = await completeReview(job, callback);
     else throw new Error(`Unknown job type '${job.job_type}'.`);
   } catch (error) {
+    if (
+      error instanceof NativeScanValidationError &&
+      job.job_type === "scan_render" &&
+      job.payload?.nativeSessionId
+    ) {
+      await failNativeScan(job, error.message, callback);
+      return;
+    }
     if (!(error instanceof EditValidationError)) throw error;
     await markJobFailure(job, error.message);
     return;

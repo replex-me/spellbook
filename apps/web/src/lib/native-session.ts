@@ -25,6 +25,7 @@ import {
   verifyWopiProof,
   type WopiProofKeys,
 } from "./wopi-proof";
+import { loadNativeSaveChangePolicy } from "./native-change-budget";
 
 const SESSION_MS = 6 * 60 * 60 * 1000;
 const OFFICE_DISCOVERY_TIMEOUT_MS = 75_000;
@@ -569,27 +570,36 @@ export async function wopiPutFile(
   const outputPrefix = `${prefix}/versions/${versionId}/render`;
   await putObject(object, data, currentPresentationFormat.mimeTypes[0]!);
   const callbackUrl = `${internalAppBaseUrl()}/api/internal/jobs/callback`;
-  const payload = {
-    jobId,
-    callbackUrl,
-    storageNamespace: storageNamespace(),
-    formatId: currentPresentationFormat.id,
-    inputObject: object,
-    baselineInputObject: context.preservationObject,
-    outputPrefix,
-    nativeSessionId: context.sessionId,
-  };
+  let payload: Record<string, unknown>;
   try {
     await db().begin(async (sql) => {
       await expireWopiLock(context.sessionId, sql);
       const [session] =
-        await sql`select working_version_id,wopi_lock from spellbook_native_sessions where id=${context.sessionId} for update`;
+        await sql`select working_version_id,wopi_lock,save_revision from spellbook_native_sessions where id=${context.sessionId} for update`;
       if (!session?.wopi_lock || session.wopi_lock !== given)
         throw new WopiLockConflict(session?.wopi_lock ?? "");
+      const policy = await loadNativeSaveChangePolicy(
+        sql,
+        context.sessionId,
+        session.save_revision,
+      );
+      payload = {
+        jobId,
+        callbackUrl,
+        storageNamespace: storageNamespace(),
+        formatId: currentPresentationFormat.id,
+        inputObject: object,
+        baselineInputObject: context.preservationObject,
+        outputPrefix,
+        nativeSessionId: context.sessionId,
+        changeOrigin: policy.origin,
+        changeTaskIds: policy.taskIds,
+        changeBudget: policy.budget,
+      };
       await sql`insert into spellbook_versions (id,document_id,parent_version_id,kind,status,document_object,document_sha256)
         values (${versionId},${documentId},${session.working_version_id},'approved','processing',${object},${digest})`;
       await sql`insert into spellbook_jobs (id,job_type,document_id,version_id,status,payload)
-        values (${jobId},'scan_render',${documentId},${versionId},'queued',${sql.json(payload)})`;
+        values (${jobId},'scan_render',${documentId},${versionId},'queued',${sql.json(payload as any)})`;
       await sql`update spellbook_native_sessions set working_version_id=${versionId},working_sha256=${digest},status='validating',save_revision=save_revision+1,last_error=null,updated_at=now() where id=${context.sessionId}`;
     });
   } catch (error) {
@@ -601,7 +611,7 @@ export async function wopiPutFile(
       jobId,
       "document",
       "/internal/jobs/scan-render",
-      payload,
+      payload!,
     );
     await db()`update spellbook_jobs set dispatched_at=now() where id=${jobId}`;
   } catch (error) {

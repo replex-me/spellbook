@@ -203,11 +203,13 @@ async function migrate(): Promise<void> {
       result jsonb,
       error text,
       delivery_count integer not null default 0,
+      save_revision_at_create integer not null default 0,
       delivered_at timestamptz,
       expires_at timestamptz not null,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
+    alter table spellbook_native_tasks add column if not exists save_revision_at_create integer not null default 0;
     create index if not exists spellbook_native_tasks_delivery_idx on spellbook_native_tasks(session_id, status, created_at);
 
     create table if not exists spellbook_native_events (

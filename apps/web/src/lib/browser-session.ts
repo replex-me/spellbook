@@ -13,6 +13,7 @@ import {
   storageNamespace,
 } from "./storage";
 import { enqueueWorkerJob } from "./workers";
+import { loadNativeSaveChangePolicy } from "./native-change-budget";
 
 const browserSessionMs = 6 * 60 * 60 * 1000;
 
@@ -178,20 +179,11 @@ export async function saveBrowserDocument(
   const object = `${prefix}/versions/${versionId}/document.pptx`;
   const outputPrefix = `${prefix}/versions/${versionId}/render`;
   await putObject(object, data, currentPresentationFormat.mimeTypes[0]!);
-  const payload = {
-    jobId,
-    callbackUrl: `${internalAppBaseUrl()}/api/internal/jobs/callback`,
-    storageNamespace: storageNamespace(),
-    formatId: currentPresentationFormat.id,
-    inputObject: object,
-    baselineInputObject: current.preservation_object,
-    outputPrefix,
-    nativeSessionId: current.id,
-  };
+  let payload: Record<string, unknown>;
   try {
     await db().begin(async (sql) => {
       const [locked] = await sql`
-        select working_version_id,working_sha256,status,wopi_lock,editor_mode
+        select working_version_id,working_sha256,status,wopi_lock,editor_mode,save_revision
         from spellbook_native_sessions where id=${current.id} for update
       `;
       if (!locked || locked.editor_mode !== "browser")
@@ -203,6 +195,24 @@ export async function saveBrowserDocument(
         expectedRevision
       )
         throw new HttpError(412, "browser_revision_changed");
+      const policy = await loadNativeSaveChangePolicy(
+        sql,
+        current.id,
+        locked.save_revision,
+      );
+      payload = {
+        jobId,
+        callbackUrl: `${internalAppBaseUrl()}/api/internal/jobs/callback`,
+        storageNamespace: storageNamespace(),
+        formatId: currentPresentationFormat.id,
+        inputObject: object,
+        baselineInputObject: current.preservation_object,
+        outputPrefix,
+        nativeSessionId: current.id,
+        changeOrigin: policy.origin,
+        changeTaskIds: policy.taskIds,
+        changeBudget: policy.budget,
+      };
       await sql`
         insert into spellbook_versions
           (id,document_id,parent_version_id,kind,status,document_object,document_sha256)
@@ -211,7 +221,7 @@ export async function saveBrowserDocument(
       await sql`
         insert into spellbook_jobs
           (id,job_type,document_id,version_id,status,payload)
-        values (${jobId},'scan_render',${documentId},${versionId},'queued',${sql.json(payload)})
+        values (${jobId},'scan_render',${documentId},${versionId},'queued',${sql.json(payload as any)})
       `;
       await sql`
         update spellbook_native_sessions set
@@ -230,7 +240,7 @@ export async function saveBrowserDocument(
       jobId,
       "document",
       "/internal/jobs/scan-render",
-      payload,
+      payload!,
     );
     await db()`update spellbook_jobs set dispatched_at=now() where id=${jobId}`;
   } catch (error) {
