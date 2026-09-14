@@ -86,6 +86,13 @@ The default image installs redistributable metric-compatible and Korean fallback
 
 The default dispatcher accepts work over the private HTTP network and workers persist completion receipts. Accepted but unfinished jobs become eligible for redelivery after `SPELLBOOK_JOB_REDELIVERY_SECONDS` (15 seconds by default). A running worker deduplicates repeat deliveries in memory; after a restart it either resumes from the durable receipt or safely reruns the version-isolated job. This is sufficient for one-worker Compose recovery, but it is not a distributed queue. Multi-node hosting must supply a durable queue adapter, shared leases, rate limits and storage concurrency controls downstream without changing the document adapter contract.
 
+Native AI work has a stricter boundary because it may already have changed the
+live canvas. Once a connector claims a turn it sends a heartbeat every 15
+seconds. If that heartbeat is absent for 60 seconds, the next browser poll
+fails the job and unfinished browser tasks visibly instead of replaying the
+edit. The open native session remains available so the user can inspect the
+slide and submit a new request.
+
 ## Live smoke test
 
 After uploading a PPTX, copy its UUID from the document URL and run:
