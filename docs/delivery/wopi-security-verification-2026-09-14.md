@@ -12,6 +12,7 @@ The self-hosted runtime now authenticates Collabora-to-host WOPI traffic as well
 - `pnpm selfhost:doctor` passed the required proof mode, persistent key, Compose configuration and both public runtimes.
 - Live `/hosting/discovery` returned `proof-key` with current and old modulus/exponent fields after the editor restart.
 - The existing headless self-host smoke test opened an actual PPTX in Collabora, observed and changed a real slide object, saved through WOPI, downloaded the PPTX and verified its ZIP and slide XML. Result: 1 passed in 9.0 seconds.
+- After the lock-lifecycle change, the same complete browser-to-Collabora-to-WOPI-to-worker-to-download path passed again in 8.4 seconds. The captured screen showed the changed native text, saved state, editable canvas and disconnected-AI guidance together without an error overlay.
 - A request with a valid unexpired document token but no proof headers returned HTTP 500 `invalid_wopi_proof`.
 - A request with a valid token, invalid signatures and a stale timestamp returned HTTP 500 `invalid_wopi_proof`.
 - The unit suite passed Microsoft's published known-good proof vector, signature tampering, full-URL construction, timestamp expiry and discovery parsing cases.

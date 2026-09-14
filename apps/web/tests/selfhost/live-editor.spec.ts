@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { createSessionToken, localAccountId } from "../../src/lib/auth";
+
 const documentId = process.env.SPELLBOOK_SELFHOST_DOCUMENT_ID;
 const cookieFile = path.resolve(
   process.cwd(),
@@ -12,28 +14,64 @@ const cookieFile = path.resolve(
 const evidenceDir = path.resolve(process.cwd(), "../../.tmp-runtime/evidence");
 
 test.beforeEach(async ({ context }) => {
-  const lines = (await fs.readFile(cookieFile, "utf8")).split("\n");
+  const stored = await storedSessionCookie();
+  await context.addCookies([stored ?? localSelfhostSessionCookie()]);
+});
+
+async function storedSessionCookie() {
+  const lines = await fs
+    .readFile(cookieFile, "utf8")
+    .then((value) => value.split("\n"))
+    .catch(() => []);
   const line = lines.find(
     (candidate) =>
       candidate.includes("\tspellbook_session\t") &&
       candidate.split("\t").length >= 7,
   );
-  if (!line) throw new Error(`No spellbook_session cookie in ${cookieFile}`);
+  if (!line) return null;
   const [rawDomain, , cookiePath, secure, expires, name, value] =
     line.split("\t");
-  await context.addCookies([
-    {
-      name,
-      value,
-      domain: rawDomain.replace(/^#HttpOnly_/, ""),
-      path: cookiePath,
-      httpOnly: rawDomain.startsWith("#HttpOnly_"),
-      secure: secure === "TRUE",
-      expires: Number(expires),
-      sameSite: "Lax",
-    },
-  ]);
-});
+  if (Number(expires) <= Date.now() / 1000) return null;
+  return {
+    name,
+    value,
+    domain: rawDomain.replace(/^#HttpOnly_/, ""),
+    path: cookiePath,
+    httpOnly: rawDomain.startsWith("#HttpOnly_"),
+    secure: secure === "TRUE",
+    expires: Number(expires),
+    sameSite: "Lax" as const,
+  };
+}
+
+function localSelfhostSessionCookie() {
+  const base = new URL(
+    process.env.SPELLBOOK_SELFHOST_URL ?? "http://localhost:3000",
+  );
+  if (!["localhost", "127.0.0.1", "::1"].includes(base.hostname))
+    throw new Error(
+      `No unexpired spellbook_session cookie in ${cookieFile}; automatic sessions are local-only.`,
+    );
+  process.loadEnvFile(path.resolve(process.cwd(), "../../.env"));
+  const email = process.env.SPELLBOOK_LOCAL_EMAIL?.trim().toLowerCase();
+  if (!email) throw new Error("SPELLBOOK_LOCAL_EMAIL is required.");
+  const value = createSessionToken({
+    accountId: localAccountId(email),
+    email,
+    admin: true,
+    token: "",
+  });
+  return {
+    name: "spellbook_session",
+    value,
+    domain: base.hostname,
+    path: "/",
+    httpOnly: true,
+    secure: base.protocol === "https:",
+    expires: Math.floor(Date.now() / 1000) + 12 * 60 * 60,
+    sameSite: "Lax" as const,
+  };
+}
 
 test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
   page,

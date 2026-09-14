@@ -5,6 +5,7 @@ import {
   createPasswordHash,
   createSession,
   createSessionToken,
+  localAccountId,
   safeRedirect,
   verifyPasswordHash,
 } from "./auth";
@@ -41,6 +42,7 @@ describe("self-hosted authentication", () => {
       "OWNER@example.test",
       "correct horse battery staple",
     );
+    expect(authenticated.accountId).toBe(localAccountId("owner@example.test"));
     const token = createSessionToken(authenticated);
     await expect(createSession(token)).resolves.toMatchObject({
       email: "owner@example.test",

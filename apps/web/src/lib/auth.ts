@@ -62,14 +62,18 @@ export function authenticateLocal(email: string, password: string): Session {
   const passwordMatches = verifyPasswordHash(password, configuredHash);
   if (!emailMatches || !passwordMatches) throw new Error("invalid_credentials");
   return {
-    accountId: `local:${createHmac("sha256", sessionSecret())
-      .update(configuredEmail)
-      .digest("base64url")
-      .slice(0, 24)}`,
+    accountId: localAccountId(configuredEmail),
     email: configuredEmail,
     admin: true,
     token: "",
   };
+}
+
+export function localAccountId(email: string): string {
+  return `local:${createHmac("sha256", sessionSecret())
+    .update(email.trim().toLowerCase())
+    .digest("base64url")
+    .slice(0, 24)}`;
 }
 
 export function createSessionToken(session: Session): string {
