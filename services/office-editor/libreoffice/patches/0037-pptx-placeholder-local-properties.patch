@@ -40,16 +40,16 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 index 3de95a5a8..f540cb28a 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -644,6 +644,8 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectInteractionUndo
+@@ -644,6 +644,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectInteractionUndo
      SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
      CPPUNIT_ASSERT(pPage && pPage->GetObjCount() > 0);
-     SdrObject* pObject = pPage->GetObj(0);
-+    const PresObjKind eTargetKind = pPage->GetPresObjKind(pObject);
-+    CPPUNIT_ASSERT_EQUAL(PresObjKind::Title, eTargetKind);
+-    SdrObject* pObject = pPage->GetObj(0);
++    SdrObject* pObject = pPage->GetPresObj(PresObjKind::Title);
++    CPPUNIT_ASSERT(pObject);
 
      SdAnimationInfo* pOldInfo = SdDrawDocument::GetShapeUserData(*pObject, true);
      pOldInfo->mbDimHide = true;
-@@ -700,11 +702,22 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectInteractionUndo
+@@ -700,11 +701,22 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectInteractionUndo
      assertAdjacentState();
 
      saveAndReload(TestFilter::PPTX);
@@ -68,7 +68,7 @@ index 3de95a5a8..f540cb28a 100644
      pPage = pImpressDocument->GetDoc()->GetSdPage(0, PageKind::Standard);
      CPPUNIT_ASSERT(pPage && pPage->GetObjCount() > 0);
 -    pObject = pPage->GetObj(0);
-+    pObject = pPage->GetPresObj(eTargetKind);
++    pObject = pPage->GetPresObj(PresObjKind::Title);
 +    CPPUNIT_ASSERT(pObject);
      std::tie(eAction, aBookmark) = getInteraction();
      CPPUNIT_ASSERT_EQUAL(presentation::ClickAction_DOCUMENT, eAction);
