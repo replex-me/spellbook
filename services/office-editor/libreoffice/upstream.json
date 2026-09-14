@@ -9,10 +9,10 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v14",
-  "sourceCandidateReady": true,
-  "patchSeriesSha256": "b386d7fa1a794d0078495448898842787e95f748522ae8c56299c5f84ff0fbaf",
-  "engineImageTag": "26.04.3.3-spellbook-undo-v14-r1-candidate",
+  "patchLevel": "undo-v15",
+  "sourceCandidateReady": false,
+  "patchSeriesSha256": "3f90a42a7977c2ad08de8f5f8b41fb740b6c5e34c1c5bb4781066624e151f75c",
+  "engineImageTag": "26.04.3.3-spellbook-undo-v15-r1-candidate",
   "impressUiUnoCommandCount": 804,
   "impressUiUnoCommandsSha256": "cafedc6b8c621afbb8399d76fc498c1e86273c2c290bb914e41298df0b203cd1",
   "patches": [
@@ -45,7 +45,8 @@
     "patches/0029-layout-selects-existing-master.patch",
     "patches/0030-text-formatting-all-scripts.patch",
     "patches/0031-observable-text-and-layout-identity.patch",
-    "patches/0032-native-object-lifecycle.patch"
+    "patches/0032-native-object-lifecycle.patch",
+    "patches/0033-text-layout-cache-invalidation.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
@@ -60,6 +61,7 @@
     "CppunitTest_sd_uiimpress:testTransformSlideVisibilityUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureTextRangePreservesFormatting",
     "CppunitTest_sd_uiimpress:testDocumentStructureTextPropertiesUndoRedo",
+    "CppunitTest_sd_uiimpress:testTypedTextMetricsRecenterLiveExportAfterUndoRedo",
     "CppunitTest_sd_uiimpress:testPptxTextShadowRoundTrip",
     "CppunitTest_sd_uiimpress:testPptxObjectLocksRoundTrip",
     "CppunitTest_sd_uiimpress:testTypedLayoutPreservesImportedMaster",
