@@ -53,5 +53,10 @@ print(json.dumps({'tests': tests, 'edits': edits}))
       source,
       /fc-match --format='%\{family\}' Arial\)" = "Liberation Sans"/,
     );
+    if (dockerfile === "services/office-editor/Dockerfile")
+      assert.match(
+        source,
+        /coolwsd-systemplate-setup \/opt\/cool\/systemplate \/opt\/collaboraoffice/,
+      );
   }
 });

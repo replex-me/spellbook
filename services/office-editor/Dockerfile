@@ -97,7 +97,9 @@ COPY --from=gateway-builder --chown=cool:cool /out/spellbook-office-gateway /usr
 RUN fc-cache -f \
     && test "$(fc-match --format='%{family}' Calibri)" = "Carlito" \
     && test "$(fc-match --format='%{family}' Arial)" = "Liberation Sans" \
-    && test "$(fc-match --format='%{family}' '맑은 고딕')" = "Noto Sans CJK KR"
+    && test "$(fc-match --format='%{family}' '맑은 고딕')" = "Noto Sans CJK KR" \
+    && coolwsd-systemplate-setup /opt/cool/systemplate /opt/collaboraoffice >/dev/null 2>&1 \
+    && test "$(find /opt/cool/systemplate/usr/share/fonts -type f | wc -l)" -gt 18
 USER cool
 EXPOSE 9980
 ENTRYPOINT ["/usr/local/bin/spellbook-office-gateway"]
