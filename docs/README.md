@@ -9,6 +9,7 @@ The repository is governed by a small set of documents with distinct jobs:
 - [Format support](product/format-support.md): the user-visible support truth for each document type.
 - [Multi-format roadmap](product/multiformat-roadmap.md): how PPTX becomes one adapter without flattening DOCX or page-layout semantics.
 - [Self-hosting](delivery/self-hosting.md): installation, secrets, storage and operational requirements.
+- [Storage-pressure verification](delivery/storage-pressure-verification-2026-09-15.md): packaged runtime evidence for atomic rejection and durable failure receipts under disk pressure.
 - [Release gates](delivery/release-gates.md): evidence required before a public release can be called usable.
 - [Product completion](delivery/product-completion.md): fixed 100-point ledger for implementation progress and remaining work.
 - [Local AI connector verification](delivery/connector-runtime-verification-2026-09-13.md): source and packaged macOS connector evidence and remaining distribution gates.

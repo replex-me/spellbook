@@ -55,6 +55,7 @@
     "selfhost:setup": "node scripts/selfhost-setup.mjs",
     "selfhost:backup": "node scripts/selfhost-backup.mjs",
     "selfhost:verify:storage-pressure": "node scripts/verify-storage-pressure.mjs",
+    "selfhost:verify:worker-storage-pressure": "node scripts/verify-document-worker-storage-pressure.mjs",
     "selfhost:restore": "node scripts/selfhost-restore.mjs",
     "selfhost:up": "docker compose up --build",
     "selfhost:down": "docker compose down"
