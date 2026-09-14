@@ -26,7 +26,8 @@ const server = localMode
         ),
         accounts: sessions,
         connectorOrigin: `http://127.0.0.1:${port}`,
-        identity: process.env.SPELLBOOK_LOCAL_EMAIL?.trim() || "local@spellbook",
+        identity:
+          process.env.SPELLBOOK_LOCAL_EMAIL?.trim() || "local@spellbook",
         runNativeJob: (job, capability) =>
           runAcceptedJob(
             job,

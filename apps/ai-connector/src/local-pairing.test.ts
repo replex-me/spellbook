@@ -101,11 +101,11 @@ describe("local connector pairing", () => {
     const pairing = authority.begin("https://documents.example", challenge);
     const approval = authority.approval(pairing.id);
     const session = authority.confirm(pairing.id, approval.confirmationSecret);
-    expect(authority.verify("https://documents.example", session.token)).toMatchObject(
-      { origin: "https://documents.example" },
-    );
-    expect(() => authority.begin("http://documents.example", challenge)).toThrow(
-      "insecure_connector_origin",
-    );
+    expect(
+      authority.verify("https://documents.example", session.token),
+    ).toMatchObject({ origin: "https://documents.example" });
+    expect(() =>
+      authority.begin("http://documents.example", challenge),
+    ).toThrow("insecure_connector_origin");
   });
 });

@@ -1,4 +1,5 @@
 /* Generated from contracts/native-edit-capabilities.json. Do not edit. */
+// prettier-ignore
 const spellbookMutationContracts = Object.freeze({
   "insert_slide": {"family":"slide_structure","domain":"slide_transform","atomicBoundary":"sfx_list_action","target":"slide","execution":"native_transform","undoProvider":"page_model_action","identityEffect":"create","availability":"engine_patch_ready","minEnginePatch":9},
   "duplicate_slide": {"family":"slide_structure","domain":"slide_transform","atomicBoundary":"sfx_list_action","target":"slide","execution":"native_transform","undoProvider":"page_model_action","identityEffect":"create","availability":"runtime_verified","minEnginePatch":0},

@@ -44,6 +44,7 @@ export const renderRuntimeMutationContract = (capabilities) => {
   );
   return [
     "/* Generated from contracts/native-edit-capabilities.json. Do not edit. */",
+    "// prettier-ignore",
     "const spellbookMutationContracts = Object.freeze({",
     ...entries,
     "});",

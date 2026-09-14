@@ -33,4 +33,3 @@ describe("native remote host authorization", () => {
     expect(init.redirect).toBe("error");
   });
 });
-
