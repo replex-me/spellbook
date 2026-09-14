@@ -71,7 +71,7 @@ async function handle(
     request.method === "POST" &&
     /^\/pair\/[^/]+\/confirm$/.test(url.pathname)
   ) {
-    requireOrigin(request, connectorOrigin);
+    requireLocalConfirmation(request, connectorOrigin);
     const id = decodeURIComponent(
       url.pathname.slice("/pair/".length, -"/confirm".length),
     );
@@ -368,6 +368,26 @@ function requiredOrigin(request: IncomingMessage): string {
 function requireOrigin(request: IncomingMessage, expected: string): void {
   if (requiredOrigin(request) !== expected)
     throw new Error("connector_origin_not_allowed");
+}
+
+function requireLocalConfirmation(
+  request: IncomingMessage,
+  expected: string,
+): void {
+  const origin = request.headers.origin;
+  if (origin === expected) return;
+  // Chromium may serialize a loopback form navigation as an opaque origin
+  // after the public opener has received Local Network Access permission.
+  // Accept that browser shape only for a same-origin top-level navigation;
+  // assertHost() and the single-use confirmation secret remain mandatory.
+  if (
+    (origin === "null" || origin === undefined) &&
+    request.headers["sec-fetch-site"] === "same-origin" &&
+    request.headers["sec-fetch-mode"] === "navigate" &&
+    request.headers["sec-fetch-dest"] === "document"
+  )
+    return;
+  throw new Error("connector_origin_not_allowed");
 }
 
 function bearerToken(request: IncomingMessage): string {

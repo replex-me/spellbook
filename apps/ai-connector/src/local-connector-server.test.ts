@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { createServer, type RequestListener } from "node:http";
+import {
+  createServer,
+  request as httpRequest,
+  type RequestListener,
+} from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -113,7 +117,82 @@ async function pair(connectorOrigin: string) {
   return payload.token;
 }
 
+async function pendingConfirmation(connectorOrigin: string) {
+  const begin = await fetch(`${connectorOrigin}/v1/pairings`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: productOrigin,
+    },
+    body: JSON.stringify({ challenge }),
+  });
+  expect(begin.status).toBe(201);
+  const started = (await begin.json()) as { approvalUrl: string };
+  const approval = await fetch(started.approvalUrl);
+  const confirmationSecret = (await approval.text()).match(
+    /name="confirmationSecret" value="([A-Za-z0-9_-]+)"/,
+  )?.[1];
+  expect(confirmationSecret).toBeTruthy();
+  return { ...started, confirmationSecret: confirmationSecret! };
+}
+
+function postConfirmation(
+  url: string,
+  confirmationSecret: string,
+  fetchSite: "same-origin" | "cross-site",
+) {
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const body = new URLSearchParams({ confirmationSecret }).toString();
+    const request = httpRequest(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "content-length": Buffer.byteLength(body),
+          origin: "null",
+          "sec-fetch-site": fetchSite,
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-dest": "document",
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on("end", () =>
+          resolve({
+            status: response.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString("utf8"),
+          }),
+        );
+      },
+    );
+    request.on("error", reject);
+    request.end(body);
+  });
+}
+
 describe("local connector HTTP boundary", () => {
+  it("accepts Chromium's opaque loopback form origin only with same-origin navigation metadata", async () => {
+    const h = await harness();
+    const started = await pendingConfirmation(h.connectorOrigin);
+    const rejected = await postConfirmation(
+      `${started.approvalUrl}/confirm`,
+      started.confirmationSecret,
+      "cross-site",
+    );
+    expect(rejected.status).toBe(403);
+
+    const retry = await pendingConfirmation(h.connectorOrigin);
+    const confirmed = await postConfirmation(
+      `${retry.approvalUrl}/confirm`,
+      retry.confirmationSecret,
+      "same-origin",
+    );
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.body).toContain("spellbook.local-connector.paired");
+  });
+
   it("answers an allowed private-network preflight without opening a session", async () => {
     const h = await harness();
     const response = await fetch(`${h.connectorOrigin}/v1/account/status`, {
