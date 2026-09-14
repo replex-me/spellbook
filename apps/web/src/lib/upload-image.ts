@@ -1,4 +1,6 @@
 /** Shared browser upload boundary for chat attachments and direct image edits. */
+import { userFacingError } from "./user-errors";
+
 export async function uploadImageAsset(
   documentId: string,
   file: File,
@@ -21,6 +23,8 @@ export async function uploadImageAsset(
   });
   const result = await response.json();
   if (!response.ok)
-    throw new Error(result.error ?? "이미지를 업로드하지 못했습니다.");
+    throw new Error(
+      userFacingError(result.error, "이미지를 업로드하지 못했습니다."),
+    );
   return result;
 }

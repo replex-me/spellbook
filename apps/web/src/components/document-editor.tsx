@@ -18,6 +18,7 @@ import { DirectEditTools } from "./direct-edit-tools";
 import { ModelControl } from "./model-control";
 import type { ModelSettings } from "@/lib/ai-models";
 import { uploadImageAsset } from "@/lib/upload-image";
+import { userFacingError } from "@/lib/user-errors";
 import type { AiPermission } from "@/lib/ai-permissions";
 
 interface EditState {
@@ -657,7 +658,10 @@ export default function DocumentEditor({ documentId }: { documentId: string }) {
             ) : null}
             {document.latestEdit?.status === "failed" && (
               <div className="error-banner compact">
-                {document.latestEdit.lastError ?? "작업을 완료하지 못했습니다."}
+                {userFacingError(
+                  document.latestEdit.lastError,
+                  "작업을 완료하지 못했습니다.",
+                )}
               </div>
             )}
           </ConversationTimeline>
@@ -839,7 +843,10 @@ export default function DocumentEditor({ documentId }: { documentId: string }) {
           ) : null}
           {document.lastError ? (
             <div className="error-banner compact" role="alert">
-              {document.lastError}
+              {userFacingError(
+                document.lastError,
+                "문서 작업을 완료하지 못했습니다.",
+              )}
             </div>
           ) : null}
           <details className="document-diagnostics">

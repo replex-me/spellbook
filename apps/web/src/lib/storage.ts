@@ -1,5 +1,46 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+
+const DEFAULT_STORAGE_RESERVE_BYTES = 512 * 1024 * 1024;
+const MIN_STORAGE_RESERVE_BYTES = 64 * 1024 * 1024;
+const MAX_STORAGE_RESERVE_BYTES = 1024 * 1024 * 1024 * 1024;
+
+export class StorageCapacityError extends Error {
+  constructor() {
+    super("storage_capacity_exhausted");
+  }
+}
+
+export function storageReserveBytes(
+  value = process.env.SPELLBOOK_STORAGE_RESERVE_BYTES,
+): number {
+  if (value === undefined || value.trim() === "")
+    return DEFAULT_STORAGE_RESERVE_BYTES;
+  const bytes = Number(value);
+  if (
+    !Number.isSafeInteger(bytes) ||
+    bytes < MIN_STORAGE_RESERVE_BYTES ||
+    bytes > MAX_STORAGE_RESERVE_BYTES
+  )
+    throw new Error(
+      `SPELLBOOK_STORAGE_RESERVE_BYTES must be an integer from ${MIN_STORAGE_RESERVE_BYTES} to ${MAX_STORAGE_RESERVE_BYTES}.`,
+    );
+  return bytes;
+}
+
+export function hasStorageCapacity(
+  availableBytes: number,
+  writeBytes: number,
+  reserveBytes: number,
+): boolean {
+  return (
+    Number.isSafeInteger(availableBytes) &&
+    Number.isSafeInteger(writeBytes) &&
+    Number.isSafeInteger(reserveBytes) &&
+    availableBytes - writeBytes >= reserveBytes
+  );
+}
 
 export function accountPrefix(accountId: string, documentId: string): string {
   const accountKey = Buffer.from(accountId).toString("base64url");
@@ -17,9 +58,23 @@ export async function putObject(
 ): Promise<void> {
   const destination = objectPath(objectName);
   await fs.mkdir(path.dirname(destination), { recursive: true });
-  const temporary = `${destination}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(temporary, data, { mode: 0o600 });
-  await fs.rename(temporary, destination);
+  const base = storageRoot();
+  const capacity = await fs.statfs(base);
+  const availableBytes = Number(capacity.bavail) * Number(capacity.bsize);
+  if (
+    !hasStorageCapacity(availableBytes, data.byteLength, storageReserveBytes())
+  )
+    throw new StorageCapacityError();
+  const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporary, data, { flag: "wx", mode: 0o600 });
+    await fs.rename(temporary, destination);
+  } catch (error) {
+    if (hasCode(error, "ENOSPC")) throw new StorageCapacityError();
+    throw error;
+  } finally {
+    await fs.rm(temporary, { force: true }).catch(() => undefined);
+  }
 }
 
 export async function getObject(objectName: string): Promise<Buffer> {
@@ -41,12 +96,25 @@ export function objectPath(objectName: string): string {
     objectName.split("/").some((part) => part === ".." || part === ".")
   )
     throw new Error("Unsafe object name.");
-  const base = path.resolve(
-    /* turbopackIgnore: true */
-    process.env.SPELLBOOK_DATA_DIR?.trim() || ".spellbook/data",
-  );
+  const base = storageRoot();
   const result = path.resolve(base, objectName);
   if (!result.startsWith(`${base}${path.sep}`))
     throw new Error("Unsafe object name.");
   return result;
+}
+
+function storageRoot(): string {
+  return path.resolve(
+    /* turbopackIgnore: true */
+    process.env.SPELLBOOK_DATA_DIR?.trim() || ".spellbook/data",
+  );
+}
+
+function hasCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === code
+  );
 }

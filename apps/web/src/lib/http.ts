@@ -1,5 +1,6 @@
 import { sessionFromRequest } from "./auth";
 import type { Session } from "./models";
+import { StorageCapacityError } from "./storage";
 
 export class HttpError extends Error {
   constructor(
@@ -17,6 +18,8 @@ export async function requireSession(request: Request): Promise<Session> {
 }
 
 export function routeError(error: unknown): Response {
+  if (error instanceof StorageCapacityError)
+    return Response.json({ error: error.message }, { status: 507 });
   if (error instanceof HttpError)
     return Response.json({ error: error.message }, { status: error.status });
   const message = error instanceof Error ? error.message : "unexpected_error";

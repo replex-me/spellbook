@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AiConnectorConfig } from "@/lib/ai-connector-config";
+import { userFacingError } from "@/lib/user-errors";
 import { CHATGPT_SECURITY_URL, useAiAccount } from "@/lib/use-ai-account";
 import { SpellbookBrand, SpellbookIcon, StatusBadge } from "./spellbook-ui";
 
@@ -80,7 +81,7 @@ export default function Dashboard({
     const body = (await response.json()) as { id?: string; error?: string };
     setUploading(false);
     if (!response.ok || !body.id) {
-      setUploadMessage(body.error ?? "업로드하지 못했습니다.");
+      setUploadMessage(userFacingError(body.error, "업로드하지 못했습니다."));
       return;
     }
     window.location.href = `/documents/${body.id}`;
@@ -355,7 +356,14 @@ export default function Dashboard({
                     <span>
                       {new Date(document.createdAt).toLocaleString("ko-KR")}
                     </span>
-                    {document.lastError ? <em>{document.lastError}</em> : null}
+                    {document.lastError ? (
+                      <em>
+                        {userFacingError(
+                          document.lastError,
+                          "문서를 준비하지 못했습니다.",
+                        )}
+                      </em>
+                    ) : null}
                   </span>
                   <StatusBadge tone={statusTone(document.status)}>
                     {statusLabel(document.status)}

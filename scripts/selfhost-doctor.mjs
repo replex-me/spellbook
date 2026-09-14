@@ -29,6 +29,16 @@ result.push({
   check: "WOPI proof verification required",
   ok: proofMode === "required",
 });
+const storageReserve = Number(
+  environment.SPELLBOOK_STORAGE_RESERVE_BYTES || 512 * 1024 * 1024,
+);
+result.push({
+  check: "storage safety reserve",
+  ok:
+    Number.isSafeInteger(storageReserve) &&
+    storageReserve >= 64 * 1024 * 1024 &&
+    storageReserve <= 1024 * 1024 * 1024 * 1024,
+});
 const proofKeyPath = path.resolve(
   environment.SPELLBOOK_WOPI_PROOF_KEY_PATH ||
     ".spellbook/secrets/wopi-proof-key.pem",

@@ -179,7 +179,7 @@ static async Task ExecuteJob(
         }));
         callback = new WorkerCallback(jobId, "failed", null, SafeError(exception));
     }
-    await storage.UploadJsonAsync(receiptObject, callback, cancellationToken);
+    await storage.UploadControlReceiptAsync(receiptObject, callback, cancellationToken);
     await CallbackAsync(clients, callbackUrl, callback, cancellationToken);
 }
 
@@ -232,97 +232,6 @@ public sealed record ScanRenderJob(string JobId, string CallbackUrl, string Stor
 public sealed record PatchRenderJob(string JobId, string CallbackUrl, string StorageNamespace, string FormatId, string InputObject, string OutputDocumentObject, string OutputPrefix, EditCommandBatch Command, Dictionary<string, string>? AssetObjects = null);
 public sealed record WorkerOutputs(string GraphObject, string? ScanObject, string? ValidationObject, string? DocumentObject, int SlideCount, string DocumentSha256);
 public sealed record WorkerCallback(string JobId, string Status, WorkerOutputs? Outputs, string? Error);
-
-public sealed class LocalObjectStore
-{
-    private readonly string root;
-
-    public LocalObjectStore()
-    {
-        root = Path.GetFullPath(Environment.GetEnvironmentVariable("SPELLBOOK_DATA_DIR") ?? ".spellbook/data");
-        Directory.CreateDirectory(root);
-    }
-
-    public async Task<byte[]> ReadAsync(string objectName, CancellationToken cancellationToken) =>
-        await File.ReadAllBytesAsync(Resolve(objectName), cancellationToken);
-
-    public async Task DownloadAsync(string objectName, string destination, CancellationToken cancellationToken)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        await using var source = File.OpenRead(Resolve(objectName));
-        await using var target = File.Create(destination);
-        await source.CopyToAsync(target, cancellationToken);
-    }
-
-    public async Task UploadFileAsync(string objectName, string sourcePath, CancellationToken cancellationToken)
-    {
-        await using var source = File.OpenRead(sourcePath);
-        await UploadAsync(objectName, source, cancellationToken);
-    }
-
-    public async Task UploadJsonAsync<T>(string objectName, T value, CancellationToken cancellationToken)
-    {
-        await using var data = new MemoryStream();
-        await JsonSerializer.SerializeAsync(data, value, cancellationToken: cancellationToken);
-        data.Position = 0;
-        await UploadAsync(objectName, data, cancellationToken);
-    }
-
-    public async Task UploadJsonAsync<T>(string objectName, T value, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo, CancellationToken cancellationToken)
-    {
-        await using var data = new MemoryStream();
-        await JsonSerializer.SerializeAsync(data, value, typeInfo, cancellationToken);
-        data.Position = 0;
-        await UploadAsync(objectName, data, cancellationToken);
-    }
-
-    public async Task<T?> TryReadJsonAsync<T>(string objectName, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var source = File.OpenRead(Resolve(objectName));
-            return await JsonSerializer.DeserializeAsync<T>(source, cancellationToken: cancellationToken);
-        }
-        catch (FileNotFoundException)
-        {
-            return default;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return default;
-        }
-    }
-
-    private async Task UploadAsync(string objectName, Stream source, CancellationToken cancellationToken)
-    {
-        var destination = Resolve(objectName);
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        var temporary = $"{destination}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
-        try
-        {
-            await using (var target = File.Create(temporary))
-                await source.CopyToAsync(target, cancellationToken);
-            File.Move(temporary, destination, true);
-        }
-        finally
-        {
-            File.Delete(temporary);
-        }
-    }
-
-    private string Resolve(string objectName)
-    {
-        if (string.IsNullOrWhiteSpace(objectName) || Path.IsPathRooted(objectName))
-            throw new InvalidDataException("Unsafe object name.");
-        var segments = objectName.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 0 || segments.Any(segment => segment is "." or ".."))
-            throw new InvalidDataException("Unsafe object name.");
-        var result = Path.GetFullPath(Path.Combine(root, Path.Combine(segments)));
-        if (!result.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-            throw new InvalidDataException("Unsafe object name.");
-        return result;
-    }
-}
 
 public sealed class JobWorkspace : IDisposable
 {

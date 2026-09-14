@@ -13,5 +13,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Spellbook.Document.Core/Spellbook.Document.Core.csproj" />
+    <ProjectReference Include="../../src/Spellbook.Document.Worker/Spellbook.Document.Worker.csproj" />
   </ItemGroup>
 </Project>

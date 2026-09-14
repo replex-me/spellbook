@@ -41,6 +41,17 @@ The build bundles the connector, the pinned official Node runtime and the matchi
 
 `database-data` holds metadata and version lineage. `document-data` holds uploaded documents, derived renders and job receipts. `ai-auth-data` is mounted only into the AI connector and holds its provider runtime home. `.spellbook/secrets/wopi-proof-key.pem` is the stable identity that lets the host authenticate Collabora requests across restarts. A usable document backup requires a consistent copy of the database and document volumes plus this proof key; back up the AI volume separately if reconnecting the provider is not acceptable.
 
+Web uploads, document-worker outputs and AI receipts preserve 512 MiB of free
+space by default through `SPELLBOOK_STORAGE_RESERVE_BYTES`. Each adapter checks
+the complete write size before creating an object, commits through an atomic
+rename or link and removes temporary data after failure. Capacity exhaustion is
+reported explicitly instead of replacing a valid object with a partial file.
+Failure and completion receipts are capped at 1 MiB and use a separate 16 MiB
+emergency margin, so rejecting a large write does not strand an accepted job
+without a durable terminal result.
+The reserve is an emergency operating margin, not a user quota; size the host
+and retention policy for expected documents and keep the reserve enabled.
+
 Create one consistent backup with:
 
 ```bash

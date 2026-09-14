@@ -56,7 +56,10 @@ export class JobResultStore {
     }
     const result = await work();
     try {
-      await file.save(JSON.stringify(result), { createIfAbsent: true });
+      await file.save(JSON.stringify(result), {
+        createIfAbsent: true,
+        controlReceipt: true,
+      });
     } catch (error) {
       if (
         !(
