@@ -145,6 +145,43 @@ public sealed class PackageChangeBudgetTests : IDisposable
     }
 
     [Fact]
+    public void IgnoresCollaboraPageGuidValuesButNotTheirStructure()
+    {
+        var source = TestPresentationFactory.Create(directory);
+        var baseline = Path.Combine(directory, "page-guid-baseline.pptx");
+        var candidate = Path.Combine(directory, "page-guid-candidate.pptx");
+        File.Copy(source, baseline);
+        File.Copy(source, candidate);
+        AddCollaboraPageGuid(baseline, "11111111-1111-1111-1111-111111111111");
+        AddCollaboraPageGuid(candidate, "22222222-2222-2222-2222-222222222222");
+
+        var ignored = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(ContractVersions.Current, []));
+        Assert.True(ignored.Valid, string.Join("\n", ignored.Errors));
+        Assert.Empty(ignored.Changes);
+
+        using (var archive = ZipFile.Open(candidate, ZipArchiveMode.Update))
+        {
+            var part = "ppt/slideMasters/slideMaster1.xml";
+            var master = ReadXml(archive, part);
+            XNamespace collabora =
+                "urn:com:collaboraoffice:names:experimental:ooxml:xmlns:coext:1.0";
+            master.Descendants(collabora + "pageGuid").Single()
+                .SetAttributeValue("purpose", "semantic-change");
+            Replace(archive, part, master);
+        }
+
+        var semanticChange = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            candidate,
+            new PackageChangeBudgetRequest(ContractVersions.Current, []));
+        Assert.False(semanticChange.Valid);
+        Assert.Equal("slide_master_parts", Assert.Single(semanticChange.Changes).Category);
+    }
+
+    [Fact]
     public void IgnoresSlideLayoutObjectRenumberingButNotPlaceholderChanges()
     {
         var source = TestPresentationFactory.Create(directory);
@@ -362,7 +399,30 @@ public sealed class PackageChangeBudgetTests : IDisposable
                                     presentation + "txBody",
                                     new XElement(drawing + "bodyPr"),
                                     new XElement(drawing + "lstStyle"),
-                                    new XElement(drawing + "p"))))))));
+                                new XElement(drawing + "p"))))))));
+    }
+
+    private static void AddCollaboraPageGuid(string path, string guid)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        XNamespace presentation =
+            "http://schemas.openxmlformats.org/presentationml/2006/main";
+        XNamespace collabora =
+            "urn:com:collaboraoffice:names:experimental:ooxml:xmlns:coext:1.0";
+        Replace(
+            archive,
+            "ppt/slideMasters/slideMaster1.xml",
+            new XDocument(
+                new XElement(
+                    presentation + "sldMaster",
+                    new XElement(
+                        presentation + "extLst",
+                        new XElement(
+                            presentation + "ext",
+                            new XAttribute("uri", collabora.NamespaceName),
+                            new XElement(
+                                collabora + "pageGuid",
+                                new XAttribute("val", $"{{{guid}}}")))))));
     }
 
     private static string FirstXmlPart(ZipArchive archive, string prefix) => archive.Entries

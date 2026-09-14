@@ -19,6 +19,8 @@ public sealed class PptxPackageChangeBudgetValidator
         "http://schemas.openxmlformats.org/package/2006/metadata/core-properties";
     private static readonly XNamespace DublinCoreTermsNamespace =
         "http://purl.org/dc/terms/";
+    private static readonly XNamespace CollaboraExtensionNamespace =
+        "urn:com:collaboraoffice:names:experimental:ooxml:xmlns:coext:1.0";
 
     public static IReadOnlySet<string> Categories { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -206,6 +208,14 @@ public sealed class PptxPackageChangeBudgetValidator
         var fieldIndex = 0;
         foreach (var field in document.Descendants(DrawingNamespace + "fld"))
             field.SetAttributeValue("id", $"{{00000000-0000-0000-0000-{++fieldIndex:D12}}}");
+
+        // Collabora also regenerates its private page GUID on every independent
+        // save. The value is not referenced elsewhere in the package; retain
+        // the element, order and every other attribute while removing only the
+        // non-deterministic UUID from change-budget comparison.
+        var pageGuidIndex = 0;
+        foreach (var pageGuid in document.Descendants(CollaboraExtensionNamespace + "pageGuid"))
+            pageGuid.SetAttributeValue("val", $"{{00000000-0000-0000-0000-{++pageGuidIndex:D12}}}");
 
         // LibreOffice can deterministically renumber non-visual object ids in
         // slide-layout parts while preserving the complete layout tree. Scope
