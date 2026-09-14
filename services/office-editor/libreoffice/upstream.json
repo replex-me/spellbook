@@ -11,7 +11,7 @@
   "runtimePatchLevel": "stock",
   "patchLevel": "undo-v18",
   "sourcePatchSeriesReady": true,
-  "sourceCandidateReady": true,
+  "sourceCandidateReady": false,
   "patchSeriesSha256": "88e2b043513fda966fa5d684d0df0914517639fc6ca564d2fa81f4109bf2c918",
   "engineImageTag": "26.04.4.1-spellbook-undo-v18-r1-candidate",
   "impressUiUnoCommandCount": 725,
