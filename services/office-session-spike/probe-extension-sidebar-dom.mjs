@@ -35,8 +35,9 @@ try {
   await office.evaluate(() => {
     const style = document.createElement("style");
     style.textContent =
-      '#sidebar-dock-wrapper:has(.extension-panel[data-extension-id="org.spellbook.editor"]) { display: none !important; }';
+      ".spellbook-extension-bridge-active #sidebar-dock-wrapper, .spellbook-extension-bridge-active #sidebar-panel { display: none !important; }";
     document.head.appendChild(style);
+    document.documentElement.classList.add("spellbook-extension-bridge-active");
   });
   await page.waitForTimeout(1_000);
   const launch = await page.evaluate(() => window.__spellbookLaunch);
