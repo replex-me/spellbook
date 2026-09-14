@@ -16,6 +16,7 @@ const slideContentType =
 const maximumInputBytes = 64 * 1024 * 1024;
 const maximumExpandedBytes = 512 * 1024 * 1024;
 const maximumEntries = 10_000;
+const deterministicZipModifiedAt = new Date("2000-01-01T00:00:00.000Z");
 const presentationPath = "ppt/presentation.xml";
 const presentationRelationshipsPath = "ppt/_rels/presentation.xml.rels";
 const contentTypesPath = "[Content_Types].xml";
@@ -59,7 +60,13 @@ export function applyOoxmlCommand(input, command) {
         : command.op === "move_slide"
           ? moveSlide(context, command)
           : updateSlideMetadata(context, command);
-  return { bytes: zipSync(context.entries, { level: 6 }), report };
+  return {
+    bytes: zipSync(context.entries, {
+      level: 6,
+      mtime: deterministicZipModifiedAt,
+    }),
+    report,
+  };
 }
 
 function openPackage(input, { requireSimpleTopology }) {

@@ -1,5 +1,10 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 
+import {
+  openBrowserDocumentJournal,
+  requestPersistentBrowserStorage,
+} from "/harness/opfs-journal.mjs";
+
 const body = document.body;
 const canvas = document.querySelector("#qtcanvas");
 const status = document.querySelector("#status");
@@ -21,8 +26,20 @@ const upstreamUiSettleMs = 1_000;
 const history = [];
 const verifiedTopologyOperations = "add,duplicate,move,delete";
 const verifiedMetadataOperations = "rename,hide";
+const recoveryMarker = "spellbook-browser-office-recovery-v1";
+const conformanceLabels = [
+  "after-insert",
+  "after-duplicate",
+  "after-move",
+  "after-delete",
+  "after-rename",
+  "after-hide",
+];
 let currentBytes;
 let currentSlideCount = 0;
+let baseBytes;
+let journal;
+const commands = [];
 
 function setState(nextState, message) {
   body.dataset.state = nextState;
@@ -121,6 +138,8 @@ async function mutate(command) {
   const result = await applyMutation(before, command);
   history.push(before);
   await writeAndOpen(new Uint8Array(result.bytes), filename);
+  commands.push(command);
+  await persistCheckpoint();
   undoButton.disabled = false;
   observed.lastMutation = result.report;
   evidence.value = JSON.stringify(observed);
@@ -139,8 +158,29 @@ async function undoMutation() {
   const previous = history.pop();
   if (!previous) throw new Error("There is no browser mutation to undo.");
   const result = await writeAndOpen(previous, filename);
+  commands.pop();
+  await persistCheckpoint();
   undoButton.disabled = history.length === 0;
   return result;
+}
+
+async function openJournal(initialBytes, name) {
+  baseBytes = initialBytes.slice();
+  journal = await openBrowserDocumentJournal({
+    identity: `${name}:${await sha256(initialBytes)}`,
+  });
+  return journal;
+}
+
+async function persistCheckpoint() {
+  if (!journal || !baseBytes || !currentBytes) return;
+  await journal.save({
+    fileName: filename,
+    baseVersionId: await sha256(baseBytes),
+    baseBytes,
+    candidateBytes: currentBytes,
+    commands,
+  });
 }
 
 function download(bytes) {
@@ -160,11 +200,22 @@ async function runConformance() {
   const fixture = new Uint8Array(
     await (await fetch("/fixtures/general-native-surface.pptx")).arrayBuffer(),
   );
+  await requestPersistentBrowserStorage();
+  await openJournal(fixture, "general-native-surface.pptx");
+  const pendingRecovery = sessionStorage.getItem(recoveryMarker);
+  if (pendingRecovery) {
+    sessionStorage.removeItem(recoveryMarker);
+    await resumeConformance(JSON.parse(pendingRecovery));
+    return;
+  }
+  await journal.clear();
+  commands.length = 0;
+  history.length = 0;
   const initial = await writeAndOpen(fixture, "general-native-surface.pptx");
   const addMutation = await addSlide();
   if (currentSlideCount !== initial.slideCount + 1)
     throw new Error("OOXML add_slide did not add exactly one slide.");
-  const added = await recordBytes(
+  await recordBytes(
     "after-insert",
     currentBytes,
     currentSlideCount,
@@ -205,7 +256,7 @@ async function runConformance() {
   });
   if (currentSlideCount !== initial.slideCount + 1)
     throw new Error("OOXML delete_slide did not remove exactly one slide.");
-  const deleted = await recordBytes(
+  await recordBytes(
     "after-delete",
     currentBytes,
     currentSlideCount,
@@ -236,13 +287,61 @@ async function runConformance() {
     hideMutation,
   );
 
+  sessionStorage.setItem(
+    recoveryMarker,
+    JSON.stringify({
+      initialSlideCount: initial.slideCount,
+      mutatedSha256: hidden.entry.sha256,
+    }),
+  );
+  location.reload();
+}
+
+async function resumeConformance(expected) {
+  const checkpoint = await journal.load();
+  if (!checkpoint)
+    throw new Error("OPFS did not retain a valid browser edit checkpoint.");
+  if (checkpoint.metadata.commands.length !== conformanceLabels.length)
+    throw new Error(
+      "OPFS did not retain the complete browser command journal.",
+    );
+  baseBytes = checkpoint.baseBytes.slice();
+  currentBytes = baseBytes.slice();
+  commands.length = 0;
+  history.length = 0;
+  for (let index = 0; index < checkpoint.metadata.commands.length; index += 1) {
+    const command = checkpoint.metadata.commands[index];
+    history.push(currentBytes.slice());
+    const result = await applyMutation(currentBytes, command);
+    currentBytes = new Uint8Array(result.bytes);
+    currentSlideCount = result.report.slideCount;
+    commands.push(command);
+    await recordBytes(
+      conformanceLabels[index],
+      currentBytes,
+      currentSlideCount,
+      result.report,
+    );
+  }
+  if ((await sha256(currentBytes)) !== checkpoint.metadata.candidateSha256)
+    throw new Error(
+      "The replayed command journal differs from the OPFS candidate.",
+    );
+  await writeAndOpen(checkpoint.candidateBytes, checkpoint.metadata.fileName);
+  observed.marks["opfs-recovered"] = Math.round(performance.now());
+  observed.events.push({
+    state: "opfs-recovered",
+    atMs: observed.marks["opfs-recovered"],
+    message: "Recovered candidate and Undo history after page reload",
+  });
+
   const undoCounts = [
-    initial.slideCount + 1,
-    initial.slideCount + 1,
-    initial.slideCount + 2,
-    initial.slideCount + 2,
-    initial.slideCount + 1,
-    initial.slideCount,
+    expected.initialSlideCount + 1,
+    expected.initialSlideCount + 1,
+    expected.initialSlideCount + 2,
+    expected.initialSlideCount + 2,
+    expected.initialSlideCount + 1,
+    expected.initialSlideCount,
   ];
   let undone;
   for (const expectedCount of undoCounts) {
@@ -258,24 +357,28 @@ async function runConformance() {
     currentSlideCount,
     { operation: "restore_original" },
   );
-  if (deleted.entry.sha256 === restored.entry.sha256)
+  if (expected.mutatedSha256 === restored.entry.sha256)
     throw new Error("Mutation and undone saves unexpectedly match.");
   const reopenPath = "/tmp/spellbook/reopened.pptx";
   FS.writeFile(reopenPath, restored.bytes);
   const reopened = await request("open", { path: reopenPath });
-  if (reopened.slideCount !== initial.slideCount)
+  if (reopened.slideCount !== expected.initialSlideCount)
     throw new Error("The undone PPTX changed after browser reopen.");
   await waitForUiPaint("reopen");
-  body.dataset.initialSlides = String(initial.slideCount);
+  body.dataset.initialSlides = String(expected.initialSlideCount);
   body.dataset.reopenedSlides = String(reopened.slideCount);
-  body.dataset.mutatedSha256 = hidden.entry.sha256;
+  body.dataset.mutatedSha256 = expected.mutatedSha256;
   body.dataset.restoredSha256 = restored.entry.sha256;
-  body.dataset.addedSha256 = added.entry.sha256;
+  body.dataset.addedSha256 = observed.runs.find(
+    (entry) => entry.label === "after-insert",
+  ).sha256;
   body.dataset.topologyOperations = verifiedTopologyOperations;
   body.dataset.metadataOperations = verifiedMetadataOperations;
+  body.dataset.recovery = "opfs-two-slot";
+  await journal.clear();
   setState(
     "complete",
-    "Browser slide topology and metadata, six-step Undo and reopen passed",
+    "Browser edits, page-reload recovery, six-step Undo and reopen passed",
   );
 }
 
@@ -283,8 +386,12 @@ fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
   if (!file) return;
   history.length = 0;
+  commands.length = 0;
   undoButton.disabled = true;
-  await writeAndOpen(new Uint8Array(await file.arrayBuffer()), file.name);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  await openJournal(bytes, file.name);
+  await journal.clear();
+  await writeAndOpen(bytes, file.name);
 });
 
 insertSlideButton.addEventListener("click", async () => {
@@ -366,6 +473,9 @@ script.onerror = () =>
 document.body.append(script);
 
 globalThis.spellbookBrowserOffice = {
+  artifactLabels() {
+    return [...savedArtifacts.keys()];
+  },
   artifact(label) {
     const bytes = savedArtifacts.get(label);
     return bytes ? Array.from(bytes) : null;

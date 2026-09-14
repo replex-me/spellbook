@@ -41,11 +41,19 @@ and reopened in PowerPoint, but rewrote untouched slide, layout, master, theme
 and font data. Spellbook therefore never promotes that whole-file output as
 the authoritative PPTX.
 
+Browser candidates and their replayable command journal are checkpointed in
+OPFS with two alternating slots. Each slot writes the base package and
+candidate before a checksummed metadata commit record; recovery ignores a
+partial or corrupt newest slot and falls back to the preceding valid
+generation. The conformance run reloads the page after all six mutations,
+recovers the candidate and Undo history from OPFS, and only then performs the
+six-step Undo and reopen checks.
+
 Promotion still requires the rest of the shared edit-command contract,
-Korean IME and accessibility checks, OPFS recovery, a current patched browser
-LibreOffice build, public-corpus render comparison and a PowerPoint platform
-matrix. Until those gates pass, `status` stays `viability_probe_only` and the
-server editor remains the runtime fallback.
+Korean IME and accessibility checks, product-integrated OPFS recovery, a
+current patched browser LibreOffice build, public-corpus render comparison and
+a PowerPoint platform matrix. Until those gates pass, `status` stays
+`viability_probe_only` and the server editor remains the runtime fallback.
 
 The Spellbook-owned conformance shell is available at
 `http://127.0.0.1:4173/?autorun=1`. It loads the tracked public PPTX fixture,

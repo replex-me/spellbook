@@ -8,6 +8,18 @@ import { DOMParser } from "@xmldom/xmldom";
 
 import { applyOoxmlCommand } from "./ooxml-worker-source.mjs";
 
+test("browser OOXML commands produce deterministic package bytes", async () => {
+  const source = new Uint8Array(await readFile(fixtureUrl));
+  const command = {
+    op: "duplicate_slide",
+    slideIndex: 0,
+    insertIndex: 1,
+  };
+  const first = applyOoxmlCommand(source, command);
+  const second = applyOoxmlCommand(source, command);
+  assert.deepEqual(first.bytes, second.bytes);
+});
+
 const fixtureUrl = new URL(
   "../../eval/public/fixtures/general-native-surface.pptx",
   import.meta.url,

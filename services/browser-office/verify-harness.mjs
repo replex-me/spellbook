@@ -67,14 +67,20 @@ try {
     restoredSha256: document.body.dataset.restoredSha256 ?? null,
     topologyOperations: document.body.dataset.topologyOperations ?? null,
     metadataOperations: document.body.dataset.metadataOperations ?? null,
+    recovery: document.body.dataset.recovery ?? null,
     status: document.querySelector("#status")?.textContent ?? null,
     evidence: globalThis.spellbookBrowserOffice.evidence,
+    artifactLabels: globalThis.spellbookBrowserOffice.artifactLabels(),
     crossOriginIsolated: globalThis.crossOriginIsolated,
   }));
   result.elapsedMs = Math.round(performance.now() - startedAt);
   result.console = consoleMessages;
   result.pageErrors = pageErrors;
   result.requestFailures = requestFailures;
+  await writeFile(
+    path.join(outputRoot, "browser-state.json"),
+    `${JSON.stringify(result, null, 2)}\n`,
+  );
 
   const artifactPaths = new Map();
   for (const [label, filename] of [
@@ -91,7 +97,10 @@ try {
         globalThis.spellbookBrowserOffice.artifact(artifactLabel),
       label,
     );
-    if (!values) throw new Error(`Browser did not preserve ${label}.`);
+    if (!values)
+      throw new Error(
+        `Browser did not preserve ${label}; available=${result.artifactLabels.join(",")}.`,
+      );
     const artifactPath = path.join(outputRoot, filename);
     await writeFile(artifactPath, Uint8Array.from(values));
     artifactPaths.set(label, artifactPath);
@@ -122,6 +131,9 @@ try {
       : null,
     result.metadataOperations !== "rename,hide"
       ? "browser metadata sequence is incomplete"
+      : null,
+    result.recovery !== "opfs-two-slot"
+      ? "browser page-reload recovery did not use the OPFS journal"
       : null,
     pageErrors.length ? `${pageErrors.length} uncaught page error(s)` : null,
     requestFailures.length

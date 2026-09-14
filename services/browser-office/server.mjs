@@ -23,6 +23,13 @@ export function buildRoutes(root = serviceRoot, upstream = manifest) {
       ),
     ],
     [
+      "/harness/opfs-journal.mjs",
+      route(
+        path.join(root, "opfs-journal.mjs"),
+        "text/javascript; charset=utf-8",
+      ),
+    ],
+    [
       "/harness/office-thread.js",
       route(
         path.join(root, "harness/office-thread.js"),
