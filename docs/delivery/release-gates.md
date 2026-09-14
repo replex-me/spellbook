@@ -2,9 +2,18 @@
 
 The existence of code, a passing unit suite or a successful image build is not a public beta by itself. A release is usable only when every required evidence layer is green.
 
-## Completion accounting
+## How these gates are used
 
-Release completion uses the nine fixed gates G0 through G8 as its only denominator. A gate counts as complete only when every item in its required-evidence column has current passing evidence; partial evidence never counts as a fraction of a gate. The percentage is therefore `complete gates / 9`, changes only in 11.1 percentage-point steps, and must not be mixed with task, command or feature counts.
+These are binary release blockers, not equal-sized units of engineering work.
+They answer whether the product may be called a usable public beta; they do not
+calculate implementation progress. A large body of implemented and locally
+verified work can sit inside a gate whose final production proof is still
+missing, so dividing completed gates by nine produces a misleading percentage.
+
+The fixed, weighted implementation ledger is
+[Product completion ledger](./product-completion.md). Build output, commit count
+and line count are supporting evidence only and never change that ledger by
+themselves.
 
 | Gate                      | Required evidence                                                                    | Current repository state                                                                                                                                                                                                                                                                                                                           |
 | ------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
