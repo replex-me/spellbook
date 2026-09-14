@@ -1,5 +1,5 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index ec3111c0b..95a34fa49 100644
+index 308ea3a7095388e63149cd8dddfff4fd20ff5d7b..b68d6376e88d82acbafa0ffb592e04b71c55c89c 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
 @@ -43,6 +43,9 @@
@@ -12,7 +12,7 @@ index ec3111c0b..95a34fa49 100644
  #include <sfx2/dispatch.hxx>
  #include <sfx2/request.hxx>
  #include <sfx2/viewfrm.hxx>
-@@ -555,6 +556,66 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
+@@ -557,6 +560,66 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
      CPPUNIT_ASSERT(bMoveProtect);
  }
  
@@ -80,10 +80,10 @@ index ec3111c0b..95a34fa49 100644
  {
      // An inserted slide's notes page must keep a notes master. If it instead
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index 9541e100b..6d00b0ff3 100644
+index 88d4c9667f432fd9f73a6a3fb43cf35124a9f9ef..f7fc5ee10cf1c02d1adbabbaa42692a00f05e04b 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -1426,6 +1426,65 @@ void handleSetText(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -1470,6 +1470,65 @@ void handleSetText(SlideCommandContext& rCtx, const std::string& rKey,
      }
  }
  
@@ -149,7 +149,7 @@ index 9541e100b..6d00b0ff3 100644
  void handleSetNotes(SlideCommandContext& rCtx, const std::string& /*rKey*/,
                      const boost::property_tree::ptree& rValue)
  {
-@@ -1889,6 +1948,7 @@ constexpr SlideCommand aSlideCommands[] = {
+@@ -1933,6 +1992,7 @@ constexpr SlideCommand aSlideCommands[] = {
      { "SetSlideVisible", false, false, &handleSetSlideVisible },
      { "RenameSlide", false, false, &handleRenameSlide },
      { "SetText.", true, false, &handleSetText },

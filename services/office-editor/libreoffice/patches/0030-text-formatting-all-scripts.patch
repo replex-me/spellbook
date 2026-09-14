@@ -1,4 +1,5 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
+index fe08140b050796dfac61e94336cb17cb5010edac..a786ef4c3371d4e4a60df1c489288abc3ff5dfe5 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
 @@ -56,10 +56,13 @@
@@ -15,12 +16,10 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
  #include <editeng/wghtitem.hxx>
  #include <tools/UnitConversion.hxx>
  #include <Outliner.hxx>
-@@ -695,8 +698,94 @@
-     CPPUNIT_ASSERT(aOriginal == *pTextObject->GetOutlinerParaObject());
-     pUndoManager->Redo();
+@@ -699,6 +702,92 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
      CPPUNIT_ASSERT(aChanged == *pTextObject->GetOutlinerParaObject());
-+}
-+
+ }
+ 
 +CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTypedTextFormattingAppliesToAllScripts)
 +{
 +    createSdImpressDoc();
@@ -50,13 +49,13 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 +            }}
 +        ]
 +    }
- }
++}
 +)json"_ustr;
 +    auto* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
 +    const size_t nUndoBefore = pUndoManager->GetUndoActionCount();
 +    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
 +                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
- 
++
 +    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount() - nUndoBefore);
 +    const OutlinerParaObject aChanged(*pTextObject->GetOutlinerParaObject());
 +    CPPUNIT_ASSERT(aChanged != aOriginal);
@@ -111,9 +110,10 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
  {
      createSdImpressDoc();
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
+index dfc39864d66e63dcfbd82e3aa17b74ed1e1f8150..f2dabf1355a52817961386f8ac396a3276a67b03 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -135,6 +135,8 @@
+@@ -139,6 +139,8 @@
  
  #include <editeng/cmapitem.hxx>
  #include <editeng/escapementitem.hxx>
@@ -122,7 +122,7 @@ diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
  #include <editeng/kernitem.hxx>
  #include <editeng/wghtitem.hxx>
  #include <editeng/postitem.hxx>
-@@ -1830,21 +1832,46 @@
+@@ -1835,21 +1837,46 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
  void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
                               const boost::property_tree::ptree& rValue)
  {
@@ -139,10 +139,11 @@ diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
      SdPage* pPage = rCtx.mpDoc->GetSdPage(rCtx.mnActPageId, PageKind::Standard);
 -    if (!pPage || nObjId < 0 || nObjId >= static_cast<int>(pPage->GetObjCount()))
 -        throw lang::IllegalArgumentException(u"Text object index out of range"_ustr, nullptr, 0);
+-
+-    SdrObject* pObject = pPage->GetObj(nObjId);
 +    if (!pPage)
 +        throw lang::IllegalArgumentException(u"Text object slide is unavailable"_ustr, nullptr, 0);
- 
--    SdrObject* pObject = pPage->GetObj(nObjId);
++
 +    // Object IDs exposed to the browser are slide-relative paths such as
 +    // `0` and `2/1`. Resolve every path segment so the same typed operation
 +    // works for ordinary text boxes and text nested inside groups.
@@ -182,7 +183,7 @@ diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
      if (!pObject->IsSdrTextObj())
          throw lang::IllegalArgumentException(u"Object has no editable text"_ustr, nullptr, 0);
      auto* pTextObject = static_cast<SdrTextObj*>(pObject);
-@@ -1853,9 +1880,13 @@
+@@ -1858,9 +1885,13 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
          throw lang::IllegalArgumentException(u"Object has no text paragraphs"_ustr, nullptr, 0);
  
      static const std::set<std::string> aAllowedProperties = {
@@ -196,7 +197,7 @@ diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
      };
      for (const auto& rEntry : rValue)
      {
-@@ -1865,16 +1896,33 @@
+@@ -1870,16 +1901,33 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
                  nullptr, 0);
      }
  
@@ -231,7 +232,7 @@ diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
      if (oEscapement
          && (*oEscapement < -100 || *oEscapement > 100 || *oEscapementHeight < 1
              || *oEscapementHeight > 100))
-@@ -1888,6 +1936,35 @@
+@@ -1893,6 +1941,35 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
      pOutliner->Init(pOriginal->GetOutlinerMode());
      pOutliner->SetText(*pOriginal);
      SfxItemSet aTextAttributes(pOutliner->GetEmptyItemSet());

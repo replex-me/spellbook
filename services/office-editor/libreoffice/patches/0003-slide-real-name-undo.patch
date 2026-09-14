@@ -1,5 +1,5 @@
 diff --git a/sd/source/ui/view/unmodpg.cxx b/sd/source/ui/view/unmodpg.cxx
-index da9e3d978..48695f1fb 100644
+index da9e3d9781de14da007d02f79aeb040e9c63e65a..48695f1fbbbf00429815a68ac5a8da36c96553db 100644
 --- a/sd/source/ui/view/unmodpg.cxx
 +++ b/sd/source/ui/view/unmodpg.cxx
 @@ -64,7 +64,10 @@ ModifyPageUndoAction::ModifyPageUndoAction(

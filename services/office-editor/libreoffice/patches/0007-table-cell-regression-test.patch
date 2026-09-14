@@ -1,16 +1,16 @@
 diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
-index b2d35db9e..d34301916 100644
+index 8f86187daa9a2e102119a2f54e593eb61e7adf3f..753c066f6a619facdc1c7b84c73152f7055495ae 100644
 --- a/sd/qa/unit/misc-tests.cxx
 +++ b/sd/qa/unit/misc-tests.cxx
-@@ -24,6 +24,7 @@
- #include <com/sun/star/container/XIndexAccess.hpp>
+@@ -25,6 +25,7 @@
  #include <com/sun/star/table/XTable.hpp>
  #include <com/sun/star/table/XMergeableCellRange.hpp>
+ #include <com/sun/star/lang/IllegalArgumentException.hpp>
 +#include <com/sun/star/text/XTextRange.hpp>
  #include <com/sun/star/lang/XSingleServiceFactory.hpp>
  #include <com/sun/star/view/XSelectionSupplier.hpp>
  
-@@ -77,6 +78,7 @@ public:
+@@ -84,6 +85,7 @@ public:
  
      void testTdf99396();
      void testTableObjectUndoTest();
@@ -18,7 +18,7 @@ index b2d35db9e..d34301916 100644
      void testSubtitleWithParaAnimationSave();
      void testFillColor();
      void testFillGradient();
-@@ -107,6 +109,7 @@ public:
+@@ -130,6 +132,7 @@ public:
      CPPUNIT_TEST_SUITE(SdMiscTest);
      CPPUNIT_TEST(testTdf99396);
      CPPUNIT_TEST(testTableObjectUndoTest);
@@ -26,7 +26,7 @@ index b2d35db9e..d34301916 100644
      CPPUNIT_TEST(testSubtitleWithParaAnimationSave);
      CPPUNIT_TEST(testFillColor);
      CPPUNIT_TEST(testFillGradient);
-@@ -279,6 +282,41 @@ void SdMiscTest::testTableObjectUndoTest()
+@@ -313,6 +316,41 @@ void SdMiscTest::testTableObjectUndoTest()
      CPPUNIT_ASSERT_EQUAL(u"Format cell"_ustr, pDoc->GetUndoManager()->GetUndoActionComment(2));
  }
  

@@ -1,63 +1,5 @@
-diff --git a/svx/source/table/tablemodel.cxx b/svx/source/table/tablemodel.cxx
-index 60c6ed0..60dd4cb 100644
---- a/svx/source/table/tablemodel.cxx
-+++ b/svx/source/table/tablemodel.cxx
-@@ -593,6 +593,14 @@ void TableModel::insertColumns( sal_Int32 nIndex, sal_Int32 nCount )
-     {
-         SdrModel& rModel(mpTableObj->getSdrModelFromSdrObject());
-         TableModelNotifyGuard aGuard( this );
-+        const bool bInheritColumn = !maColumns.empty();
-+        const sal_Int32 nSourceColumn = bInheritColumn
-+            ? std::min(std::max(nIndex, sal_Int32(0)), getColumnCountImpl() - 1)
-+            : 0;
-+        const sal_Int32 nInheritedWidth
-+            = bInheritColumn ? maColumns[nSourceColumn]->mnWidth : 0;
-+        const bool bInheritedOptimalWidth
-+            = bInheritColumn && maColumns[nSourceColumn]->mbOptimalWidth;
-         nIndex = insert_range<ColumnVector,ColumnVector::iterator,TableColumnRef>( maColumns, nIndex, nCount );
- 
-         sal_Int32 nRows = getRowCountImpl();
-@@ -603,6 +611,11 @@ void TableModel::insertColumns( sal_Int32 nIndex, sal_Int32 nCount )
-         for( sal_Int32 nOffset = 0; nOffset < nCount; ++nOffset )
-         {
-             TableColumnRef xNewCol( new TableColumn( this, nIndex+nOffset ) );
-+            if (bInheritColumn)
-+            {
-+                xNewCol->mnWidth = nInheritedWidth;
-+                xNewCol->mbOptimalWidth = bInheritedOptimalWidth;
-+            }
-             maColumns[nIndex+nOffset] = xNewCol;
-             aNewColumns[nOffset] = std::move(xNewCol);
-         }
-@@ -785,6 +798,14 @@ void TableModel::insertRows( sal_Int32 nIndex, sal_Int32 nCount )
-     try
-     {
-         TableModelNotifyGuard aGuard( this );
-+        const bool bInheritRow = !maRows.empty();
-+        const sal_Int32 nSourceRow = bInheritRow
-+            ? std::min(std::max(nIndex, sal_Int32(0)), getRowCountImpl() - 1)
-+            : 0;
-+        const sal_Int32 nInheritedHeight
-+            = bInheritRow ? maRows[nSourceRow]->mnHeight : 0;
-+        const bool bInheritedOptimalHeight
-+            = bInheritRow && maRows[nSourceRow]->mbOptimalHeight;
- 
-         nIndex = insert_range<RowVector,RowVector::iterator,TableRowRef>( maRows, nIndex, nCount );
- 
-@@ -793,6 +814,11 @@ void TableModel::insertRows( sal_Int32 nIndex, sal_Int32 nCount )
-         for( sal_Int32 nOffset = 0; nOffset < nCount; ++nOffset )
-         {
-             TableRowRef xNewRow( new TableRow( this, nIndex+nOffset, nColCount ) );
-+            if (bInheritRow)
-+            {
-+                xNewRow->mnHeight = nInheritedHeight;
-+                xNewRow->mbOptimalHeight = bInheritedOptimalHeight;
-+            }
-             maRows[nIndex+nOffset] = xNewRow;
-             aNewRows[nOffset] = std::move(xNewRow);
-         }
 diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
-index df4ff07..f6b074d 100644
+index 753c066f6a619facdc1c7b84c73152f7055495ae..bbae46344a3ccb09abc47d7418a2e643085f11e1 100644
 --- a/sd/qa/unit/misc-tests.cxx
 +++ b/sd/qa/unit/misc-tests.cxx
 @@ -21,8 +21,11 @@
@@ -70,9 +12,9 @@ index df4ff07..f6b074d 100644
 +#include <com/sun/star/table/XTableColumns.hpp>
 +#include <com/sun/star/table/XTableRows.hpp>
  #include <com/sun/star/table/XMergeableCellRange.hpp>
+ #include <com/sun/star/lang/IllegalArgumentException.hpp>
  #include <com/sun/star/text/XTextRange.hpp>
- #include <com/sun/star/lang/XSingleServiceFactory.hpp>
-@@ -79,6 +82,7 @@ public:
+@@ -86,6 +89,7 @@ public:
      void testTdf99396();
      void testTableObjectUndoTest();
      void testApiTableCellTextUndo();
@@ -80,7 +22,7 @@ index df4ff07..f6b074d 100644
      void testSubtitleWithParaAnimationSave();
      void testFillColor();
      void testFillGradient();
-@@ -110,6 +114,7 @@ public:
+@@ -133,6 +137,7 @@ public:
      CPPUNIT_TEST(testTdf99396);
      CPPUNIT_TEST(testTableObjectUndoTest);
      CPPUNIT_TEST(testApiTableCellTextUndo);
@@ -88,7 +30,7 @@ index df4ff07..f6b074d 100644
      CPPUNIT_TEST(testSubtitleWithParaAnimationSave);
      CPPUNIT_TEST(testFillColor);
      CPPUNIT_TEST(testFillGradient);
-@@ -317,6 +322,71 @@ void SdMiscTest::testApiTableCellTextUndo()
+@@ -351,6 +356,71 @@ void SdMiscTest::testApiTableCellTextUndo()
                     == *pTableObject->getText(0)->GetOutlinerParaObject());
  }
  
@@ -160,3 +102,61 @@ index df4ff07..f6b074d 100644
  void SdMiscTest::testSubtitleWithParaAnimationSave()
  {
      createSdImpressDoc("pptx/subtitle-animation-save.pptx");
+diff --git a/svx/source/table/tablemodel.cxx b/svx/source/table/tablemodel.cxx
+index 27a5a0df86a77eb579c4355ac74c65ccee5fc1be..800926e809656343cd817f18989389cb0c7dca99 100644
+--- a/svx/source/table/tablemodel.cxx
++++ b/svx/source/table/tablemodel.cxx
+@@ -593,6 +593,14 @@ void TableModel::insertColumns( sal_Int32 nIndex, sal_Int32 nCount )
+     {
+         SdrModel& rModel(mpTableObj->getSdrModelFromSdrObject());
+         TableModelNotifyGuard aGuard( this );
++        const bool bInheritColumn = !maColumns.empty();
++        const sal_Int32 nSourceColumn = bInheritColumn
++            ? std::min(std::max(nIndex, sal_Int32(0)), getColumnCountImpl() - 1)
++            : 0;
++        const sal_Int32 nInheritedWidth
++            = bInheritColumn ? maColumns[nSourceColumn]->mnWidth : 0;
++        const bool bInheritedOptimalWidth
++            = bInheritColumn && maColumns[nSourceColumn]->mbOptimalWidth;
+         nIndex = insert_range<ColumnVector,ColumnVector::iterator,TableColumnRef>( maColumns, nIndex, nCount );
+ 
+         sal_Int32 nRows = getRowCountImpl();
+@@ -603,6 +611,11 @@ void TableModel::insertColumns( sal_Int32 nIndex, sal_Int32 nCount )
+         for( sal_Int32 nOffset = 0; nOffset < nCount; ++nOffset )
+         {
+             TableColumnRef xNewCol( new TableColumn( this, nIndex+nOffset ) );
++            if (bInheritColumn)
++            {
++                xNewCol->mnWidth = nInheritedWidth;
++                xNewCol->mbOptimalWidth = bInheritedOptimalWidth;
++            }
+             maColumns[nIndex+nOffset] = xNewCol;
+             aNewColumns[nOffset] = std::move(xNewCol);
+         }
+@@ -785,6 +798,14 @@ void TableModel::insertRows( sal_Int32 nIndex, sal_Int32 nCount )
+     try
+     {
+         TableModelNotifyGuard aGuard( this );
++        const bool bInheritRow = !maRows.empty();
++        const sal_Int32 nSourceRow = bInheritRow
++            ? std::min(std::max(nIndex, sal_Int32(0)), getRowCountImpl() - 1)
++            : 0;
++        const sal_Int32 nInheritedHeight
++            = bInheritRow ? maRows[nSourceRow]->mnHeight : 0;
++        const bool bInheritedOptimalHeight
++            = bInheritRow && maRows[nSourceRow]->mbOptimalHeight;
+ 
+         nIndex = insert_range<RowVector,RowVector::iterator,TableRowRef>( maRows, nIndex, nCount );
+ 
+@@ -793,6 +814,11 @@ void TableModel::insertRows( sal_Int32 nIndex, sal_Int32 nCount )
+         for( sal_Int32 nOffset = 0; nOffset < nCount; ++nOffset )
+         {
+             TableRowRef xNewRow( new TableRow( this, nIndex+nOffset, nColCount ) );
++            if (bInheritRow)
++            {
++                xNewRow->mnHeight = nInheritedHeight;
++                xNewRow->mbOptimalHeight = bInheritedOptimalHeight;
++            }
+             maRows[nIndex+nOffset] = xNewRow;
+             aNewRows[nOffset] = std::move(xNewRow);
+         }

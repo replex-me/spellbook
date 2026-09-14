@@ -1,8 +1,8 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 7f33e62d..fce81a44 100644
+index b68d6376e88d82acbafa0ffb592e04b71c55c89c..6b659497241dae2859a60b5c4457c901cb236d12 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -41,8 +41,11 @@
+@@ -41,10 +41,13 @@
  #include <editeng/editobj.hxx>
  #include <editeng/editview.hxx>
  #include <editeng/eeitem.hxx>
@@ -14,7 +14,9 @@ index 7f33e62d..fce81a44 100644
  #include <editeng/wghtitem.hxx>
 +#include <tools/UnitConversion.hxx>
  #include <Outliner.hxx>
-@@ -558,6 +560,86 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
+ #include <sfx2/dispatch.hxx>
+ #include <sfx2/request.hxx>
+@@ -560,6 +563,86 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
      CPPUNIT_ASSERT(bMoveProtect);
  }
  
@@ -102,7 +104,7 @@ index 7f33e62d..fce81a44 100644
  {
      createSdImpressDoc();
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index 5901982f..9b20b10d 100644
+index f7fc5ee10cf1c02d1adbabbaa42692a00f05e04b..46dfa16a87dfea1728e0e3583fe377d446011cda 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
 @@ -22,6 +22,7 @@
@@ -112,8 +114,8 @@ index 5901982f..9b20b10d 100644
 +#include <limits>
  #include <map>
  #include <optional>
- #include <set>
-@@ -1598,9 +1599,6 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
+ #include <string_view>
+@@ -1602,9 +1603,6 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
          u"TextAutoGrowHeight"_ustr,
          u"TextAutoGrowWidth"_ustr,
          u"TextWordWrap"_ustr,
@@ -123,7 +125,7 @@ index 5901982f..9b20b10d 100644
          u"Shadow"_ustr,
          u"ShadowColor"_ustr,
          u"ShadowTransparence"_ustr,
-@@ -1683,6 +1681,91 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
+@@ -1687,6 +1685,91 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
      rCtx.touch(pPage);
  }
  
@@ -215,7 +217,7 @@ index 5901982f..9b20b10d 100644
  void handleInsertImage(SlideCommandContext& rCtx, const std::string& rKey,
                         const boost::property_tree::ptree& rValue)
  {
-@@ -1999,6 +2082,7 @@ constexpr SlideCommand aSlideCommands[] = {
+@@ -2003,6 +2086,7 @@ constexpr SlideCommand aSlideCommands[] = {
      { "SetSlideIntent", false, false, &handleSetSlideIntent },
      { "SetNotes", false, false, &handleSetNotes },
      { "SetObjectProperties.", true, false, &handleSetObjectProperties },

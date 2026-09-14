@@ -1,8 +1,8 @@
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index e8fdfaa57..6c980f68f 100644
+index 2c3e334c4a7a783475c762cdcfaa4136619f7d20..88d4c9667f432fd9f73a6a3fb43cf35124a9f9ef 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -40,6 +40,8 @@
+@@ -42,6 +42,8 @@
  #include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
  #include <com/sun/star/drawing/XDrawPages.hpp>
  #include <com/sun/star/lang/XInitialization.hpp>
@@ -11,7 +11,7 @@ index e8fdfaa57..6c980f68f 100644
  #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
  #include <com/sun/star/ui/dialogs/XSLTFilterDialog.hpp>
  #include <com/sun/star/frame/XDispatchProvider.hpp>
-@@ -972,6 +974,68 @@ struct SlideCommandContext
+@@ -976,6 +978,68 @@ struct SlideCommandContext
      }
  };
  
@@ -80,7 +80,7 @@ index e8fdfaa57..6c980f68f 100644
  // Undo for a name or autolayout change. ModifyPageUndoAction snapshots the
  // page state on construction, so call this before applying the change.
  void lcl_AddModifyPageUndo(const SlideCommandContext& rCtx, SdPage* pPg,
-@@ -1334,6 +1398,28 @@ void handleChangeLayout(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -1338,6 +1402,28 @@ void handleChangeLayout(SlideCommandContext& rCtx, const std::string& rKey,
      rCtx.touch(pLayoutPage);
  }
  
@@ -109,7 +109,7 @@ index e8fdfaa57..6c980f68f 100644
  void handleRenameSlide(SlideCommandContext& rCtx, const std::string& /*rKey*/,
                         const boost::property_tree::ptree& rValue)
  {
-@@ -1407,6 +1453,123 @@ void handleSetNotes(SlideCommandContext& rCtx, const std::string& /*rKey*/,
+@@ -1425,6 +1511,123 @@ void handleSetNotes(SlideCommandContext& rCtx, const std::string& /*rKey*/,
          rCtx.mpDoc->GetSdPage(static_cast<sal_uInt16>(rCtx.mnActPageId), PageKind::Standard));
  }
  
@@ -233,7 +233,7 @@ index e8fdfaa57..6c980f68f 100644
  void handleInsertImage(SlideCommandContext& rCtx, const std::string& rKey,
                         const boost::property_tree::ptree& rValue)
  {
-@@ -1709,6 +1872,7 @@ constexpr SlideCommand aSlideCommands[] = {
+@@ -1727,6 +1930,7 @@ constexpr SlideCommand aSlideCommands[] = {
      { "DuplicateSlide", false, false, &handleDuplicateSlide },
      { "ChangeLayout", false, false, &handleChangeLayout },
      { "ChangeLayoutByName", false, false, &handleChangeLayout },
@@ -241,7 +241,7 @@ index e8fdfaa57..6c980f68f 100644
      { "RenameSlide", false, false, &handleRenameSlide },
      { "SetText.", true, false, &handleSetText },
      { "InsertImage.", true, false, &handleInsertImage },
-@@ -1720,6 +1884,7 @@ constexpr SlideCommand aSlideCommands[] = {
+@@ -1738,6 +1942,7 @@ constexpr SlideCommand aSlideCommands[] = {
      { "SetSlidePart", false, false, &handleSetSlidePart },
      { "SetSlideIntent", false, false, &handleSetSlideIntent },
      { "SetNotes", false, false, &handleSetNotes },

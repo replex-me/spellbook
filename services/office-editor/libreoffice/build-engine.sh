@@ -18,9 +18,9 @@ source_repository="$(node "$upstream_reader" get source.repository)"
 patch_level="$(node "$upstream_reader" get patchLevel)"
 expected_patch_series_sha256="$(node "$upstream_reader" get patchSeriesSha256)"
 actual_patch_series_sha256="$(node "$upstream_reader" patch-series-sha256)"
-source_candidate_ready="$(node "$upstream_reader" get sourceCandidateReady)"
-if [[ "$source_candidate_ready" != "true" ]]; then
-  echo "The Collabora patch bundle is still in incremental development; sourceCandidateReady must be true before a full image build." >&2
+source_patch_series_ready="$(node "$upstream_reader" get sourcePatchSeriesReady)"
+if [[ "$source_patch_series_ready" != "true" ]]; then
+  echo "The Collabora patch series has not passed exact clean-source admission; sourcePatchSeriesReady must be true before a full image build." >&2
   exit 1
 fi
 if [[ "$actual_patch_series_sha256" != "$expected_patch_series_sha256" ]]; then

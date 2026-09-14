@@ -8,7 +8,8 @@ Spellbook uses Collabora Online for the shared browser editor. Collabora embeds 
 - approved stock runtime image digest;
 - ordered patch files and their aggregate SHA-256;
 - patch level, focused native tests and full C++ test targets;
-- whether the source candidate is ready for the expensive integrated build.
+- whether the patch series is admitted to the expensive integrated build, and
+  whether the built source candidate has passed the native release boundary.
 
 The patches add bounded document commands and exact native Undo/Redo behavior. They do not expose raw UNO, macros, external processes or arbitrary file/network access to the AI. A patch is kept only while the pinned upstream lacks equivalent behavior.
 
@@ -30,13 +31,21 @@ node services/office-editor/libreoffice/audit-upgrade.mjs \
 
 The audit compares the source identity, the complete Impress command inventory and every patch byte. If upstream absorbed a fix, remove that patch only after its regression test passes against the new source. If a patch conflicts, rebase its intent in a new candidate; never weaken context or apply with fuzz.
 
-After all focused native tests pass in an incremental worktree, mark the source candidate ready and perform one integrated image build:
+After the rebased series applies exactly to the pinned clean source and its
+static source audit passes, mark `sourcePatchSeriesReady` true and perform one
+integrated image build:
 
 ```bash
 pnpm office:engine:build
 ```
 
-That build reapplies the hash-locked series to a clean source tree, builds the Online image and runs both declared C++ suites. It is intentionally not the patch-development loop. Browser command, Undo/Redo, failure rollback, save/reopen, OOXML change-budget, visual corpus and PowerPoint checks must all point to the same source commit, patch hash and image digest before `runtimeImage` and `runtimePatchLevel` are promoted.
+That build reapplies the hash-locked series to a clean source tree, builds the
+Online image and runs both declared C++ suites. Only after those native suites
+pass may `sourceCandidateReady` become true and the thin runtime wrapper be
+built. It is intentionally not the patch-development loop. Browser command,
+Undo/Redo, failure rollback, save/reopen, OOXML change-budget, visual corpus and
+PowerPoint checks must all point to the same source commit, patch hash and image
+digest before `runtimeImage` and `runtimePatchLevel` are promoted.
 
 Build the thin Spellbook editor image only from the approved runtime manifest:
 

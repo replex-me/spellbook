@@ -1,8 +1,8 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index f9888a0d6..7f5e4c3b2 100644
+index 775365d9ca402320924a269baa1662a528c52a87..6165e635b4276e18935577d9395f2fe2fd757e31 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -973,6 +973,58 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertSlideNotesMaste
+@@ -983,6 +983,58 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertSlideNotesMaste
      CPPUNIT_ASSERT_EQUAL(PageKind::Notes, pNotesMaster->GetPageKind());
  }
  
@@ -62,10 +62,10 @@ index f9888a0d6..7f5e4c3b2 100644
  {
      // ApplyTemplate gives a generated deck the bundled template's design. Every
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index 6c980f68f..7d091a2b3 100644
+index 9b90a997502e0f6c455e77c39051c283b3f79733..6034944e5bf63fb8f4e0d2efe785d5f7dec38872 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -1234,8 +1234,9 @@ void handleInsertMasterSlide(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -1237,8 +1237,9 @@ void handleInsertMasterSlide(SlideCommandContext& rCtx, const std::string& rKey,
  
      // It will move to the next slide.
      rCtx.mnNextPageId

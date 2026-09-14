@@ -1,5 +1,5 @@
 diff --git a/oox/source/drawingml/textcharacterproperties.cxx b/oox/source/drawingml/textcharacterproperties.cxx
-index 5257d75..fed5c5b 100644
+index 5257d759e73e41ba2dae31da9fc285cb7f0c04a2..fed5c5b1f1f28e6f1fa32a0209fd7051e7b8a635 100644
 --- a/oox/source/drawingml/textcharacterproperties.cxx
 +++ b/oox/source/drawingml/textcharacterproperties.cxx
 @@ -35,6 +35,8 @@
@@ -25,10 +25,10 @@ index 5257d75..fed5c5b 100644
      if( moBaseline.has_value() ) {
          rPropMap.setProperty( PROP_CharEscapement, sal_Int16(moBaseline.value_or( 0 ) / 1000));
 diff --git a/oox/source/export/drawingml.cxx b/oox/source/export/drawingml.cxx
-index 973ac88..0e0ff24 100644
+index 7cfd2204fe85387a77ba853b092f87e375f013a2..df34c1d8156a51721a10426f69163981c47d47aa 100644
 --- a/oox/source/export/drawingml.cxx
 +++ b/oox/source/export/drawingml.cxx
-@@ -2813,15 +2813,34 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
+@@ -2824,15 +2824,34 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
                      WriteSolidFill(COL_BLACK);
              }
  
@@ -70,7 +70,7 @@ index 973ac88..0e0ff24 100644
      // so make sure this code is only run when exporting to pptx, just in case
      if (GetDocumentType() == DOCUMENT_PPTX)
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 82f046a..b762324 100644
+index 3fda1dfd5c0e1f3e0aea46b7cc6bfc2071e48aeb..40ea6702e0c310d9ac9db9a240546a68495cacae 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
 @@ -21,6 +21,7 @@
@@ -89,7 +89,7 @@ index 82f046a..b762324 100644
  #include <com/sun/star/text/WritingMode2.hpp>
  #include <com/sun/star/view/XSelectionSupplier.hpp>
  
-@@ -687,6 +689,59 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
+@@ -689,6 +691,59 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
      CPPUNIT_ASSERT(aChanged == *pTextObject->GetOutlinerParaObject());
  }
  

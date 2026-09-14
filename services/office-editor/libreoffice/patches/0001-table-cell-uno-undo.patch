@@ -1,10 +1,10 @@
 diff --git a/svx/source/table/cell.cxx b/svx/source/table/cell.cxx
-index b1556e4b7..367e72315 100644
+index 716fd826eb5ab87c4dc9222b478156c6a6f56cb8..316163a1e39001df2c61f0d845c156d32649732f 100644
 --- a/svx/source/table/cell.cxx
 +++ b/svx/source/table/cell.cxx
-@@ -1688,6 +1688,10 @@ OUString SAL_CALL Cell::getString(  )
+@@ -1688,6 +1688,10 @@ OUString Cell::getString(  )
  
- void SAL_CALL Cell::setString( const OUString& aString )
+ void Cell::setString( const OUString& aString )
  {
 +    if (getString() == aString)
 +        return;
@@ -14,7 +14,7 @@ index b1556e4b7..367e72315 100644
      notifyModified();
  }
 diff --git a/svx/source/table/tableundo.cxx b/svx/source/table/tableundo.cxx
-index 27f0e7024..c02783ec9 100644
+index 4dfa902ea65fd71a8ee81c619073ab471b73089d..6f75b51a7c4eb580c3deda9ccaab4adf6e3aab0b 100644
 --- a/svx/source/table/tableundo.cxx
 +++ b/svx/source/table/tableundo.cxx
 @@ -115,10 +115,12 @@ void CellUndo::setDataToCell( const Data& rData )

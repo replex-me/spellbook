@@ -1,20 +1,23 @@
 diff --git a/sd/inc/sdpage.hxx b/sd/inc/sdpage.hxx
-index 2bc794524..d72505c0f 100644
+index e1f08367c914fe96e297ef6eb66fcc043e41e1e2..1830e942cc98fb296695013a67dc4c4a8ae95208 100644
 --- a/sd/inc/sdpage.hxx
 +++ b/sd/inc/sdpage.hxx
-@@ -192,5 +192,6 @@ public:
-     void            InsertPresObj(SdrObject* pObj, PresObjKind eKind );
+@@ -214,7 +214,8 @@ public:
+         belongs to no page yet, so the caller decides how it takes the old object's place. */
+     rtl::Reference<SdrObject> MakePresObjPlaceholder(SdrObject& rObj);
  
 -    SD_DLLPUBLIC void SetAutoLayout(AutoLayout eLayout, bool bInit=false, bool bCreate=false);
 +    SD_DLLPUBLIC void SetAutoLayout(AutoLayout eLayout, bool bInit=false, bool bCreate=false,
 +                                    bool bPreserveMaster=false);
      AutoLayout      GetAutoLayout() const { return meAutoLayout; }
      void            CreateTitleAndLayout(bool bInit=false, bool bCreate=false);
+     SdrObject*      InsertAutoLayoutShape(SdrObject* pObj, PresObjKind eObjKind, bool bVertical, const ::tools::Rectangle& rRect, const OUString& rCustomPrompt, bool bInit);
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 7500d2b4f..19570fb83 100644
+index 6b659497241dae2859a60b5c4457c901cb236d12..240ad49fbaf199120b6fa0ce495ee98cc6c5197c 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -2835,4 +2835,99 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf126605)
+@@ -2836,6 +2836,101 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf126605)
+     CPPUNIT_ASSERT_EQUAL(text::WritingMode2::LR_TB, nWritingMode);
  }
  
 +CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTypedLayoutPreservesImportedMaster)
@@ -114,18 +117,22 @@ index 7500d2b4f..19570fb83 100644
 +
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTdf167029PasteKeepsOutlineLevel)
  {
+     // Copy a level-1 (depth 0) list paragraph and paste it into a level-2
 diff --git a/sd/source/core/sdpage.cxx b/sd/source/core/sdpage.cxx
-index f65379231..7a9333fe6 100644
+index 6d82443f3753a6f11f3e82413f59660fd5fba600..7afd6abf23e9bbafe9b78338dba2abef5f1ddd14 100644
 --- a/sd/source/core/sdpage.cxx
 +++ b/sd/source/core/sdpage.cxx
-@@ -1725,5 +1725,5 @@ static void findAutoLayoutShapesImpl( SdPage& rPage, const LayoutDescriptor& rDe
+@@ -1728,7 +1728,7 @@ static void findAutoLayoutShapesImpl( SdPage& rPage, const LayoutDescriptor& rDe
+     }
  }
  
 -void SdPage::SetAutoLayout(AutoLayout eLayout, bool bInit, bool bCreate )
 +void SdPage::SetAutoLayout(AutoLayout eLayout, bool bInit, bool bCreate, bool bPreserveMaster)
  {
      sd::ScopeLockGuard aGuard( maLockAutoLayoutArrangement );
-@@ -1736,6 +1736,12 @@ void SdPage::SetAutoLayout(AutoLayout eLayout, bool bInit, bool bCreate )
+ 
+@@ -1739,8 +1739,14 @@ void SdPage::SetAutoLayout(AutoLayout eLayout, bool bInit, bool bCreate )
+ 
      meAutoLayout = eLayout;
  
 -    // if needed, creates and initialises the presentation shapes on this slides master page
@@ -140,17 +147,21 @@ index f65379231..7a9333fe6 100644
 +        CreateTitleAndLayout(bInit, bCreate);
  
      if((meAutoLayout == AUTOLAYOUT_NONE && maPresentationShapeList.isEmpty()) || mbMaster)
+     {
 diff --git a/sd/source/ui/inc/unmodpg.hxx b/sd/source/ui/inc/unmodpg.hxx
-index 34af45249..3a1aa33da 100644
+index 34af452499c52825983c9eb6551adea155bca055..3a1aa33dadbf146c5b31145aa0f55ab7b96285d8 100644
 --- a/sd/source/ui/inc/unmodpg.hxx
 +++ b/sd/source/ui/inc/unmodpg.hxx
-@@ -41,4 +41,5 @@ class ModifyPageUndoAction final : public SdUndoAction
+@@ -40,6 +40,7 @@ class ModifyPageUndoAction final : public SdUndoAction
+     bool        mbNewBckgrndVisible;
      bool        mbOldBckgrndObjsVisible;
      bool        mbNewBckgrndObjsVisible;
 +    bool        mbPreserveMaster;
  
  public:
-@@ -49,5 +50,6 @@ public:
+     ModifyPageUndoAction(
+@@ -48,7 +49,8 @@ public:
+         const OUString&         aTheNewName,
          AutoLayout              eTheNewAutoLayout,
          bool                    bTheNewBckgrndVisible,
 -        bool                    bTheNewBckgrndObjsVisible);
@@ -158,11 +169,13 @@ index 34af45249..3a1aa33da 100644
 +        bool                    bPreserveMaster = false);
  
      virtual ~ModifyPageUndoAction() override;
+     virtual void Undo() override;
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index 9b20b10d9..e0e707081 100644
+index 46dfa16a87dfea1728e0e3583fe377d446011cda..451e32a576beb253722668bd54dd7b834882c28d 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -1041,5 +1041,6 @@ private:
+@@ -1044,7 +1044,8 @@ private:
+ // Undo for a name or autolayout change. ModifyPageUndoAction snapshots the
  // page state on construction, so call this before applying the change.
  void lcl_AddModifyPageUndo(const SlideCommandContext& rCtx, SdPage* pPg,
 -                           const OUString& rNewName, AutoLayout eNewLayout)
@@ -170,14 +183,18 @@ index 9b20b10d9..e0e707081 100644
 +                           bool bPreserveMaster = false)
  {
      if (!rCtx.mbUndo || !pPg)
-@@ -1051,5 +1052,5 @@ void lcl_AddModifyPageUndo(const SlideCommandContext& rCtx, SdPage* pPg,
+         return;
+@@ -1054,7 +1055,7 @@ void lcl_AddModifyPageUndo(const SlideCommandContext& rCtx, SdPage* pPg,
+     SdrLayerIDSet aVisibleLayers = pPg->TRG_GetMasterPageVisibleLayers();
      rCtx.mpUndoManager->AddUndoAction(std::make_unique<ModifyPageUndoAction>(
          *rCtx.mpDoc, pPg, rNewName, eNewLayout, aVisibleLayers.IsSet(aBg),
 -        aVisibleLayers.IsSet(aBgObj)));
 +        aVisibleLayers.IsSet(aBgObj), bPreserveMaster));
  }
  
-@@ -1395,6 +1396,9 @@ void handleChangeLayout(SlideCommandContext& rCtx, const std::string& rKey,
+ void handleJumpToSlide(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -1398,8 +1399,11 @@ void handleChangeLayout(SlideCommandContext& rCtx, const std::string& rKey,
+ 
      // Todo warning:  ... if (nLayoutId >= ???)
      SdPage* pLayoutPage = rCtx.mpDoc->GetSdPage(rCtx.mnActPageId, PageKind::Standard);
 -    lcl_AddModifyPageUndo(rCtx, pLayoutPage, pLayoutPage->GetName(), nLayoutId);
@@ -189,11 +206,13 @@ index 9b20b10d9..e0e707081 100644
 +    pLayoutPage->SetAutoLayout(nLayoutId, true, false, true);
      rCtx.touch(pLayoutPage);
  }
+ 
 diff --git a/sd/source/ui/view/unmodpg.cxx b/sd/source/ui/view/unmodpg.cxx
-index 48695f1fb..bceb524c8 100644
+index 48695f1fbbbf00429815a68ac5a8da36c96553db..bceb524c82105885fbdb8ff6cff00aacd68cb053 100644
 --- a/sd/source/ui/view/unmodpg.cxx
 +++ b/sd/source/ui/view/unmodpg.cxx
-@@ -50,5 +50,6 @@ ModifyPageUndoAction::ModifyPageUndoAction(
+@@ -49,7 +49,8 @@ ModifyPageUndoAction::ModifyPageUndoAction(
+     const OUString& aTheNewName,
      AutoLayout  eTheNewAutoLayout,
      bool bTheNewBckgrndVisible,
 -    bool bTheNewBckgrndObjsVisible)
@@ -201,13 +220,17 @@ index 48695f1fb..bceb524c8 100644
 +    bool bPreserveMaster)
  :   SdUndoAction(rTheDoc)
  {
-@@ -60,4 +61,5 @@ ModifyPageUndoAction::ModifyPageUndoAction(
+     DBG_ASSERT(pThePage, "Undo without a page???");
+@@ -59,6 +60,7 @@ ModifyPageUndoAction::ModifyPageUndoAction(
+     meNewAutoLayout         = eTheNewAutoLayout;
      mbNewBckgrndVisible     = bTheNewBckgrndVisible;
      mbNewBckgrndObjsVisible = bTheNewBckgrndObjsVisible;
 +    mbPreserveMaster        = bPreserveMaster;
  
      meOldAutoLayout         = mpPage->GetAutoLayout();
-@@ -100,5 +102,8 @@ void ModifyPageUndoAction::Undo()
+ 
+@@ -99,7 +101,10 @@ void ModifyPageUndoAction::Undo()
+                 pView->UnmarkAll();
          });
  
 -    mpPage->SetAutoLayout( meOldAutoLayout );
@@ -217,3 +240,4 @@ index 48695f1fb..bceb524c8 100644
 +    mpPage->SetAutoLayout(meOldAutoLayout, false, false, mbPreserveMaster);
  
      if (!mpPage->IsMasterPage())
+     {

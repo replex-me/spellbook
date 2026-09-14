@@ -1,8 +1,26 @@
+diff --git a/sd/CppunitTest_sd_misc_tests.mk b/sd/CppunitTest_sd_misc_tests.mk
+index 2c943d9d661517051cccea3f35790cfe9a7ff518..261c65d5c03beb6c7449bef229c74f10498409b8 100644
+--- a/sd/CppunitTest_sd_misc_tests.mk
++++ b/sd/CppunitTest_sd_misc_tests.mk
+@@ -74,6 +74,13 @@ $(eval $(call gb_CppunitTest_use_custom_headers,sd_misc_tests,\
+ 	officecfg/registry \
+ ))
+ 
++$(eval $(call gb_CppunitTest_use_uiconfigs,sd_misc_tests,\
++	modules/simpress \
++	sfx \
++	svt \
++	svx \
++))
++
+ $(eval $(call gb_CppunitTest_use_configuration,sd_misc_tests))
+ 
+ $(eval $(call gb_CppunitTest_add_arguments,sd_misc_tests, \
 diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
-index f6b074d..705c68a 100644
+index e16b8166ca40770a0bad25377ff554586c1d6592..8399615407ee354088525b33cd372eb30b118490 100644
 --- a/sd/qa/unit/misc-tests.cxx
 +++ b/sd/qa/unit/misc-tests.cxx
-@@ -82,6 +82,7 @@ public:
+@@ -90,6 +90,7 @@ public:
      void testTdf99396();
      void testTableObjectUndoTest();
      void testApiTableCellTextUndo();
@@ -10,7 +28,7 @@ index f6b074d..705c68a 100644
      void testApiTableInsertInheritsDimensions();
      void testSubtitleWithParaAnimationSave();
      void testFillColor();
-@@ -114,6 +115,7 @@ public:
+@@ -138,6 +139,7 @@ public:
      CPPUNIT_TEST(testTdf99396);
      CPPUNIT_TEST(testTableObjectUndoTest);
      CPPUNIT_TEST(testApiTableCellTextUndo);
@@ -18,7 +36,7 @@ index f6b074d..705c68a 100644
      CPPUNIT_TEST(testApiTableInsertInheritsDimensions);
      CPPUNIT_TEST(testSubtitleWithParaAnimationSave);
      CPPUNIT_TEST(testFillColor);
-@@ -322,6 +324,94 @@ void SdMiscTest::testApiTableCellTextUndo()
+@@ -357,6 +359,94 @@ void SdMiscTest::testApiTableCellTextUndo()
                     == *pTableObject->getText(0)->GetOutlinerParaObject());
  }
  
@@ -113,28 +131,11 @@ index f6b074d..705c68a 100644
  void SdMiscTest::testApiTableInsertInheritsDimensions()
  {
      createSdImpressDoc("tdf99396.odp");
-diff --git a/sd/CppunitTest_sd_misc_tests.mk b/sd/CppunitTest_sd_misc_tests.mk
---- a/sd/CppunitTest_sd_misc_tests.mk
-+++ b/sd/CppunitTest_sd_misc_tests.mk
-@@ -73,6 +73,13 @@
- $(eval $(call gb_CppunitTest_use_custom_headers,sd_misc_tests,\
- 	officecfg/registry \
- ))
- 
-+$(eval $(call gb_CppunitTest_use_uiconfigs,sd_misc_tests,\
-+	modules/simpress \
-+	sfx \
-+	svt \
-+	svx \
-+))
-+
- $(eval $(call gb_CppunitTest_use_configuration,sd_misc_tests))
- 
 diff --git a/svx/source/table/cell.cxx b/svx/source/table/cell.cxx
-index 367e723..c53befb 100644
+index 316163a1e39001df2c61f0d845c156d32649732f..38b78c7458a2bccfb35796d8becbbec2dc51a9f7 100644
 --- a/svx/source/table/cell.cxx
 +++ b/svx/source/table/cell.cxx
-@@ -984,6 +984,14 @@ void SAL_CALL Cell::setPropertyValue( const OUString& rPropertyName, const Any&
+@@ -984,6 +984,14 @@ void Cell::setPropertyValue( const OUString& rPropertyName, const Any& rValue )
  
      setPropertyValueImpl(rPropertyName, rValue, aSet);
  

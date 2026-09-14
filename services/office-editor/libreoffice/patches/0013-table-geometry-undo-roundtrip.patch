@@ -1,8 +1,8 @@
 diff --git a/include/svx/svdotable.hxx b/include/svx/svdotable.hxx
-index 8b1ea1728..4de361319 100644
+index a54c17f1e93c9a1f82f27a05caa159a46833eb8e..8c531725103b71508386739885efed3b59c27a1c 100644
 --- a/include/svx/svdotable.hxx
 +++ b/include/svx/svdotable.hxx
-@@ -258,6 +258,10 @@ public:
+@@ -259,6 +259,10 @@ public:
  
      void LayoutTableHeight(tools::Rectangle& rArea);
  
@@ -14,17 +14,18 @@ index 8b1ea1728..4de361319 100644
  
      virtual void dumpAsXml(xmlTextWriterPtr pWriter) const override;
 diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
-index cf2545f5e..d6a0eb175 100644
+index bbae46344a3ccb09abc47d7418a2e643085f11e1..e16b8166ca40770a0bad25377ff554586c1d6592 100644
 --- a/sd/qa/unit/misc-tests.cxx
 +++ b/sd/qa/unit/misc-tests.cxx
-@@ -18,5 +18,6 @@
+@@ -19,6 +19,7 @@
+ #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
  #include <com/sun/star/drawing/XDrawPages.hpp>
  #include <com/sun/star/drawing/XDrawPage.hpp>
 +#include <com/sun/star/drawing/XShape.hpp>
  #include <com/sun/star/drawing/XShapes.hpp>
  #include <com/sun/star/graphic/XGraphic.hpp>
  #include <com/sun/star/beans/XPropertySet.hpp>
-@@ -352,6 +353,40 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+@@ -386,6 +387,40 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
      xSourceColumn->getPropertyValue(u"Width"_ustr) >>= nExpectedWidth;
      auto* pUndoManager = pXImpressDocument->GetDocShell()->GetUndoManager();
      CPPUNIT_ASSERT_EQUAL(size_t(0), pUndoManager->GetUndoActionCount());
@@ -65,7 +66,7 @@ index cf2545f5e..d6a0eb175 100644
  
      xRows->insertByIndex(0, 1);
      uno::Reference<beans::XPropertySet> xInsertedRow(xRows->getByIndex(0),
-@@ -361,14 +396,35 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+@@ -395,14 +430,35 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
      CPPUNIT_ASSERT_EQUAL(nExpectedHeight, nInsertedHeight);
      CPPUNIT_ASSERT_EQUAL(nOriginalRows + 1, xRows->getCount());
      CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
@@ -101,7 +102,7 @@ index cf2545f5e..d6a0eb175 100644
  
      xColumns->insertByIndex(0, 1);
      uno::Reference<beans::XPropertySet> xInsertedColumn(xColumns->getByIndex(0),
-@@ -377,14 +433,66 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+@@ -411,14 +467,66 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
      xInsertedColumn->getPropertyValue(u"Width"_ustr) >>= nInsertedWidth;
      CPPUNIT_ASSERT_EQUAL(nExpectedWidth, nInsertedWidth);
      CPPUNIT_ASSERT_EQUAL(nOriginalColumns + 1, xColumns->getCount());
@@ -170,10 +171,10 @@ index cf2545f5e..d6a0eb175 100644
  
  void SdMiscTest::testSubtitleWithParaAnimationSave()
 diff --git a/svx/source/table/svdotable.cxx b/svx/source/table/svdotable.cxx
-index 862f86181..126534f59 100644
+index 29d492eb765dec449073533e8d74f6e9bb6d02c1..d4450c58dee5bb9ca2883bda59785a2260736350 100644
 --- a/svx/source/table/svdotable.cxx
 +++ b/svx/source/table/svdotable.cxx
-@@ -2386,6 +2386,12 @@ void SdrTableObj::RestoreGeoData(const SdrObjGeoData& rGeo)
+@@ -2396,6 +2396,12 @@ void SdrTableObj::RestoreGeoData(const SdrObjGeoData& rGeo)
  
      SdrTextObj::RestoreGeoData (rGeo);
  
@@ -186,7 +187,7 @@ index 862f86181..126534f59 100644
      if( mpImpl.is() )
      {
          auto aRectangle = getRectangle();
-@@ -2415,6 +2421,18 @@ void SdrTableObj::LayoutTableHeight(tools::Rectangle& rArea)
+@@ -2423,6 +2429,18 @@ void SdrTableObj::LayoutTableHeight(tools::Rectangle& rArea)
      }
  }
  
@@ -206,10 +207,10 @@ index 862f86181..126534f59 100644
  {
      if( mpImpl.is() && mpImpl->mpLayouter )
 diff --git a/svx/source/table/tablecolumn.cxx b/svx/source/table/tablecolumn.cxx
-index 965405ebf..2374beb68 100644
+index d17d0a6359f58bc8a45d90121003e4d7be590e32..5c3bd3e86fe0d6f343309d1fea664027f2ae986f 100644
 --- a/svx/source/table/tablecolumn.cxx
 +++ b/svx/source/table/tablecolumn.cxx
-@@ -218,6 +218,7 @@ void SAL_CALL TableColumn::setFastPropertyValue( sal_Int32 nHandle, const Any& a
+@@ -218,6 +218,7 @@ void TableColumn::setFastPropertyValue( sal_Int32 nHandle, const Any& aValue )
              rModel.AddUndo( std::move(pUndo) );
          }
          mxTableModel->setModified(true);
@@ -218,7 +219,7 @@ index 965405ebf..2374beb68 100644
  }
  
 diff --git a/svx/source/table/tablemodel.cxx b/svx/source/table/tablemodel.cxx
-index 60dd4cb54..187ea6263 100644
+index 800926e809656343cd817f18989389cb0c7dca99..665b9d15f50c82265b96fe5124ba0f14da967931 100644
 --- a/svx/source/table/tablemodel.cxx
 +++ b/svx/source/table/tablemodel.cxx
 @@ -198,71 +198,83 @@ uno::Reference<css::table::XTable> TableModel::getTable()
@@ -409,10 +410,10 @@ index 60dd4cb54..187ea6263 100644
  
  
 diff --git a/svx/source/table/tablerow.cxx b/svx/source/table/tablerow.cxx
-index a093f96a5..5f90115bf 100644
+index ed73ed38b7fb78163731deff110af773748ba546..cb98498cff5b872ee61652d4164c5cb7c247306c 100644
 --- a/svx/source/table/tablerow.cxx
 +++ b/svx/source/table/tablerow.cxx
-@@ -289,6 +289,7 @@ void SAL_CALL TableRow::setFastPropertyValue( sal_Int32 nHandle, const Any& aVal
+@@ -289,6 +289,7 @@ void TableRow::setFastPropertyValue( sal_Int32 nHandle, const Any& aValue )
              rModel.AddUndo( std::move(pUndo) );
          }
          mxTableModel->setModified(true);
@@ -421,7 +422,7 @@ index a093f96a5..5f90115bf 100644
  }
  
 diff --git a/svx/source/table/tableundo.cxx b/svx/source/table/tableundo.cxx
-index 6f75b51a7..dd8819d7c 100644
+index 6f75b51a7c4eb580c3deda9ccaab4adf6e3aab0b..dd8819d7c02042961239886cf6d54b9830e59a50 100644
 --- a/svx/source/table/tableundo.cxx
 +++ b/svx/source/table/tableundo.cxx
 @@ -387,6 +387,7 @@ void TableColumnUndo::setData( const Data& rData )

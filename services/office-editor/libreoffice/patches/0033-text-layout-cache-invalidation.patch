@@ -1,8 +1,8 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
+index be2252dfeadeeee1f08d3432e786527607d18d2e..505925d36abe67e8abe63cebb34682706a286ede 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -10,8 +10,10 @@
- #include "sdmodeltestbase.hxx"
+@@ -11,7 +11,9 @@
  
  #include <config_folders.h>
  
@@ -12,7 +12,7 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
  
  #include <COKit/COKit.hxx>
  
-@@ -19,6 +19,7 @@
+@@ -23,6 +25,7 @@
  #include <com/sun/star/animations/XTimeContainer.hpp>
  #include <com/sun/star/animations/XAnimationNodeSupplier.hpp>
  #include <com/sun/star/awt/FontSlant.hpp>
@@ -20,7 +20,8 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
  #include <com/sun/star/awt/FontWeight.hpp>
  #include <com/sun/star/container/XEnumeration.hpp>
  #include <com/sun/star/container/XEnumerationAccess.hpp>
-@@ -90,5 +91,9 @@
+@@ -94,6 +97,10 @@
+ #include <controller/SlsPageSelector.hxx>
  #include <svl/stritem.hxx>
  #include <undo/undomanager.hxx>
 +#include <unotools/tempfile.hxx>
@@ -30,7 +31,7 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
  #include <vcl/scheduler.hxx>
  #include <docmodel/uno/UnoComplexColor.hxx>
  #include <comphelper/propertyvalue.hxx>
-@@ -728,6 +733,115 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRe
+@@ -706,6 +713,115 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
      CPPUNIT_ASSERT(aChanged == *pTextObject->GetOutlinerParaObject());
  }
  
@@ -147,9 +148,10 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
  {
      createSdImpressDoc();
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
+index 0ecfec67d98c9d78da3f4ec473fd0ae0462e7a6b..282f7f0042088c317415cd98a08d677c4824da3a 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -2038,6 +2038,10 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -2044,6 +2044,10 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
      for (sal_Int32 nParagraph = 0; nParagraph < pOutliner->GetParagraphCount(); ++nParagraph)
          pOutliner->SetCharAttribs(nParagraph, aTextAttributes);
      pTextObject->SetOutlinerParaObject(pOutliner->CreateParaObject());
@@ -161,6 +163,7 @@ diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
      // shape after the complete internal mutation so browser-side observation
      // reloads the new portions immediately instead of waiting for save/reopen.
 diff --git a/svx/source/svdraw/svdundo.cxx b/svx/source/svdraw/svdundo.cxx
+index bfba8422981590358349ecc532a3bd0cd8c19121..349153d3c5a52891bef6390d1f6d86690f807305 100644
 --- a/svx/source/svdraw/svdundo.cxx
 +++ b/svx/source/svdraw/svdundo.cxx
 @@ -25,6 +25,7 @@
@@ -171,7 +174,7 @@ diff --git a/svx/source/svdraw/svdundo.cxx b/svx/source/svdraw/svdundo.cxx
  #include <svx/svdview.hxx>
  #include <svx/xbtmpit.hxx>
  #include <svx/xfillit0.hxx>
-@@ -1143,6 +1144,9 @@ void SdrUndoObjSetText::Undo()
+@@ -1149,6 +1150,9 @@ void SdrUndoObjSetText::Undo()
      {
          // copy text for Undo, because the original now belongs to SetOutlinerParaObject()
          pTarget->NbcSetOutlinerParaObjectForText(m_pOldText, pText);
@@ -181,7 +184,7 @@ diff --git a/svx/source/svdraw/svdundo.cxx b/svx/source/svdraw/svdundo.cxx
      }
  
      pTarget->SetEmptyPresObj(m_bEmptyPresObj);
-@@ -1176,6 +1180,9 @@ void SdrUndoObjSetText::Redo()
+@@ -1182,6 +1186,9 @@ void SdrUndoObjSetText::Redo()
      {
          // copy text for Undo, because the original now belongs to SetOutlinerParaObject()
          pTarget->NbcSetOutlinerParaObjectForText( m_pNewText, pText );

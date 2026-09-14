@@ -1,7 +1,9 @@
 diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
+index 8399615407ee354088525b33cd372eb30b118490..23a954c811af8b23b8adc6a36e1eb569ba2f379e 100644
 --- a/sd/qa/unit/misc-tests.cxx
 +++ b/sd/qa/unit/misc-tests.cxx
-@@ -453,4 +453,7 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+@@ -485,6 +485,9 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+         CPPUNIT_ASSERT_EQUAL(rExpected.getOpenWidth(), rActual.getOpenWidth());
          CPPUNIT_ASSERT_EQUAL(rExpected.getOpenHeight(), rActual.getOpenHeight());
      };
 +    sal_Int32 nExpectedModelToUnoWidthDelta = 0;
@@ -9,7 +11,8 @@ diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
 +    bool bCapturedModelToUnoDelta = false;
      const auto assertUnoSizeMatchesTableModel = [&]() {
          sal_Int32 nRowHeightSum = 0;
-@@ -473,7 +476,17 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+         for (sal_Int32 nRow = 0; nRow < xRows->getCount(); ++nRow)
+@@ -507,8 +510,18 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
          uno::Reference<drawing::XShape> xTableShape = pTableObject->getUnoShape();
          CPPUNIT_ASSERT(xTableShape.is());
          const awt::Size aUnoSize = xTableShape->getSize();
@@ -29,7 +32,8 @@ diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
 +        CPPUNIT_ASSERT_EQUAL(nExpectedModelToUnoHeightDelta, nCurrentHeightDelta);
      };
      assertUnoSizeMatchesTableModel();
-@@ -480,13 +492,19 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+ 
+@@ -517,13 +530,19 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
                                                       uno::UNO_QUERY_THROW);
      sal_Int32 nInsertedHeight = 0;
      xInsertedRow->getPropertyValue(u"Height"_ustr) >>= nInsertedHeight;
@@ -51,7 +55,8 @@ diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
                           aInsertedRowRect.getOpenHeight());
      pUndoManager->Undo();
      CPPUNIT_ASSERT_EQUAL(nOriginalRows, xRows->getCount());
-@@ -493,6 +511,6 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+@@ -535,7 +554,7 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+     assertUnoSizeMatchesTableModel();
      xInsertedRow.set(xRows->getByIndex(0), uno::UNO_QUERY_THROW);
      xInsertedRow->getPropertyValue(u"Height"_ustr) >>= nInsertedHeight;
 -    CPPUNIT_ASSERT_EQUAL(nExpectedHeight, nInsertedHeight);
@@ -59,7 +64,7 @@ diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
      xRows->removeByIndex(0, 1);
      CPPUNIT_ASSERT_EQUAL(nOriginalRows, xRows->getCount());
      assertSameUnoGeometry(aOriginalRect, pTableObject->GetLogicRect());
-@@ -514,12 +532,14 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+@@ -555,12 +574,14 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
                                                          uno::UNO_QUERY_THROW);
      sal_Int32 nInsertedWidth = 0;
      xInsertedColumn->getPropertyValue(u"Width"_ustr) >>= nInsertedWidth;
@@ -76,7 +81,8 @@ diff --git a/sd/qa/unit/misc-tests.cxx b/sd/qa/unit/misc-tests.cxx
                           aInsertedColumnRect.getOpenWidth());
      CPPUNIT_ASSERT_EQUAL(aOriginalRect.getOpenHeight(), aInsertedColumnRect.getOpenHeight());
      pUndoManager->Undo();
-@@ -532,6 +552,6 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+@@ -573,7 +594,7 @@ void SdMiscTest::testApiTableInsertInheritsDimensions()
+     assertUnoSizeMatchesTableModel();
      xInsertedColumn.set(xColumns->getByIndex(0), uno::UNO_QUERY_THROW);
      xInsertedColumn->getPropertyValue(u"Width"_ustr) >>= nInsertedWidth;
 -    CPPUNIT_ASSERT_EQUAL(nExpectedWidth, nInsertedWidth);

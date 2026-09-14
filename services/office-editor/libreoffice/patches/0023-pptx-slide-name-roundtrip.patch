@@ -1,8 +1,9 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 7f5e4c3b2..8a6f5d4c3 100644
+index 6165e635b4276e18935577d9395f2fe2fd757e31..3fda1dfd5c0e1f3e0aea46b7cc6bfc2071e48aeb 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -3860,5 +3860,12 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testRenameSlideUndoRestoresUnnamedState)
+@@ -3859,6 +3859,13 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testRenameSlideUndoRestoresUnnamedState)
+     CPPUNIT_ASSERT(pPage->GetRealName().isEmpty());
      pImpressDocument->GetDocShell()->GetUndoManager()->Redo();
      CPPUNIT_ASSERT_EQUAL(u"Custom slide name"_ustr, pPage->GetRealName());
 +
@@ -16,10 +17,10 @@ index 7f5e4c3b2..8a6f5d4c3 100644
  
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTransformSlideVisibilityUndoRedo)
 diff --git a/sd/source/filter/eppt/pptx-epptooxml.cxx b/sd/source/filter/eppt/pptx-epptooxml.cxx
-index 123456789..987654321 100644
+index 9a68d97012f45c11b31529f9203f66436e0d2155..8088094401e4a433da680d2b84a9d9e3663d3c9d 100644
 --- a/sd/source/filter/eppt/pptx-epptooxml.cxx
 +++ b/sd/source/filter/eppt/pptx-epptooxml.cxx
-@@ -1864,7 +1864,14 @@ void PowerPointExport::ImplWriteSlide(sal_uInt32 nPageNum, sal_uInt32 nMasterNum
+@@ -2301,7 +2301,14 @@ void PowerPointExport::ImplWriteSlide(sal_uInt32 nPageNum, sal_uInt32 nMasterNum
  
      pFS->startElementNS(XML_p, XML_sld, pAttributes);
  

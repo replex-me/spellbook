@@ -1,8 +1,8 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index f9a88ea14..f9888a0d6 100644
+index 292998729491d9ff08dba88db4e9a9ab2d5464b3..308ea3a7095388e63149cd8dddfff4fd20ff5d7b 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -399,6 +399,162 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureUndo)
+@@ -401,6 +401,162 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureUndo)
      CPPUNIT_ASSERT_EQUAL(u"Generated title"_ustr, getSlide0Title());
  }
  
@@ -165,7 +165,7 @@ index f9a88ea14..f9888a0d6 100644
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertSlideNotesMaster)
  {
      // An inserted slide's notes page must keep a notes master. If it instead
-@@ -3063,6 +3219,10 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPageFillColor)
+@@ -3064,6 +3220,10 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPageFillColor)
      createSdImpressDoc("tdf126197.odp");
      auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
      sd::ViewShell* pViewShell = pImpressDocument->GetDocShell()->GetViewShell();
@@ -176,7 +176,7 @@ index f9a88ea14..f9888a0d6 100644
  
      // Set FillPageColor
  
-@@ -3071,7 +3231,6 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPageFillColor)
+@@ -3072,7 +3232,6 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPageFillColor)
      };
      dispatchCommand(mxComponent, u".uno:FillPageColor"_ustr, aPropertyValues);
  
@@ -184,7 +184,7 @@ index f9a88ea14..f9888a0d6 100644
      const SfxItemSet& rPageAttr = pPage->getSdrPageProperties().GetItemSet();
  
      const XFillStyleItem* pFillStyle = rPageAttr.GetItem(XATTR_FILLSTYLE);
-@@ -3080,6 +3239,18 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPageFillColor)
+@@ -3081,6 +3240,18 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPageFillColor)
  
      Color aColor = rPageAttr.GetItem(XATTR_FILLCOLOR)->GetColorValue();
      CPPUNIT_ASSERT_EQUAL(COL_LIGHTRED, aColor);

@@ -1,15 +1,15 @@
 {
   "version": "1.0.0",
-  "reviewedAt": "2026-09-13",
+  "reviewedAt": "2026-09-14",
   "purpose": "Route the complete raw Impress command inventory into product-level families and track verified typed operations. This is not yet a command-by-command support classification; raw UNO commands are evidence inputs, not an AI API.",
   "engineBaseline": {
-    "product": "Collabora Online cp-26.04.3-3 / stock CODE 26.04.3.2.1",
+    "product": "Collabora Online cp-26.04.4-1 source / stock CODE 26.04.3.2.1 runtime",
     "sourceRepository": "https://github.com/CollaboraOnline/online.mirror",
-    "sourceRef": "cp-26.04.3-3",
-    "sourceCommit": "7ddebab0ef71e249941ff21d2c8e4fbefa474499",
+    "sourceRef": "cp-26.04.4-1",
+    "sourceCommit": "292bae6e2ee1d8749040b258cd7bf415cf6241b4",
     "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
-    "observedUniqueUiUnoCommands": 804,
-    "observedUiUnoCommandsSha256": "cafedc6b8c621afbb8399d76fc498c1e86273c2c290bb914e41298df0b203cd1",
+    "observedUniqueUiUnoCommands": 725,
+    "observedUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
     "inventoryScope": [
       "engine/sd/uiconfig/simpress",
       "browser/src/control/Control.NotebookbarImpress.js"

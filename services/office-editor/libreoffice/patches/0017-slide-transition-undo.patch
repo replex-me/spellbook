@@ -1,8 +1,8 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index d34900d..e041b79 100644
+index 6b72ce53be401f1ee35da6b788288d86f8b6953a..42055ee33ac15299b2b3b30b92291c4ec7c983bf 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -702,6 +702,62 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureGraphicCropUndoRedo)
+@@ -704,6 +704,62 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureGraphicCropUndoRedo)
      CPPUNIT_ASSERT_EQUAL(aChanged.Bottom, aRedone.Bottom);
  }
  
@@ -66,18 +66,18 @@ index d34900d..e041b79 100644
  {
      createSdImpressDoc();
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index 5a45215..59db7cd 100644
+index 6e7c4a0fa36a935cca73104706f71691e28155a4..4eb2f4943ecba0038fc69e5a49a7820e73339ec7 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -32,6 +32,7 @@
- 
+@@ -34,6 +34,7 @@
  #include <osl/file.hxx>
  #include <rtl/bootstrap.hxx>
+ #include <rtl/character.hxx>
 +#include <rtl/math.hxx>
  
  #include <avmedia/mediaplayer.hxx>
  
-@@ -209,6 +210,7 @@
+@@ -212,6 +213,7 @@
  #include <stlsheet.hxx>
  #include <undolayer.hxx>
  #include <unmodpg.hxx>
@@ -85,7 +85,7 @@ index 5a45215..59db7cd 100644
  #include <sfx2/sidebar/Sidebar.hxx>
  #include <sfx2/classificationhelper.hxx>
  #include <sdmod.hxx>
-@@ -1821,6 +1823,47 @@ void handleSetGraphicCrop(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -1829,6 +1831,47 @@ void handleSetGraphicCrop(SlideCommandContext& rCtx, const std::string& rKey,
      rCtx.touch(pPage);
  }
  
@@ -133,7 +133,7 @@ index 5a45215..59db7cd 100644
  void handleInsertImage(SlideCommandContext& rCtx, const std::string& rKey,
                         const boost::property_tree::ptree& rValue)
  {
-@@ -2139,6 +2182,7 @@ constexpr SlideCommand aSlideCommands[] = {
+@@ -2147,6 +2190,7 @@ constexpr SlideCommand aSlideCommands[] = {
      { "SetObjectProperties.", true, false, &handleSetObjectProperties },
      { "SetTextProperties.", true, false, &handleSetTextProperties },
      { "SetGraphicCrop.", true, false, &handleSetGraphicCrop },

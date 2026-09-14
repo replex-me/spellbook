@@ -1,8 +1,8 @@
 diff --git a/sd/inc/drawdoc.hxx b/sd/inc/drawdoc.hxx
-index e16165e6e..a83c98129 100644
+index 3c32ab66e7d46c965603c773a3eb0a1931a3887f..87505af0ee7e52b49cd31a4abebb8e5d89cf8072 100644
 --- a/sd/inc/drawdoc.hxx
 +++ b/sd/inc/drawdoc.hxx
-@@ -975,7 +975,8 @@ private:
+@@ -1123,7 +1123,8 @@ public:
          AutoLayout eNotesLayout,
          bool bIsPageBack,
          bool bIsPageObj,
@@ -13,10 +13,10 @@ index e16165e6e..a83c98129 100644
      /** This method acts as a simplified front end for the more complex
          <member>DuplicatePage()</member> method.
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 06f6dfd7d..a88a758a5 100644
+index 505925d36abe67e8abe63cebb34682706a286ede..a6607165a2391a75312335e5e397a8f626a824cf 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -1565,6 +1565,67 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertSlideInheritsSo
+@@ -1567,6 +1567,67 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureInsertSlideInheritsSo
      CPPUNIT_ASSERT_EQUAL(nMasterObjectCount, pMaster->GetObjCount());
  }
  
@@ -85,10 +85,10 @@ index 06f6dfd7d..a88a758a5 100644
  {
      // ApplyTemplate gives a generated deck the bundled template's design. Every
 diff --git a/sd/source/core/drawdoc2.cxx b/sd/source/core/drawdoc2.cxx
-index 7500e7ddc..9c85c0b02 100644
+index 762fa51a6c7f6d453935804695398941a36ab947..9c67f087bfde6fa507fd07fb850e4d7a53db8fd6 100644
 --- a/sd/source/core/drawdoc2.cxx
 +++ b/sd/source/core/drawdoc2.cxx
-@@ -1502,7 +1502,8 @@ sal_uInt16 SdDrawDocument::CreatePage (
+@@ -1524,7 +1524,8 @@ sal_uInt16 SdDrawDocument::CreatePage (
      AutoLayout eNotesLayout,
      bool bIsPageBack,
      bool bIsPageObj,
@@ -98,7 +98,7 @@ index 7500e7ddc..9c85c0b02 100644
  {
      if (pActualPage->IsCanvasPage())
          return 0xffff;
-@@ -1543,7 +1544,8 @@ sal_uInt16 SdDrawDocument::CreatePage (
+@@ -1566,7 +1567,8 @@ sal_uInt16 SdDrawDocument::CreatePage (
  
      // User layout of current standard page
      pStandardPage->SetLayoutName( pPreviousStandardPage->GetLayoutName() );
@@ -109,10 +109,10 @@ index 7500e7ddc..9c85c0b02 100644
  
      // transition settings of current page
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index ae4b337bc..1093bb896 100644
+index 282f7f0042088c317415cd98a08d677c4824da3a..d17451d24b8f5fdf0c785b33d53b9282d431e511 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -1283,7 +1283,7 @@ void handleInsertMasterSlide(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -1287,7 +1287,7 @@ void handleInsertMasterSlide(SlideCommandContext& rCtx, const std::string& rKey,
          = rCtx.mpDoc->CreatePage(pPage, PageKind::Standard, OUString(),
                                   OUString(), pPage->GetAutoLayout(),
                                   AUTOLAYOUT_NOTES, true, true,

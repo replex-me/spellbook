@@ -1,5 +1,5 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index b70b96e13..d34900de4 100644
+index 240ad49fbaf199120b6fa0ce495ee98cc6c5197c..6b72ce53be401f1ee35da6b788288d86f8b6953a 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
 @@ -33,6 +33,7 @@
@@ -10,7 +10,7 @@ index b70b96e13..d34900de4 100644
  #include <com/sun/star/text/WritingMode2.hpp>
  #include <com/sun/star/view/XSelectionSupplier.hpp>
  
-@@ -641,6 +642,66 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
+@@ -643,6 +644,66 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
      CPPUNIT_ASSERT(aChanged == *pTextObject->GetOutlinerParaObject());
  }
  
@@ -78,10 +78,10 @@ index b70b96e13..d34900de4 100644
  {
      createSdImpressDoc();
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index 9b20b10d9..5a4521572 100644
+index 451e32a576beb253722668bd54dd7b834882c28d..6e7c4a0fa36a935cca73104706f71691e28155a4 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -42,6 +42,7 @@
+@@ -44,6 +44,7 @@
  #include <com/sun/star/drawing/XDrawPages.hpp>
  #include <com/sun/star/lang/XInitialization.hpp>
  #include <com/sun/star/lang/IllegalArgumentException.hpp>
@@ -89,7 +89,7 @@ index 9b20b10d9..5a4521572 100644
  #include <model/SlideSorterModel.hxx>
  #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
  #include <com/sun/star/ui/dialogs/XSLTFilterDialog.hpp>
-@@ -1766,6 +1767,60 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -1774,6 +1775,60 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
      rCtx.touch(pPage);
  }
  
@@ -150,7 +150,7 @@ index 9b20b10d9..5a4521572 100644
  void handleInsertImage(SlideCommandContext& rCtx, const std::string& rKey,
                         const boost::property_tree::ptree& rValue)
  {
-@@ -2083,6 +2138,7 @@ constexpr SlideCommand aSlideCommands[] = {
+@@ -2091,6 +2146,7 @@ constexpr SlideCommand aSlideCommands[] = {
      { "SetNotes", false, false, &handleSetNotes },
      { "SetObjectProperties.", true, false, &handleSetObjectProperties },
      { "SetTextProperties.", true, false, &handleSetTextProperties },

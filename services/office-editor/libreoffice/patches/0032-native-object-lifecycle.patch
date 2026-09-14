@@ -1,5 +1,5 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 829a3771e..a410c5b79 100644
+index cd07a751a9fd127bec27315d8a1b1eaaf1139cdd..be2252dfeadeeee1f08d3432e786527607d18d2e 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
 @@ -27,6 +27,7 @@
@@ -10,7 +10,7 @@ index 829a3771e..a410c5b79 100644
  #include <com/sun/star/beans/XPropertySet.hpp>
  #include <com/sun/star/beans/XPropertyContainer.hpp>
  #include <com/sun/star/beans/PropertyAttribute.hpp>
-@@ -836,6 +837,150 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTypedTextFormattingAppliesToAllScripts
+@@ -838,6 +839,150 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTypedTextFormattingAppliesToAllScripts
      assertUnoWholeRangeReadback();
  }
  
@@ -162,7 +162,7 @@ index 829a3771e..a410c5b79 100644
  {
      createSdImpressDoc();
 diff --git a/sd/source/ui/unoidl/unopage.cxx b/sd/source/ui/unoidl/unopage.cxx
-index 6235942b7..5653e6540 100644
+index 189d8ad074483df2f37e1d447a169aa2461ad30c..a7b9973b23cd146837664164d165d1b0ba40a1d8 100644
 --- a/sd/source/ui/unoidl/unopage.cxx
 +++ b/sd/source/ui/unoidl/unopage.cxx
 @@ -50,6 +50,7 @@
@@ -173,7 +173,7 @@ index 6235942b7..5653e6540 100644
  #include <sdresid.hxx>
  #include <strings.hrc>
  #include <sdpage.hxx>
-@@ -2457,7 +2458,22 @@ bool SAL_CALL SdDrawPage::hasElements()
+@@ -2562,7 +2563,22 @@ bool SAL_CALL SdDrawPage::hasElements()
  // XShapes
  void SAL_CALL SdDrawPage::add( const Reference< drawing::XShape >& xShape )
  {
@@ -197,18 +197,10 @@ index 6235942b7..5653e6540 100644
  
  void SAL_CALL SdDrawPage::remove( const Reference< drawing::XShape >& xShape )
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index 7126f4f4c..e5c1d0a3d 100644
+index 0c8e175a986a57a63b993efb9276bbdbd0c1f435..0ecfec67d98c9d78da3f4ec473fd0ae0462e7a6b 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
-@@ -28,6 +28,7 @@
- #include <set>
- #include <stdexcept>
- #include <string_view>
-+#include <unordered_set>
- #include <utility>
- #include <vector>
- 
-@@ -989,6 +990,51 @@ struct SlideCommandContext
+@@ -994,6 +994,51 @@ struct SlideCommandContext
      }
  };
  
@@ -260,7 +252,7 @@ index 7126f4f4c..e5c1d0a3d 100644
  // Owns the native history boundary of one document transform. Command
  // handlers only contribute typed Undo actions; this guard is the sole owner of
  // list-action lifetime, commit and failure rollback.
-@@ -1838,6 +1884,39 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
+@@ -1843,6 +1888,39 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
      rCtx.touch(pPage);
  }
  
@@ -300,7 +292,7 @@ index 7126f4f4c..e5c1d0a3d 100644
  void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
                               const boost::property_tree::ptree& rValue)
  {
-@@ -1845,42 +1924,7 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
+@@ -1850,42 +1928,7 @@ void handleSetTextProperties(SlideCommandContext& rCtx, const std::string& rKey,
      if (!pPage)
          throw lang::IllegalArgumentException(u"Text object slide is unavailable"_ustr, nullptr, 0);
  
@@ -344,7 +336,7 @@ index 7126f4f4c..e5c1d0a3d 100644
      if (!pObject->IsSdrTextObj())
          throw lang::IllegalArgumentException(u"Object has no editable text"_ustr, nullptr, 0);
      auto* pTextObject = static_cast<SdrTextObj*>(pObject);
-@@ -2499,6 +2543,7 @@ constexpr SlideCommand aSlideCommands[] = {
+@@ -2504,6 +2547,7 @@ constexpr SlideCommand aSlideCommands[] = {
      { "SetSlideIntent", false, false, &handleSetSlideIntent },
      { "SetNotes", false, false, &handleSetNotes },
      { "SetObjectProperties.", true, false, &handleSetObjectProperties },
@@ -352,4 +344,3 @@ index 7126f4f4c..e5c1d0a3d 100644
      { "SetTextProperties.", true, false, &handleSetTextProperties },
      { "SetGraphicCrop.", true, false, &handleSetGraphicCrop },
      { "SetSlideTransition", false, false, &handleSetSlideTransition },
-

@@ -1,8 +1,8 @@
 diff --git a/include/oox/drawingml/shape.hxx b/include/oox/drawingml/shape.hxx
-index 25df95e..e791fb3 100644
+index f5cd2e29a8da5d4f2b7d87933e3fffdb649ec6f4..bea995de818c3fbc7533945f27353d44c0a47e17 100644
 --- a/include/oox/drawingml/shape.hxx
 +++ b/include/oox/drawingml/shape.hxx
-@@ -180,6 +180,8 @@ public:
+@@ -189,6 +189,8 @@ public:
      void                            setHidden( bool bHidden ) { mbHidden = bHidden; }
      void                            setHiddenMasterShape( bool bHiddenMasterShape ) { mbHiddenMasterShape = bHiddenMasterShape; }
      void                            setLocked( bool bLocked ) { mbLocked = bLocked; }
@@ -11,7 +11,7 @@ index 25df95e..e791fb3 100644
      void                            setSubType( sal_Int32 nSubType ) { mnSubType = nSubType; }
      sal_Int32                       getSubType() const { return mnSubType; }
      void                            setSubTypeIndex( sal_Int32 nSubTypeIndex ) { moSubTypeIndex = nSubTypeIndex; }
-@@ -422,6 +424,8 @@ private:
+@@ -435,6 +437,8 @@ private:
                                                           // we need separate flag because we don't want
                                                           // to propagate it when applying reference shape
      bool                            mbLocked;
@@ -21,10 +21,10 @@ index 25df95e..e791fb3 100644
      bool mbLockedCanvas; ///< Is this shape part of a locked canvas?
      bool mbWordprocessingCanvas; ///< Is this shape part of a wordprocessing canvas?
 diff --git a/include/oox/export/shapes.hxx b/include/oox/export/shapes.hxx
-index acca817..61876b5 100644
+index 8a0b10c445b67cb730c6b33f992dc5c3227a8e58..c04fc523abfb68d395c89160997b3ec39b6cef9e 100644
 --- a/include/oox/export/shapes.hxx
 +++ b/include/oox/export/shapes.hxx
-@@ -94,6 +94,8 @@ private:
+@@ -91,6 +91,8 @@ private:
      std::shared_ptr<URLTransformer> mpURLTransformer;
  
      css::awt::Size MapSize( const css::awt::Size& ) const;
@@ -34,7 +34,7 @@ index acca817..61876b5 100644
      ShapeHashMap maShapeMap;
      ShapeHashMap* mpShapeMap;
 diff --git a/oox/source/drawingml/connectorshapecontext.cxx b/oox/source/drawingml/connectorshapecontext.cxx
-index 5800a52..59a6ba2 100644
+index 5800a52cfb4931a17b96d2d219c07b2044c47900..59a6ba20aed5e24974c73dfa7b6824de466e0674 100644
 --- a/oox/source/drawingml/connectorshapecontext.cxx
 +++ b/oox/source/drawingml/connectorshapecontext.cxx
 @@ -60,6 +60,10 @@ ConnectorShapePropertiesContext::onCreateContext(sal_Int32 aElementToken,
@@ -49,7 +49,7 @@ index 5800a52..59a6ba2 100644
          {
              ConnectorShapeProperties aConnectorShapeProps;
 diff --git a/oox/source/drawingml/graphicshapecontext.cxx b/oox/source/drawingml/graphicshapecontext.cxx
-index 0a14362..a69cf42 100644
+index 0a143623db18793487b2a63f078b2cfee2b0b580..a69cf420dc84fb24ce0da52ee1c837cf7373178b 100644
 --- a/oox/source/drawingml/graphicshapecontext.cxx
 +++ b/oox/source/drawingml/graphicshapecontext.cxx
 @@ -158,6 +158,10 @@ ContextHandlerRef GraphicalObjectFrameContext::onCreateContext( sal_Int32 aEleme
@@ -64,10 +64,10 @@ index 0a14362..a69cf42 100644
          return new Transform2DContext( *this, rAttribs, *mpShapePtr );
      case XML_graphic:               // CT_GraphicalObject
 diff --git a/oox/source/drawingml/shape.cxx b/oox/source/drawingml/shape.cxx
-index 2e436f7..d3166d1 100644
+index ecd3bc9ea27fdfe17319d61c277e2f648d5337de..449d1198165462b8efeeb9e2f0c8104718692c57 100644
 --- a/oox/source/drawingml/shape.cxx
 +++ b/oox/source/drawingml/shape.cxx
-@@ -155,6 +155,8 @@ Shape::Shape()
+@@ -165,6 +165,8 @@ Shape::Shape()
  , mbHidden( false )
  , mbHiddenMasterShape( false )
  , mbLocked( false )
@@ -76,7 +76,7 @@ index 2e436f7..d3166d1 100644
  , mbWPGChild(false)
  , mbLockedCanvas( false )
  , mbWordprocessingCanvas(false)
-@@ -188,6 +190,8 @@ Shape::Shape( const OUString& rServiceName, bool bDefaultHeight )
+@@ -198,6 +200,8 @@ Shape::Shape( const OUString& rServiceName, bool bDefaultHeight )
  , mbHidden( false )
  , mbHiddenMasterShape( false )
  , mbLocked( false )
@@ -85,7 +85,7 @@ index 2e436f7..d3166d1 100644
  , mbWPGChild(false)
  , mbLockedCanvas( false )
  , mbWordprocessingCanvas(false)
-@@ -232,6 +236,8 @@ Shape::Shape( const ShapePtr& pSourceShape )
+@@ -242,6 +246,8 @@ Shape::Shape( const ShapePtr& pSourceShape )
  , mbHidden( pSourceShape->mbHidden )
  , mbHiddenMasterShape( pSourceShape->mbHiddenMasterShape )
  , mbLocked( pSourceShape->mbLocked )
@@ -94,7 +94,7 @@ index 2e436f7..d3166d1 100644
  , mbWPGChild( pSourceShape->mbWPGChild )
  , mbLockedCanvas( pSourceShape->mbLockedCanvas )
  , mbWordprocessingCanvas(pSourceShape->mbWordprocessingCanvas)
-@@ -587,6 +593,8 @@ void Shape::applyShapeReference( const Shape& rReferencedShape, bool bUseText )
+@@ -617,6 +623,8 @@ void Shape::applyShapeReference(const Shape& rReferencedShape, ReferencedShapeTe
      mbFlipV = rReferencedShape.mbFlipV;
      mbHidden = rReferencedShape.mbHidden;
      mbLocked = rReferencedShape.mbLocked;
@@ -103,7 +103,7 @@ index 2e436f7..d3166d1 100644
  }
  
  namespace {
-@@ -1443,11 +1451,10 @@ Reference< XShape > const & Shape::createAndInsert(
+@@ -1652,11 +1660,10 @@ Reference< XShape > const & Shape::createAndInsert(
              xSet->setPropertyValue( u"Printable"_ustr, Any( false ) );
          }
  
@@ -118,7 +118,7 @@ index 2e436f7..d3166d1 100644
          ActionLockGuard const alg(mxShape);
  
 diff --git a/oox/source/drawingml/shapecontext.cxx b/oox/source/drawingml/shapecontext.cxx
-index adedaf9..79e42ed 100644
+index adedaf970913197a8e132f369c2c9bfe3bfac699..79e42ed01207a0bcd267ffeeb852e0122d8abb80 100644
 --- a/oox/source/drawingml/shapecontext.cxx
 +++ b/oox/source/drawingml/shapecontext.cxx
 @@ -117,6 +117,8 @@ ContextHandlerRef ShapeContext::onCreateContext( sal_Int32 aElementToken, const
@@ -140,7 +140,7 @@ index adedaf9..79e42ed 100644
      case XML_relIds:
          break;
 diff --git a/oox/source/drawingml/shapegroupcontext.cxx b/oox/source/drawingml/shapegroupcontext.cxx
-index eaf9f1a..05e3b20 100644
+index 3963489ceed54ce76462d6465c89e053eb87d7ad..5be398b6a05542be74314fc3d9b8be73f8338502 100644
 --- a/oox/source/drawingml/shapegroupcontext.cxx
 +++ b/oox/source/drawingml/shapegroupcontext.cxx
 @@ -125,6 +125,8 @@ ContextHandlerRef ShapeGroupContext::onCreateContext( sal_Int32 aElementToken, c
@@ -153,7 +153,7 @@ index eaf9f1a..05e3b20 100644
      default:
          SAL_WARN("oox", "ShapeGroupContext::onCreateContext: unhandled element: " << getBaseToken(aElementToken));
 diff --git a/oox/source/export/shapes.cxx b/oox/source/export/shapes.cxx
-index 1f92302..69a29d7 100644
+index f025ca99fbebdc133570828c9d548821346d3e6d..a55590646b9823a5c0541257c4bbd16f58f2dd29 100644
 --- a/oox/source/export/shapes.cxx
 +++ b/oox/source/export/shapes.cxx
 @@ -354,6 +354,29 @@ awt::Size ShapeExport::MapSize( const awt::Size& rSize ) const
@@ -183,7 +183,7 @@ index 1f92302..69a29d7 100644
 +                             XML_noResize, sax_fastparser::UseIf("1", bSizeProtected));
 +}
 +
- static bool IsNonEmptySimpleText(const Reference<XInterface>& xIface)
+ static bool IsNonEmptySimpleText(const Reference<cpo::uno::XInterface>& xIface)
  {
      if (Reference<XSimpleText> xText{ xIface, UNO_QUERY })
 @@ -452,7 +475,9 @@ ShapeExport& ShapeExport::WritePolyPolygonShape( const Reference< XShape >& xSha
@@ -273,7 +273,7 @@ index 1f92302..69a29d7 100644
      WriteNonVisualProperties( xShape );
      pFS->endElementNS( mnXmlNamespace, XML_nvSpPr );
  
-@@ -2711,7 +2747,9 @@ ShapeExport& ShapeExport::WriteTableShape( const Reference< XShape >& xShape )
+@@ -2714,7 +2750,9 @@ ShapeExport& ShapeExport::WriteTableShape( const Reference< XShape >& xShape )
      AddExtLst(pFS, xShapeProps);
      pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
  
@@ -284,7 +284,7 @@ index 1f92302..69a29d7 100644
  
      if( GetDocumentType() == DOCUMENT_PPTX )
          pFS->singleElementNS(mnXmlNamespace, XML_nvPr);
-@@ -2755,7 +2793,9 @@ ShapeExport& ShapeExport::WriteTextShape( const Reference< XShape >& xShape )
+@@ -2758,7 +2796,9 @@ ShapeExport& ShapeExport::WriteTextShape( const Reference< XShape >& xShape )
          AddExtLst(pFS, xShapeProps);
          pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
      }
@@ -295,7 +295,7 @@ index 1f92302..69a29d7 100644
      if (GetDocumentType() != DOCUMENT_DOCX || mbUserShapes)
      {
          WriteNonVisualProperties( xShape );
-@@ -2805,7 +2845,9 @@ void ShapeExport::WriteMathShape(Reference<XShape> const& xShape)
+@@ -2808,7 +2848,9 @@ void ShapeExport::WriteMathShape(Reference<XShape> const& xShape)
      mpFS->startElementNS(mnXmlNamespace, XML_cNvPr, XML_id, cNvPr_id, XML_name, shapeName);
      AddExtLst(mpFS, xPropSet);
      mpFS->endElementNS(mnXmlNamespace, XML_cNvPr);
@@ -306,7 +306,7 @@ index 1f92302..69a29d7 100644
      mpFS->singleElementNS(mnXmlNamespace, XML_nvPr);
      mpFS->endElementNS(mnXmlNamespace, XML_nvSpPr);
      mpFS->startElementNS(mnXmlNamespace, XML_spPr);
-@@ -2843,7 +2885,9 @@ void ShapeExport::WriteMathShape(Reference<XShape> const& xShape)
+@@ -2846,7 +2888,9 @@ void ShapeExport::WriteMathShape(Reference<XShape> const& xShape)
              mpFS->startElementNS(mnXmlNamespace, XML_cNvPr, XML_id, cNvPr_id, XML_name, shapeName);
              AddExtLst(mpFS, xPropSet);
              mpFS->endElementNS(mnXmlNamespace, XML_cNvPr);
@@ -317,7 +317,7 @@ index 1f92302..69a29d7 100644
              mpFS->singleElementNS(mnXmlNamespace, XML_nvPr);
              mpFS->endElementNS(mnXmlNamespace, XML_nvSpPr);
              mpFS->startElementNS(mnXmlNamespace, XML_spPr);
-@@ -3067,7 +3111,9 @@ ShapeExport& ShapeExport::WriteOLE2Shape( const Reference< XShape >& xShape )
+@@ -3070,7 +3114,9 @@ ShapeExport& ShapeExport::WriteOLE2Shape( const Reference< XShape >& xShape )
      AddExtLst(mpFS, xPropSet);
      mpFS->endElementNS(mnXmlNamespace, XML_cNvPr);
  
@@ -329,7 +329,7 @@ index 1f92302..69a29d7 100644
      if (GetDocumentType() == DOCUMENT_PPTX)
          mpFS->singleElementNS(mnXmlNamespace, XML_nvPr);
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index b762324..79653d1 100644
+index 40ea6702e0c310d9ac9db9a240546a68495cacae..23ca19ebd1833bacee7a2acb886f0e394ea4a6f7 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
 @@ -22,6 +22,7 @@
@@ -340,7 +340,7 @@ index b762324..79653d1 100644
  #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
  #include <com/sun/star/document/XDocumentProperties.hpp>
  #include <com/sun/star/frame/Desktop.hpp>
-@@ -742,6 +743,75 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPptxTextShadowRoundTrip)
+@@ -744,6 +745,75 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testPptxTextShadowRoundTrip)
      CPPUNIT_ASSERT(bShadowed);
  }
  

@@ -1,20 +1,21 @@
 {
   "schemaVersion": 1,
   "product": "Collabora CODE",
-  "release": "26.04.3.3",
+  "release": "26.04.4.1",
   "source": {
     "repository": "https://github.com/CollaboraOnline/online.mirror.git",
-    "ref": "cp-26.04.3-3",
-    "commit": "7ddebab0ef71e249941ff21d2c8e4fbefa474499"
+    "ref": "cp-26.04.4-1",
+    "commit": "292bae6e2ee1d8749040b258cd7bf415cf6241b4"
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
   "patchLevel": "undo-v16",
+  "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "ee5218115c00d87adc5c3c8f96c6265e90987c21288d351d30a9e42f1fe6e6d3",
-  "engineImageTag": "26.04.3.3-spellbook-undo-v16-r1-candidate",
-  "impressUiUnoCommandCount": 804,
-  "impressUiUnoCommandsSha256": "cafedc6b8c621afbb8399d76fc498c1e86273c2c290bb914e41298df0b203cd1",
+  "patchSeriesSha256": "d4716fbb2f65c7ac88e20f2327ee125e8524934fd533d089d3a5a8dc71653cd6",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v16-r1-candidate",
+  "impressUiUnoCommandCount": 725,
+  "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
     "patches/0001-table-cell-uno-undo.patch",
     "patches/0002-page-background-undo.patch",
