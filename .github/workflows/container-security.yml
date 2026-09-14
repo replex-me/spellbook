@@ -1,0 +1,65 @@
+name: Container Security
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/container-security.yml"
+      - "apps/**/Dockerfile"
+      - "apps/**/package.json"
+      - "services/**/Dockerfile"
+      - "services/office-editor/gateway/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  pull_request:
+    paths:
+      - ".github/workflows/container-security.yml"
+      - "apps/**/Dockerfile"
+      - "apps/**/package.json"
+      - "services/**/Dockerfile"
+      - "services/office-editor/gateway/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  schedule:
+    - cron: "41 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: web
+            dockerfile: apps/web/Dockerfile
+          - name: ai-connector
+            dockerfile: apps/ai-connector/Dockerfile
+          - name: document-worker
+            dockerfile: services/document-worker/Dockerfile
+          - name: office-editor
+            dockerfile: services/office-editor/Dockerfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build runtime image
+        run: >-
+          docker build
+          --file "${{ matrix.dockerfile }}"
+          --tag "spellbook-${{ matrix.name }}:security"
+          .
+      - name: Reject fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: spellbook-${{ matrix.name }}:security
+          scanners: vuln
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: "1"
