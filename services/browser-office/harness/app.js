@@ -13,8 +13,17 @@ const fileInput = document.querySelector("#file-input");
 const insertSlideButton = document.querySelector("#insert-slide");
 const undoButton = document.querySelector("#undo");
 const saveButton = document.querySelector("#save");
+const productMode = location.pathname === "/workspace";
+const productBridgeSessionId = productMode ? crypto.randomUUID() : "";
+const expectedHostOrigin = productMode
+  ? new URLSearchParams(location.search).get("hostOrigin")
+  : null;
 
-let port;
+let enginePort;
+let hostPort;
+let hostRevision = "";
+let hostMaximumBytes = 0;
+let lastReportedModified = false;
 let filename = "document.pptx";
 let activePath = "/tmp/spellbook/document.pptx";
 let requestSequence = 0;
@@ -39,6 +48,7 @@ let currentBytes;
 let currentSlideCount = 0;
 let baseBytes;
 let journal;
+let productExportQueue = Promise.resolve();
 const commands = [];
 
 function setState(nextState, message) {
@@ -57,7 +67,7 @@ function request(command, details = {}) {
   const requestId = `browser-office-${++requestSequence}`;
   return new Promise((resolve, reject) => {
     pending.set(requestId, { resolve, reject, command });
-    port.postMessage({ command, requestId, ...details });
+    enginePort.postMessage({ command, requestId, ...details });
   });
 }
 
@@ -277,6 +287,248 @@ function download(bytes) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function requireProductHostOrigin() {
+  if (!expectedHostOrigin)
+    throw new Error("Browser Office host origin is required.");
+  const parsed = new URL(expectedHostOrigin);
+  if (
+    parsed.origin !== expectedHostOrigin ||
+    !["http:", "https:"].includes(parsed.protocol)
+  )
+    throw new Error("Browser Office host origin is invalid.");
+  return parsed.origin;
+}
+
+function postHost(message, transfer = []) {
+  if (!hostPort) throw new Error("Browser Office host is not connected.");
+  hostPort.postMessage(message, transfer);
+}
+
+function reportHostModified(modified) {
+  if (modified === lastReportedModified) return;
+  lastReportedModified = modified;
+  postHost({ type: "modified", modified });
+}
+
+async function exportProductDocumentNow({ checkpoint = true } = {}) {
+  if (!currentBytes || !journal)
+    throw new Error("No browser Office document is open.");
+  const exportPath = "/tmp/spellbook/product-export.pptx";
+  await request("store", { path: exportPath });
+  const bytes = new Uint8Array(FS.readFile(exportPath)).slice();
+  if (!bytes.byteLength || bytes.byteLength > hostMaximumBytes)
+    throw new Error("Browser Office export exceeded the document limit.");
+  currentBytes = bytes;
+  if (checkpoint) await persistCheckpoint();
+  return bytes;
+}
+
+function exportProductDocument(options = {}) {
+  const pendingExport = productExportQueue.then(() =>
+    exportProductDocumentNow(options),
+  );
+  productExportQueue = pendingExport.catch(() => undefined);
+  return pendingExport;
+}
+
+async function openProductDocument(message) {
+  if (
+    typeof message.requestId !== "string" ||
+    typeof message.fileName !== "string" ||
+    !message.fileName.trim() ||
+    message.fileName.length > 255 ||
+    typeof message.revision !== "string" ||
+    !message.revision ||
+    !Number.isSafeInteger(message.maxBytes) ||
+    message.maxBytes <= 0 ||
+    message.maxBytes > 64 * 1024 * 1024 ||
+    !(message.bytes instanceof ArrayBuffer) ||
+    !message.bytes.byteLength ||
+    message.bytes.byteLength > message.maxBytes
+  )
+    throw new Error("Browser Office open request is invalid.");
+  const initial = new Uint8Array(message.bytes);
+  if (initial[0] !== 0x50 || initial[1] !== 0x4b)
+    throw new Error("Browser Office received an invalid PPTX package.");
+  hostRevision = message.revision;
+  hostMaximumBytes = message.maxBytes;
+  history.length = 0;
+  commands.length = 0;
+  await requestPersistentBrowserStorage();
+  await openJournal(initial, message.fileName);
+  const recovered = await journal.load();
+  const candidate = recovered?.candidateBytes ?? initial;
+  baseBytes = initial.slice();
+  currentBytes = candidate.slice();
+  await writeAndOpen(currentBytes, message.fileName);
+  const modified = Boolean(recovered);
+  lastReportedModified = !modified;
+  reportHostModified(modified);
+  postHost({
+    type: "open-complete",
+    requestId: message.requestId,
+    revision: hostRevision,
+    slideCount: currentSlideCount,
+    recovered: Boolean(recovered),
+  });
+}
+
+let hostSaveRequestId = null;
+async function saveProductDocument() {
+  if (hostSaveRequestId) return;
+  const requestId = `browser-save-${++requestSequence}`;
+  hostSaveRequestId = requestId;
+  try {
+    const bytes = await exportProductDocument();
+    const transferable = bytes.slice();
+    postHost(
+      {
+        type: "save",
+        requestId,
+        revision: hostRevision,
+        bytes: transferable.buffer,
+      },
+      [transferable.buffer],
+    );
+  } catch (error) {
+    hostSaveRequestId = null;
+    throw error;
+  }
+}
+
+async function handleProductHostMessage(message) {
+  if (!message || typeof message !== "object")
+    throw new Error("Browser Office host message is invalid.");
+  if (message.type === "open") {
+    await openProductDocument(message);
+    return;
+  }
+  if (message.type === "command") {
+    if (message.messageId === "Action_Save") {
+      await saveProductDocument();
+      return;
+    }
+    if (message.messageId === "Send_UNO_Command") {
+      const command = String(message.values?.Command ?? "").replace(
+        /^\.uno:/u,
+        "",
+      );
+      if (!["Undo", "Redo"].includes(command))
+        throw new Error("Browser Office host command is not allowed.");
+      await request("dispatch", { unoCommand: command });
+      const status = await request("status");
+      reportHostModified(Boolean(status.modified));
+      postHost({
+        type: "command-complete",
+        messageId: message.messageId,
+        command,
+      });
+      return;
+    }
+    if (
+      message.messageId === "welcome-close" ||
+      message.messageId === "Host_PostmessageReady"
+    )
+      return;
+    throw new Error("Browser Office host command is not supported.");
+  }
+  if (message.type === "save-result") {
+    if (!hostSaveRequestId || message.requestId !== hostSaveRequestId)
+      throw new Error("Browser Office save response is stale.");
+    hostSaveRequestId = null;
+    if (message.ok !== true) {
+      reportHostModified(true);
+      postHost({
+        type: "save-response",
+        success: false,
+        error: String(message.error ?? "browser_document_save_failed"),
+      });
+      return;
+    }
+    if (typeof message.revision !== "string" || !message.revision)
+      throw new Error("Browser Office save revision is invalid.");
+    hostRevision = message.revision;
+    baseBytes = currentBytes.slice();
+    await request("mark-saved");
+    await journal.clear();
+    lastReportedModified = true;
+    reportHostModified(false);
+    postHost({ type: "save-response", success: true });
+    return;
+  }
+  if (typeof message.id === "string" && message.request) {
+    try {
+      const result = await request("native", {
+        nativeRequest: message.request,
+      });
+      const status = await request("status");
+      reportHostModified(Boolean(status.modified));
+      postHost({ id: message.id, value: result.value });
+    } catch (error) {
+      postHost({
+        id: message.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return;
+  }
+  throw new Error("Browser Office host message is unsupported.");
+}
+
+function connectProductHost(event) {
+  if (
+    !productMode ||
+    event.source !== window.parent ||
+    event.origin !== requireProductHostOrigin() ||
+    event.data?.type !== "spellbook.browser-office-connect" ||
+    event.data?.protocolVersion !== 1 ||
+    event.ports.length !== 1 ||
+    hostPort
+  )
+    return;
+  hostPort = event.ports[0];
+  hostPort.onmessage = (hostEvent) => {
+    void handleProductHostMessage(hostEvent.data).catch((error) => {
+      postHost({
+        type: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  };
+  hostPort.start();
+  postHost({ type: "ready", protocolVersion: 1 });
+  startProductHeartbeat();
+}
+
+let runtimeReady = false;
+let productHeartbeat = null;
+let checkpointInFlight = false;
+let lastCheckpointAt = 0;
+function startProductHeartbeat() {
+  if (!productMode || !runtimeReady || !hostPort || productHeartbeat) return;
+  const poll = async () => {
+    if (!currentBytes || checkpointInFlight) return;
+    checkpointInFlight = true;
+    try {
+      const current = await request("status");
+      const modified = Boolean(current.modified);
+      reportHostModified(modified);
+      if (modified && Date.now() - lastCheckpointAt >= 10_000) {
+        await exportProductDocument();
+        lastCheckpointAt = Date.now();
+      }
+    } catch (error) {
+      postHost({
+        type: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      checkpointInFlight = false;
+    }
+  };
+  productHeartbeat = setInterval(() => void poll(), 750);
 }
 
 async function runConformance() {
@@ -500,6 +752,11 @@ saveButton.addEventListener("click", async () => {
   download(currentBytes);
 });
 
+if (productMode) {
+  body.dataset.mode = "product";
+  window.addEventListener("message", connectProductHost);
+}
+
 window.addEventListener("error", (event) => {
   body.dataset.error = event.message;
   setState("error", event.message);
@@ -543,12 +800,25 @@ const script = document.createElement("script");
 script.src = new URL("soffice.js", runtimeBase).href;
 script.onload = () => {
   Module.uno_main.then((messagePort) => {
-    port = messagePort;
-    port.onmessage = async (event) => {
+    enginePort = messagePort;
+    enginePort.onmessage = async (event) => {
       const message = event.data;
       if (message.command === "runtime-ready") {
+        runtimeReady = true;
         setState("runtime-ready", "Engine ready");
-        if (new URLSearchParams(location.search).get("autorun") === "1") {
+        if (productMode) {
+          window.parent.postMessage(
+            {
+              type: "spellbook.browser-office-ready",
+              protocolVersion: 1,
+              bridgeSessionId: productBridgeSessionId,
+            },
+            requireProductHostOrigin(),
+          );
+          startProductHeartbeat();
+        } else if (
+          new URLSearchParams(location.search).get("autorun") === "1"
+        ) {
           try {
             await runConformance();
           } catch (error) {

@@ -86,6 +86,10 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     manifest.requiredDocumentHeaders["Cross-Origin-Embedder-Policy"],
     "require-corp",
   );
+  assert.equal(
+    manifest.requiredDocumentHeaders["Cross-Origin-Resource-Policy"],
+    "cross-origin",
+  );
   assert.match(fetcher, /does not match the pinned/);
   assert.match(fetcher, /Content-Encoding/);
   assert.match(fetcher, /\.partial/);

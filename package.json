@@ -16,6 +16,7 @@
     "browser-office:prepare": "pnpm browser-office:fetch && pnpm browser-office:build",
     "browser-office:serve": "pnpm browser-office:prepare && node services/browser-office/server.mjs",
     "browser-office:verify": "pnpm browser-office:prepare && node services/browser-office/verify-harness.mjs",
+    "browser-office:verify:product": "pnpm browser-office:prepare && node services/browser-office/verify-product-bridge.mjs",
     "browser-office:verify:powerpoint": "pnpm browser-office:verify && node services/browser-office/verify-powerpoint.mjs",
     "corpus:discover": "node scripts/create-corpus-manifest.mjs",
     "corpus:fetch-public": "node scripts/fetch-public-corpus.mjs",

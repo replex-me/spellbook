@@ -39,6 +39,26 @@ function dispatch(command) {
   dispatcher.dispatch(url.val, []);
 }
 
+function property(Name, type, value) {
+  return new css.beans.PropertyValue({
+    Name,
+    Value: new zetajs.Any(type, value),
+  });
+}
+
+function storeDocument(path, requestId) {
+  if (!model) throw new Error("No browser Office document is open.");
+  model.storeToURL(`file://${path}`, [
+    property("FilterName", zetajs.type.string, "Impress Office Open XML"),
+    property("Overwrite", zetajs.type.boolean, true),
+  ]);
+  post("store-complete", {
+    requestId,
+    path,
+    modified: model.isModified(),
+  });
+}
+
 function closeDocument() {
   if (!model) return;
   try {
@@ -106,6 +126,21 @@ function start() {
               nativeAdapter,
             }),
           });
+          break;
+        case "status":
+          post("status-complete", {
+            requestId,
+            modified: Boolean(model?.isModified()),
+            slideCount: slideCount(),
+          });
+          break;
+        case "store":
+          storeDocument(event.data.path, requestId);
+          break;
+        case "mark-saved":
+          if (!model) throw new Error("No browser Office document is open.");
+          model.setModified(false);
+          post("mark-saved-complete", { requestId });
           break;
         case "close":
           closeDocument();

@@ -17,7 +17,7 @@ import { CHATGPT_SECURITY_URL, useAiAccount } from "@/lib/use-ai-account";
 import type { AiConnectorConfig } from "@/lib/ai-connector-config";
 import "./native-workspace.css";
 
-export interface NativeLaunch {
+interface LaunchBase {
   documentId: string;
   fileName: string;
   editorUrl: string;
@@ -26,6 +26,19 @@ export interface NativeLaunch {
   apiBase: string;
   aiConnector: AiConnectorConfig;
 }
+
+interface WopiLaunch extends LaunchBase {
+  editorKind: "wopi";
+}
+
+interface BrowserLaunch extends LaunchBase {
+  editorKind: "browser";
+  contentApiBase: string;
+  revision: string;
+  maxBytes: number;
+}
+
+export type NativeLaunch = WopiLaunch | BrowserLaunch;
 type Message = {
   id: number;
   role: "user" | "assistant";
@@ -54,7 +67,15 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     pendingSaveRevision = useRef<number | null>(null),
     pendingTurn = useRef<PendingTurn | null>(null),
     editorModified = useRef(false),
-    downloadAfterRevision = useRef<number | null>(null);
+    downloadAfterRevision = useRef<number | null>(null),
+    browserOpening = useRef(false),
+    browserRevision = useRef(
+      launch.editorKind === "browser" ? launch.revision : "",
+    ),
+    pendingBrowserSave = useRef<{
+      requestId: string;
+      revision: string | null;
+    } | null>(null);
   const dispatchedLocalJobs = useRef(new Set<string>());
   const imagePayloads = useRef(
     new Map<
@@ -84,7 +105,9 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       const response = await fetch(`${launch.apiBase}/${path}`, {
         method: body === undefined ? "GET" : "POST",
         headers: {
-          authorization: `Bearer ${launch.accessToken}`,
+          ...(launch.accessToken
+            ? { authorization: `Bearer ${launch.accessToken}` }
+            : {}),
           ...(body === undefined ? {} : { "content-type": "application/json" }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -143,12 +166,21 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     [ai.mode, api, dispatchLocalJob],
   );
   const sendOffice = useCallback(
-    (MessageId: string, Values: unknown = {}) =>
+    (MessageId: string, Values: unknown = {}) => {
+      if (launch.editorKind === "browser") {
+        port.current?.postMessage({
+          type: "command",
+          messageId: MessageId,
+          values: Values,
+        });
+        return;
+      }
       office.current?.contentWindow?.postMessage(
         JSON.stringify({ MessageId, SendTime: Date.now(), Values }),
         origin,
-      ),
-    [origin],
+      );
+    },
+    [launch.editorKind, origin],
   );
   const deliverTask = useCallback(
     (task: {
@@ -264,7 +296,131 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
         )
         .finally(() => loadingImages.current.delete(task.id!));
     },
-    [api, launch.accessToken, launch.documentId],
+    [api, launch.documentId],
+  );
+  const openBrowserDocument = useCallback(
+    async (channel: MessagePort) => {
+      if (launch.editorKind !== "browser" || browserOpening.current) return;
+      browserOpening.current = true;
+      try {
+        const response = await fetch(`${launch.contentApiBase}/contents`, {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          const value = await response.json().catch(() => ({}));
+          throw new Error(value.error ?? "browser_document_download_failed");
+        }
+        const revision = response.headers.get("etag") ?? "";
+        const contentType = response.headers
+          .get("content-type")
+          ?.split(";", 1)[0];
+        const bytes = await response.arrayBuffer();
+        if (
+          revision !== launch.revision ||
+          contentType !==
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+          !bytes.byteLength ||
+          bytes.byteLength > launch.maxBytes ||
+          new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 2))[0] !== 0x50 ||
+          new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 2))[1] !== 0x4b
+        )
+          throw new Error("browser_document_identity_mismatch");
+        browserRevision.current = revision;
+        channel.postMessage(
+          {
+            type: "open",
+            requestId: crypto.randomUUID(),
+            fileName: launch.fileName,
+            revision,
+            maxBytes: launch.maxBytes,
+            bytes,
+          },
+          [bytes],
+        );
+      } catch (cause) {
+        browserOpening.current = false;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "브라우저에서 PPTX를 열지 못했습니다.",
+        );
+      }
+    },
+    [launch],
+  );
+  const saveBrowserDocument = useCallback(
+    async (
+      channel: MessagePort,
+      message: { requestId?: unknown; revision?: unknown; bytes?: unknown },
+    ) => {
+      if (
+        launch.editorKind !== "browser" ||
+        typeof message.requestId !== "string" ||
+        message.revision !== browserRevision.current ||
+        !(message.bytes instanceof ArrayBuffer) ||
+        !message.bytes.byteLength ||
+        message.bytes.byteLength > launch.maxBytes ||
+        pendingBrowserSave.current
+      ) {
+        channel.postMessage({
+          type: "save-result",
+          requestId: message.requestId,
+          ok: false,
+          error: "invalid_browser_save_request",
+        });
+        return;
+      }
+      pendingBrowserSave.current = {
+        requestId: message.requestId,
+        revision: null,
+      };
+      pendingSaveRevision.current = saveRevision.current + 1;
+      try {
+        const response = await fetch(`${launch.contentApiBase}/contents`, {
+          method: "PUT",
+          headers: {
+            "content-type":
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "if-match": browserRevision.current,
+          },
+          body: message.bytes,
+          cache: "no-store",
+        });
+        const value = await response.json().catch(() => ({}));
+        if (!response.ok)
+          throw new Error(value.error ?? "browser_document_save_failed");
+        const revision = response.headers.get("etag") ?? value.revision ?? "";
+        if (typeof revision !== "string" || !revision)
+          throw new Error("browser_save_revision_missing");
+        const pendingRequest = pendingBrowserSave.current;
+        if (!pendingRequest || pendingRequest.requestId !== message.requestId)
+          return;
+        browserRevision.current = revision;
+        pendingRequest.revision = revision;
+        editorModified.current = false;
+        setSaveState(value.unchanged ? "저장 확인 중…" : "저장 검사 중…");
+      } catch (cause) {
+        if (pendingBrowserSave.current?.requestId !== message.requestId) return;
+        channel.postMessage({
+          type: "save-result",
+          requestId: message.requestId,
+          ok: false,
+          error:
+            cause instanceof Error
+              ? cause.message
+              : "browser_document_save_failed",
+        });
+        pendingSaveRevision.current = null;
+        editorModified.current = true;
+        setSaveState("저장 실패");
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "브라우저에서 PPTX를 저장하지 못했습니다.",
+        );
+      }
+    },
+    [launch],
   );
   useLayoutEffect(() => {
     if (input.current) {
@@ -278,9 +434,19 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== origin) return;
-      if (event.data?.type === "spellbook.extension-ready" && event.source) {
-        const sessionId =
-          typeof event.data.bridgeSessionId === "string"
+      const browserBridge =
+        launch.editorKind === "browser" &&
+        event.data?.type === "spellbook.browser-office-ready" &&
+        event.data?.protocolVersion === 1 &&
+        typeof event.data.bridgeSessionId === "string" &&
+        event.data.bridgeSessionId.length > 0;
+      const wopiBridge =
+        launch.editorKind === "wopi" &&
+        event.data?.type === "spellbook.extension-ready";
+      if ((browserBridge || wopiBridge) && event.source) {
+        const sessionId = browserBridge
+          ? event.data.bridgeSessionId
+          : typeof event.data.bridgeSessionId === "string"
             ? event.data.bridgeSessionId
             : "legacy";
         if (port.current && bridgeSession.current === sessionId) return;
@@ -292,6 +458,49 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
         port.current = channel.port1;
         channel.port1.onmessage = (result) => {
           if (port.current !== channel.port1) return;
+          if (browserBridge) {
+            if (result.data?.type === "ready") {
+              void openBrowserDocument(channel.port1);
+              return;
+            }
+            if (result.data?.type === "open-complete") {
+              browserOpening.current = false;
+              setEngineReady(true);
+              setBridgeReady(true);
+              setSaveState(
+                result.data.recovered ? "복구된 변경 사항 있음" : "저장됨",
+              );
+              return;
+            }
+            if (result.data?.type === "modified") {
+              editorModified.current = result.data.modified === true;
+              setSaveState((current) =>
+                result.data.modified
+                  ? "변경 사항 있음"
+                  : pendingSaveRevision.current !== null
+                    ? current
+                    : "저장됨",
+              );
+              return;
+            }
+            if (result.data?.type === "save") {
+              void saveBrowserDocument(channel.port1, result.data);
+              return;
+            }
+            if (result.data?.type === "save-response") {
+              if (!result.data.success) setSaveState("저장 실패");
+              return;
+            }
+            if (result.data?.type === "error") {
+              browserOpening.current = false;
+              setError(
+                typeof result.data.error === "string"
+                  ? result.data.error
+                  : "브라우저 편집기에서 오류가 발생했습니다.",
+              );
+              return;
+            }
+          }
           if (result.data?.type === "ready") {
             setBridgeReady(true);
             return;
@@ -303,10 +512,15 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
             ).catch((e) => setError(e.message));
         };
         (event.source as Window).postMessage(
-          {
-            type: "spellbook.connect",
-            bridgeSessionId: sessionId === "legacy" ? undefined : sessionId,
-          },
+          browserBridge
+            ? {
+                type: "spellbook.browser-office-connect",
+                protocolVersion: 1,
+              }
+            : {
+                type: "spellbook.connect",
+                bridgeSessionId: sessionId === "legacy" ? undefined : sessionId,
+              },
           origin,
           [channel.port2],
         );
@@ -351,14 +565,21 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       }
     };
     window.addEventListener("message", onMessage);
-    if (!submitted.current) {
+    if (launch.editorKind === "wopi" && !submitted.current) {
       submitted.current = true;
       form.current?.submit();
     }
     return () => window.removeEventListener("message", onMessage);
-  }, [origin, api, sendOffice]);
+  }, [
+    origin,
+    api,
+    launch.editorKind,
+    openBrowserDocument,
+    saveBrowserDocument,
+    sendOffice,
+  ]);
   useEffect(() => {
-    if (!engineReady || bridgeReady) return;
+    if (launch.editorKind !== "wopi" || !engineReady || bridgeReady) return;
     const open = () => {
       // CODE can show a first-run release dialog even when welcome.enable is
       // disabled. Close it through the editor's own message contract so the
@@ -372,7 +593,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     open();
     const timer = setInterval(open, 500);
     return () => clearInterval(timer);
-  }, [engineReady, bridgeReady, origin]);
+  }, [engineReady, bridgeReady, launch.editorKind, origin, sendOffice]);
   useEffect(() => {
     if (!bridgeReady) return;
     let stopped = false,
@@ -400,6 +621,22 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
             completedRevision !== null &&
             saveRevision.current >= completedRevision
           ) {
+            const browserSave = pendingBrowserSave.current;
+            if (browserSave?.revision) {
+              pendingBrowserSave.current = null;
+              editorModified.current = false;
+              port.current?.postMessage({
+                type: "save-result",
+                requestId: browserSave.requestId,
+                ok: true,
+                revision: browserSave.revision,
+              });
+            }
+            if (browserSave && !browserSave.revision) {
+              setSaveState("저장 검사 중…");
+              timer = setTimeout(poll, 500);
+              return;
+            }
             pendingSaveRevision.current = null;
             setSaveState("저장됨");
             const waiting = pendingTurn.current;
@@ -425,11 +662,23 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           ) {
             downloadAfterRevision.current = null;
             window.location.assign(
-              `${launch.apiBase.replace(/\/native$/, "")}/download`,
+              `/api/documents/${launch.documentId}/download`,
             );
           }
         } else if (response.session?.status === "failed") {
           const waiting = pendingTurn.current;
+          const browserSave = pendingBrowserSave.current;
+          if (browserSave) {
+            pendingBrowserSave.current = null;
+            editorModified.current = true;
+            port.current?.postMessage({
+              type: "save-result",
+              requestId: browserSave.requestId,
+              ok: false,
+              error:
+                response.session.error ?? "browser_document_validation_failed",
+            });
+          }
           pendingTurn.current = null;
           pendingSaveRevision.current = null;
           setSaveState("저장 실패");
@@ -543,6 +792,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
   }, [aiConnected]);
   useEffect(() => {
     if (
+      launch.editorKind !== "wopi" ||
       !aiConnected ||
       !engineReady ||
       !bridgeReady ||
@@ -557,7 +807,14 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       Notify: true,
       DontSaveIfUnmodified: false,
     });
-  }, [aiConnected, bridgeReady, engineReady, sendOffice, sessionObserved]);
+  }, [
+    aiConnected,
+    bridgeReady,
+    engineReady,
+    launch.editorKind,
+    sendOffice,
+    sessionObserved,
+  ]);
   async function submit() {
     if (!text.trim() || busy || !bridgeReady || !aiConnected) return;
     const pending: PendingTurn = { draft: text, permission, model };
@@ -576,7 +833,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     ]);
     if (
       editorModified.current ||
-      saveRevision.current === 0 ||
+      (launch.editorKind === "wopi" && saveRevision.current === 0) ||
       saveState !== "저장됨"
     ) {
       pendingTurn.current = pending;
@@ -658,7 +915,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
             className="ds-button is-secondary is-compact native-download"
             disabled={!engineReady || saveState.endsWith("중…")}
             onClick={() => {
-              const downloadUrl = `${launch.apiBase.replace(/\/native$/, "")}/download`;
+              const downloadUrl = `/api/documents/${launch.documentId}/download`;
               if (saveState === "저장됨") {
                 window.location.assign(downloadUrl);
                 return;
@@ -688,27 +945,30 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
         </div>
       </header>
       <section className="native-canvas" aria-label="프레젠테이션 편집">
-        <form
-          ref={form}
-          target="spellbook-office"
-          method="post"
-          action={launch.editorUrl}
-          hidden
-        >
-          <input name="access_token" value={launch.accessToken} readOnly />
-          <input name="access_token_ttl" value={launch.expiresAt} readOnly />
-          <input name="css_variables" value={theme} readOnly />
-          <input
-            name="ui_defaults"
-            value="UIMode=tabbed;PresentationSidebar=false;"
-            readOnly
-          />
-        </form>
+        {launch.editorKind === "wopi" ? (
+          <form
+            ref={form}
+            target="spellbook-office"
+            method="post"
+            action={launch.editorUrl}
+            hidden
+          >
+            <input name="access_token" value={launch.accessToken} readOnly />
+            <input name="access_token_ttl" value={launch.expiresAt} readOnly />
+            <input name="css_variables" value={theme} readOnly />
+            <input
+              name="ui_defaults"
+              value="UIMode=tabbed;PresentationSidebar=false;"
+              readOnly
+            />
+          </form>
+        ) : null}
         <iframe
           ref={office}
           name="spellbook-office"
           title="PPT 편집기"
-          allow="clipboard-read; clipboard-write"
+          src={launch.editorKind === "browser" ? launch.editorUrl : undefined}
+          allow="clipboard-read; clipboard-write; cross-origin-isolated"
         />
         {!engineReady ? (
           <div className="native-loading">

@@ -1439,10 +1439,19 @@ function spellbookDocumentOperation(request) {
           }))
           .filter((element) => element.paragraphs !== null)
       : [];
+    // Master shapeCount is diagnostic only. Import/export may lazily
+    // materialize empty layout placeholders without changing authored
+    // content; the persistence validator applies the same rule. Keeping that
+    // implementation count in a live concurrency revision makes a save look
+    // like an unrelated user edit and prevents a real Undo from restoring its
+    // prior revision.
+    const revisionMasters = masters.map(
+      ({ shapeCount: _shapeCount, ...master }) => master,
+    );
     return {
       unit: "1/100mm",
       engine: engineIdentity,
-      revision: revisionOf({ slides, masters }),
+      revision: revisionOf({ slides, masters: revisionMasters }),
       masters,
       slides,
       activeSlide,

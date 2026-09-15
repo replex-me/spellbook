@@ -16,6 +16,24 @@ body {
   margin: 0;
 }
 
+body[data-mode="product"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+body[data-mode="product"] > header,
+body[data-mode="product"] > #evidence {
+  display: none;
+}
+
+body[data-mode="product"] > main {
+  padding: 0;
+}
+
+body[data-mode="product"] #qtcanvas {
+  min-height: 100vh;
+  outline: 0;
+}
+
 header {
   display: flex;
   align-items: center;

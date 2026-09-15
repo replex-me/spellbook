@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { browserRevision, requireBrowserOrigin } from "./browser-session";
+import {
+  browserOfficeWorkspaceUrl,
+  browserRevision,
+  requireBrowserOrigin,
+} from "./browser-session";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -30,5 +34,23 @@ describe("browser edit session boundary", () => {
         }),
       ),
     ).toThrow("invalid_browser_origin");
+  });
+
+  it("binds the browser Office workspace to the exact product origin", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://spellbook.example");
+    vi.stubEnv(
+      "SPELLBOOK_BROWSER_OFFICE_URL",
+      "https://office.spellbook.example",
+    );
+    expect(browserOfficeWorkspaceUrl()).toBe(
+      "https://office.spellbook.example/workspace?hostOrigin=https%3A%2F%2Fspellbook.example",
+    );
+    vi.stubEnv(
+      "SPELLBOOK_BROWSER_OFFICE_URL",
+      "https://user:secret@office.spellbook.example",
+    );
+    expect(() => browserOfficeWorkspaceUrl()).toThrow(
+      "SPELLBOOK_BROWSER_OFFICE_URL is invalid.",
+    );
   });
 });

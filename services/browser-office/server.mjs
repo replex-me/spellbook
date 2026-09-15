@@ -16,6 +16,10 @@ export function buildRoutes(root = serviceRoot, upstream = manifest) {
       route(path.join(root, "harness/index.html"), "text/html; charset=utf-8"),
     ],
     [
+      "/workspace",
+      route(path.join(root, "harness/index.html"), "text/html; charset=utf-8"),
+    ],
+    [
       "/harness/app.js",
       route(
         path.join(root, "harness/app.js"),
@@ -114,13 +118,37 @@ export function buildRoutes(root = serviceRoot, upstream = manifest) {
 
 export function createHarnessServer(options = {}) {
   const routes = options.routes ?? buildRoutes();
+  const hostOrigin = validateHostOrigin(
+    options.hostOrigin ?? process.env.SPELLBOOK_BROWSER_HOST_ORIGIN,
+  );
   return createServer((request, response) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-    const target = routes.get(pathname);
     for (const [name, value] of Object.entries(
       manifest.requiredDocumentHeaders,
     ))
       response.setHeader(name, value);
+    if (pathname === "/workspace" && hostOrigin)
+      response.setHeader(
+        "Content-Security-Policy",
+        `frame-ancestors 'self' ${hostOrigin}`,
+      );
+    if (pathname === "/readyz") {
+      response.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      response.end(
+        JSON.stringify({
+          status: "ok",
+          protocolVersion: 1,
+          buildCommit: manifest.source.buildCommit,
+          candidateCommit: manifest.source.candidateCommit,
+          ...manifest.sourceCandidate,
+        }),
+      );
+      return;
+    }
+    const target = routes.get(pathname);
     if (!target || !existsSync(target.file)) {
       response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       response.end("Not found");
@@ -130,6 +158,14 @@ export function createHarnessServer(options = {}) {
     if (request.method === "HEAD") response.end();
     else createReadStream(target.file).pipe(response);
   });
+}
+
+function validateHostOrigin(value) {
+  if (!value) return null;
+  const parsed = new URL(value);
+  if (parsed.origin !== value || !["http:", "https:"].includes(parsed.protocol))
+    throw new Error("SPELLBOOK_BROWSER_HOST_ORIGIN must be an HTTP origin.");
+  return parsed.origin;
 }
 
 function route(file, contentType, headers = {}) {
@@ -146,10 +182,11 @@ function route(file, contentType, headers = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const portFlag = process.argv.indexOf("--port");
   const port = Number(portFlag >= 0 ? process.argv[portFlag + 1] : 4173);
+  const host = process.env.HOST ?? "127.0.0.1";
   const server = createHarnessServer();
-  server.listen(port, "127.0.0.1", () => {
+  server.listen(port, host, () => {
     process.stdout.write(
-      `Spellbook Browser Office: http://127.0.0.1:${port}/?autorun=1\n`,
+      `Spellbook Browser Office: http://${host}:${port}/?autorun=1\n`,
     );
   });
 }

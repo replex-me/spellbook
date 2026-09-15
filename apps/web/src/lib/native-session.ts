@@ -33,6 +33,7 @@ const OFFICE_DISCOVERY_CACHE_MS = 12 * 60 * 60 * 1000;
 const OFFICE_WARM_TIMEOUT_MS = 150_000;
 
 export interface NativeLaunch {
+  editorKind: "wopi";
   documentId: string;
   fileName: string;
   editorUrl: string;
@@ -310,6 +311,7 @@ export async function createNativeLaunch(
   const wopiSource = `${internalAppBaseUrl()}/api/wopi/files/${documentId}`;
   const editorUrl = await editorActionUrl();
   return {
+    editorKind: "wopi",
     documentId,
     fileName: row.file_name,
     editorUrl: buildPptxEditorUrl(editorUrl, wopiSource),

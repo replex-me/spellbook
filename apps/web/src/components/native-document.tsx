@@ -13,9 +13,17 @@ const launchErrors: Record<string, string> = {
     "파일을 찾을 수 없습니다. 파일 목록에서 다시 열어 주세요.",
   document_processing_failed:
     "이 PPTX를 편집 가능한 상태로 만들지 못했습니다. 파일 목록에서 오류를 확인하거나 다시 업로드해 주세요.",
+  browser_office_not_configured:
+    "브라우저 편집기 배포 설정이 완료되지 않았습니다. 잠시 후 다시 시도해 주세요.",
 };
 
-export default function NativeDocument({ documentId }: { documentId: string }) {
+export default function NativeDocument({
+  documentId,
+  launchMode,
+}: {
+  documentId: string;
+  launchMode: "wopi" | "browser";
+}) {
   const [launch, setLaunch] = useState<NativeLaunch | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -24,8 +32,9 @@ export default function NativeDocument({ documentId }: { documentId: string }) {
   const load = useCallback(
     async (signal: AbortSignal) => {
       const response = await fetch(
-        `/api/documents/${documentId}/native/launch`,
+        `/api/documents/${documentId}/${launchMode === "browser" ? "browser" : "native"}/launch`,
         {
+          method: launchMode === "browser" ? "POST" : "GET",
           cache: "no-store",
           signal,
         },
@@ -58,7 +67,7 @@ export default function NativeDocument({ documentId }: { documentId: string }) {
       );
       return "failed" as const;
     },
-    [documentId],
+    [documentId, launchMode],
   );
   useEffect(() => {
     const controller = new AbortController();

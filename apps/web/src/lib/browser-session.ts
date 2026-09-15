@@ -14,22 +14,58 @@ import {
 } from "./storage";
 import { enqueueWorkerJob } from "./workers";
 import { loadNativeSaveChangePolicy } from "./native-change-budget";
+import {
+  aiConnectorConfig,
+  type AiConnectorConfig,
+} from "./ai-connector-config";
 
 const browserSessionMs = 6 * 60 * 60 * 1000;
 
 export interface BrowserDocumentLaunch {
+  editorKind: "browser";
   documentId: string;
   fileName: string;
+  editorUrl: string;
+  accessToken: "";
   revision: string;
   expiresAt: number;
   apiBase: string;
+  contentApiBase: string;
   maxBytes: number;
+  aiConnector: AiConnectorConfig;
+}
+
+export function browserOfficeWorkspaceUrl(): string {
+  const configured = process.env.SPELLBOOK_BROWSER_OFFICE_URL?.trim();
+  if (!configured) throw new HttpError(503, "browser_office_not_configured");
+  const base = new URL(
+    configured.endsWith("/") ? configured : `${configured}/`,
+  );
+  const loopback =
+    base.protocol === "http:" &&
+    (base.hostname === "localhost" || base.hostname === "127.0.0.1");
+  if (
+    base.username ||
+    base.password ||
+    base.pathname !== "/" ||
+    base.search ||
+    base.hash ||
+    !["http:", "https:"].includes(base.protocol) ||
+    (process.env.NODE_ENV === "production" &&
+      base.protocol !== "https:" &&
+      !loopback)
+  )
+    throw new Error("SPELLBOOK_BROWSER_OFFICE_URL is invalid.");
+  const workspace = new URL("workspace", base);
+  workspace.searchParams.set("hostOrigin", publicAppBaseUrl());
+  return workspace.toString();
 }
 
 export async function createBrowserDocumentLaunch(
   session: Session,
   documentId: string,
 ): Promise<BrowserDocumentLaunch> {
+  const editorUrl = browserOfficeWorkspaceUrl();
   await ensureSchema();
   const expiresAt = Date.now() + browserSessionMs;
   const document = await db().begin(async (sql) => {
@@ -90,15 +126,20 @@ export async function createBrowserDocumentLaunch(
     return current;
   });
   return {
+    editorKind: "browser",
     documentId,
     fileName: document.file_name,
+    editorUrl,
+    accessToken: "",
     revision: browserRevision(
       document.current_version_id,
       document.document_sha256,
     ),
     expiresAt,
-    apiBase: `/api/documents/${documentId}/browser`,
+    apiBase: `/api/documents/${documentId}/native`,
+    contentApiBase: `/api/documents/${documentId}/browser`,
     maxBytes: currentPresentationFormat.maxBytes,
+    aiConnector: aiConnectorConfig(),
   };
 }
 
