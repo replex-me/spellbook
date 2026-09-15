@@ -1,96 +1,59 @@
-# Product completion ledger
+# Product completion contract
 
-Updated: 2026-09-15
+Updated: 2026-09-16
 
-This is the single progress denominator for the current delivery objective:
-**a usable PPTX public beta, a runnable open-core self-host product, and the
-Replex-managed public service that consumes it**. Future DOCX and native
-page-layout editors are outside this score. Adding those formats requires an
-explicit new scope decision; discovering a PPTX defect does not enlarge the
-denominator.
+The delivery objective is one complete product: **a usable PPTX public beta,
+a runnable open-core self-host product, and the Replex-managed public service
+that consumes the exact same released core**. A partial score is not a delivery
+target and is not used to decide what to implement next.
 
-## Accounting rule
+Future DOCX and native page-layout editors are outside this scope. A new format
+requires an explicit scope decision; a newly discovered PPTX defect belongs to
+the existing PPTX completion contract.
 
-The denominator is fixed at 100 points. Points represent user value and the
-engineering risk that remains before the promised experience is real. A point
-is earned only by the evidence named below. Source code, a patch, a download or
-a running build does not earn the later runtime or deployment point. New
-findings are recorded under the existing line item instead of adding new
-points. Weights change only when the product scope changes explicitly.
+## Completion rule
 
-Current score: **49 / 100 complete; 51 / 100 remaining**.
+Spellbook is complete only when one immutable release candidate satisfies all
+rows below. Code, a source patch, a successful build, a command name, or a
+passing unit test is evidence for its own layer only. None can substitute for
+the integrated browser, native PowerPoint, AI, self-host, managed-service,
+security, load, rollback, and user-experience evidence.
 
-| Product outcome                               |  Weight | Earned | Current evidence                                                                                                                                                                                                                                                                                                                    | Remaining evidence                                                                                                                                                                                                                                                                               |
-| --------------------------------------------- | ------: | -----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Open-core and cloud repository boundary       |      10 |      8 | The public runnable repository, MPL-2.0 boundary checks and private cloud ownership boundary exist                                                                                                                                                                                                                                  | Consume only pinned public artifacts through private adapters; prove migration, rollback, licensing and SBOM release evidence                                                                                                                                                                    |
-| PowerPoint-like direct editing UX             |      20 |     10 | Slide pane, ribbon, canvas and integrated AI panel exist; the browser-owned LibreOffice canvas completes six structure-preserving slide operations and six-step Undo; the product session now performs a real text edit, reload recovery, Undo, Redo, save, validation and download through the same revision-bound journal         | Complete direct manipulation, property editing, responsive/Korean IME/accessibility behavior, measured interaction latency and final screenshot review                                                                                                                                           |
-| Subscription AI collaboration                 |      15 |      9 | Real Codex and Claude Code subscriptions completed deployed read/edit/re-observe/self-review/save/Undo loops through the packaged macOS arm64 Connector; Codex image generation passed                                                                                                                                              | Complete permission switching and full tool exposure, reconnect/error UX, Developer ID/notarized packages, normal Finder lifecycle, upgrades, x64 macOS and Windows                                                                                                                              |
-| PPT feature breadth for people and AI         |      25 |     10 | Typed bounded tools, stale-revision rejection, permission rebinding, dry-run and atomic rollback exist; the exact undo-v18 engine exercised all 63 exposed native operations across 10 browser scenarios with save/reopen and change-budget checks; browser slide topology covers all four shared commands                          | Complete and verify high-value gaps including deeper charts, SmartArt semantics, arbitrary master/theme authoring, media and effect insertion/removal; establish browser parity for the remaining command families                                                                               |
-| Fidelity, Undo, save and PowerPoint integrity |      15 |      7 | Public corpus/evaluation harness, structural change budgets, font policy, 621-slide no-render-failure run and macOS PowerPoint topology/Undo identity checks exist; the real product text-save path changes only `ppt/slides/slide1.xml`, and both the browser verifier and server validator reject collateral package changes      | Extend localized save coverage to the remaining commands; run the exact promoted engine through corpus regression, text-reflow/font closure, wider preservation checks and repeatable Windows/macOS PowerPoint matrices; resolve the pinned browser renderer's observed text-position difference |
-| Public infrastructure, performance and safety |      10 |      5 | Compose/local auth/storage, signed WOPI verification, backup/isolated restore, restart recovery, private GCP validation and central control-plane contracts provide the base; the product now consumes the browser runtime through a revision-bound bridge and recovers a reconciled candidate from the crash-tolerant OPFS journal | Public signup/deletion, direct object-storage transfer, browser reconciliation for untracked direct manipulation, multi-user isolation, load/backpressure/autoscaling, billing/entitlement, clean native host/TLS/disk/interrupted-job exercises                                                 |
-| Final public launch evidence                  |       5 |      0 | No current build proves the complete promised public workflow                                                                                                                                                                                                                                                                       | Ship a signed release and deploy the exact artifacts; verify self-host and managed signup-to-edit-to-AI-review-to-download flows with rollback and support commitments                                                                                                                           |
-| **Total**                                     | **100** | **49** |                                                                                                                                                                                                                                                                                                                                     | **51 points remain**                                                                                                                                                                                                                                                                             |
+| Required product outcome                      | Complete only when                                                                                                                                                                                                                                                  | Current verified foundation                                                                                                                                                | Work still required before the completion claim                                                                                                                                                                                                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Open-core and managed-cloud boundary          | A clean clone runs independently; the private service consumes only signed, digest-pinned public artifacts; license, NOTICE, SBOM, upgrade, migration and rollback evidence identify the same release                                                               | Public repository, MPL-2.0 boundary checks, runnable local services and private-cloud ownership boundary exist                                                             | Bind the private adapters and deployed service to the final public release; complete release licensing, SBOM, migration and rollback proof                                                                                                                                           |
+| PowerPoint-like human editing                 | A user can directly manipulate supported PPTX content with familiar slide pane, ribbon, canvas and properties; Korean IME, keyboard, accessibility, responsive layout, latency and visual review pass                                                               | Slide pane, ribbon, canvas and AI panel exist; browser Office now checkpoints direct native edits into the same PPTX journal used by AI edits                              | Complete and runtime-verify direct manipulation and property workflows across the supported PPT feature set; pass Korean IME, accessibility, responsive, latency and screenshot review                                                                                               |
+| Subscription AI collaboration                 | Codex and Claude Code can connect from normal installations, request/change permission, use every admitted editing tool, observe fresh screenshots, repair their own visual regressions, save and Undo; reconnect, upgrades and supported OS packages pass          | Real subscription loops passed read, edit, re-observe, review, save and Undo on packaged macOS arm64; Codex image generation passed; permission modes exist                | Finish signed/notarized distribution, normal Finder lifecycle, reconnect/error recovery, upgrades, macOS x64 and Windows; prove the final browser runtime with the complete tool contract                                                                                            |
+| PPT feature breadth for people and AI         | Every supported human mutation has a bounded AI equivalent or an explicit format/security exclusion; tables, charts, diagrams, media, animation, masters/themes, text, shapes and slide structure pass readback, Undo/Redo, save/reopen and preservation checks     | The typed contract exposes 63 bounded operations; the server engine passed ten conformance scenarios; the browser adapter implements the same contract and image insertion | Run the compiled browser engine through all ten shared scenarios; implement and verify the remaining high-value semantic gaps rather than exposing unsafe raw UI commands, including deeper charts, SmartArt semantics, master/theme authoring, media and animation/effect lifecycle |
+| PPTX fidelity and integrity                   | Supported public and real-world corpora have no hard failures; fonts and text wrapping meet the declared threshold; every edit stays within its structural change budget; Windows and macOS PowerPoint reopen the exact artifacts                                   | Public corpus/evaluation harness, font policy, 621-slide no-render-failure run, change-budget validator and macOS PowerPoint topology checks exist                         | Run the final engine through corpus regression, text-reflow/font closure, editability/preservation checks and repeatable Windows/macOS PowerPoint matrices; resolve remaining browser text-position drift                                                                            |
+| Public infrastructure, performance and safety | Public signup, account deletion, direct object transfer, tenant isolation, backpressure/autoscaling, entitlement, billing, TLS, backups, restore, disk pressure and interrupted jobs pass at planned load and cost                                                  | Local auth/storage, signed WOPI, isolated restore, worker recovery, disk-pressure behavior and browser OPFS crash recovery exist                                           | Complete the public identity and storage path, multi-user isolation, load/autoscaling, entitlement/billing, production TLS, restore and interrupted-job exercises                                                                                                                    |
+| Release and real user workflow                | Signed public and managed artifacts are deployed; a fresh user completes signup → upload → first editable frame → direct edit → AI permission/edit/review → Undo → save → PowerPoint download on supported platforms; rollback and support procedures are exercised | Public prerelease source and release automation foundations exist                                                                                                          | Produce, deploy and verify the single final release candidate end to end; do not call an earlier evidence layer a beta                                                                                                                                                               |
 
-## Score change log
+## Execution discipline
 
-| Date       | Commit    | Delta | Evidence                                                                                                                                                                                                    |
-| ---------- | --------- | ----: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-15 | `cceb895` |    +2 | PowerPoint-like direct editing: headless product bridge completed edit, reload recovery, Undo, Redo and save without page or request failures                                                               |
-| 2026-09-15 | `cceb895` |    +1 | Fidelity: browser and real self-host comparisons both found exactly one changed OOXML part for one text edit; the document worker independently returned `valid: true`, one in-scope change and zero errors |
-| 2026-09-15 | `cceb895` |    +1 | Infrastructure: the real product session consumed the browser editor, persisted its command/revision journal and recovered it after reload; unsupported unreconciled commands failed before mutation        |
+- Implement the entire fixed scope; do not optimize for an intermediate score.
+- Batch related source changes and use focused local tests while editing. Run an
+  expensive LibreOffice build only after the source batch is complete.
+- Keep the LibreOffice source line, toolchain, build outputs and promotion
+  evidence separately cached. Never rebuild an already-proven stage because a
+  web-only file changed.
+- Reuse one conformance program across the server and browser engines. A
+  feature passes only when the same semantic command, permission, readback,
+  Undo/Redo, save/reopen and change-budget contract passes on the released
+  runtime.
+- Report concrete completed behavior and concrete failures. Do not translate
+  partial evidence into a progress percentage.
 
-This four-point delta is limited to the proven text-edit path. It does not
-claim browser parity for other commands, free-form canvas edits, PowerPoint
-desktop reopen, production deployment or final UI quality.
+## Evidence that exists but is not completion
 
-## Unscored implementation evidence
+The initial public extraction contained 261 files and 47,613 inserted lines;
+subsequent work added application, engine, contract, distribution and
+verification code. The current browser path can preserve generic native edits
+as real PPTX snapshots, recover them from OPFS, and expose the complete current
+63-operation contract to a receipt-bound candidate runtime. The shared
+ten-scenario browser conformance runner is ready to consume that immutable
+runtime.
 
-These changes reduce product risk or prepare a missing capability, but they do
-not change the completion score until the user outcome in the main table is
-proven.
-
-| Date       | Commit    | Improvement                                                                                                                                                                                                                                  | Why it earns no point yet                                                                                                                                 |
-| ---------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-09-15 | `19f7806` | The product rejects six slide-structure commands before mutation when the browser runtime cannot safely observe and undo them; the verifier proves the revision and slide count remain unchanged                                             | It prevents corruption but does not make slide insertion, duplication, deletion, movement, rename or hide available to the user                           |
-| 2026-09-15 | `27b08cc` | The stock product path proves text replacement, move, resize and fill color through edit and Undo; unsafe rotation and line/transparency paths are gated; the `browser-undo-v6` source and bounded property adapter cover those gaps         | The v6 C++ patch applies cleanly, but it has not yet been compiled or passed the integrated browser edit, Undo, recovery and save matrix                  |
-| 2026-09-15 | `47e3ef2` | Browser timeouts now report the pending native request and revision/save/Undo state; a rolling experiment isolated a stock WASM stall after the first post-save edit rather than hiding it as a generic timeout                              | Diagnostics and a release criterion expose the defect but do not make a long-lived editing session reliable                                               |
-| 2026-09-15 | `8a08e18` | The `browser-undo-v7` source and adapter route eight text-formatting operations and five shape-appearance operations through bounded typed property transactions with native Undo and PPTX round-trip regressions                            | The source patch and simulated adapter tests do not prove that the compiled WASM runtime executes those 13 candidate-only operations                      |
-| 2026-09-15 | `9819b10` | The browser build now pins the complete Linux, Emscripten and Qt toolchain, preserves source/native/WASM/ccache stages across retries and emits a hash-bound build receipt                                                                   | A reproducible build path reduces build risk but is not an editor capability, and the exact candidate has not completed its build                         |
-| 2026-09-15 | `60c73cb` | Candidate verification admits only receipt-bound raw runtime bytes without changing the tracked promotion manifest and adds a one-session 100-cycle matrix across all 17 admitted element operations                                         | The stock four-operation path still passes, but the candidate runtime and its native, endurance and PowerPoint evidence remain pending                    |
-| 2026-09-15 | `38de40f` | A stuck WASM renderer can no longer trap the verifier in its own diagnostics; the candidate report is bound to artifact hashes and the follow-up requires Open XML SDK plus native PowerPoint reopen, text and bounded visual-delta evidence | The fail-closed verifier and PowerPoint gate are proven in unit and stock-runtime runs, but no compiled v7 candidate has supplied their required evidence |
-| 2026-09-15 | `3a843eb` | The pinned Allotropia Emscripten fork now bootstraps its own npm package state before the toolchain image admits `em++`, closing the exact setup failure reproduced on the build host                                                        | The toolchain fix enables the one candidate build but does not itself provide an editable runtime                                                         |
-| 2026-09-15 | `57b29ee` | Candidate promotion emits one receipt only when the runtime, 100-cycle browser session and native PowerPoint report identify the same source receipt and saved PPTX                                                                          | The fail-closed promotion path has unit evidence, but no complete candidate evidence set exists yet                                                       |
-| 2026-09-15 | `0ac9a9d` | The build receipt now binds both raw runtime files and the Brotli-compressed WASM/data bytes that the production server actually delivers; candidate verification serves those exact compressed bytes                                        | Artifact identity prevents a false promotion but does not earn product capability until the candidate runs                                                |
-
-## Completion target
-
-The delivery target is **100 / 100**, not the next intermediate score. Browser
-runtime admission, command breadth, direct manipulation, AI collaboration,
-fidelity, public infrastructure and launch evidence are one product scope and
-remain in execution until every row in the main table is fully earned. An
-intermediate score may be recorded as truthful evidence, but it is not a
-release milestone and must not be presented as completion or as the next
-product target.
-
-Implementation proceeds across the complete remaining scope before the final
-release claim. Focused tests may run while code is changing to catch defects
-close to their source, but the score reaches 100 only after one immutable
-release candidate passes the full browser, engine, PowerPoint, AI, self-host,
-managed-service, security, load and rollback matrix.
-
-## What the last three days produced
-
-The initial public extraction was 261 files and 47,613 inserted lines. After
-that extraction, 38 additional commits changed 215 files with 33,437 inserted
-and 1,155 deleted lines. The current product tree contains about 60,000 lines
-across application, engine, contract and verification source and 70 test
-files, including generated test output. These figures demonstrate substantial
-implementation work but do not substitute for the evidence-based score above.
-
-## Update discipline
-
-Every score change must name the exact line item, newly earned points and the
-evidence artifact. Work in progress is reported in words without advancing the
-number. Release blockers remain tracked separately in
-[Public release gates](./release-gates.md); a blocker may prevent publication
-without erasing implementation already completed.
+These facts explain what has been built. They do not claim that the final
+runtime, full remaining feature breadth, deployment or public user workflow has
+passed.

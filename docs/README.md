@@ -11,7 +11,7 @@ The repository is governed by a small set of documents with distinct jobs:
 - [Self-hosting](delivery/self-hosting.md): installation, secrets, storage and operational requirements.
 - [Storage-pressure verification](delivery/storage-pressure-verification-2026-09-15.md): packaged runtime evidence for atomic rejection and durable failure receipts under disk pressure.
 - [Release gates](delivery/release-gates.md): evidence required before a public release can be called usable.
-- [Product completion](delivery/product-completion.md): fixed 100-point ledger for implementation progress and remaining work.
+- [Product completion](delivery/product-completion.md): binary completion contract for the full public product and its required evidence.
 - [Local AI connector verification](delivery/connector-runtime-verification-2026-09-13.md): source and packaged macOS connector evidence and remaining distribution gates.
 - [Local runtime evidence](delivery/runtime-verification-2026-09-11.md): the exact end-to-end path verified before the first public push.
 - [Research record](research/open-core-selfhost-research-2026-09-11.md): external evidence and the decisions derived from it.
