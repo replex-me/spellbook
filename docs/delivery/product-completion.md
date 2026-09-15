@@ -62,19 +62,21 @@ proven.
 | 2026-09-15 | `57b29ee` | Candidate promotion emits one receipt only when the runtime, 100-cycle browser session and native PowerPoint report identify the same source receipt and saved PPTX                                                                          | The fail-closed promotion path has unit evidence, but no complete candidate evidence set exists yet                                                       |
 | 2026-09-15 | `0ac9a9d` | The build receipt now binds both raw runtime files and the Brotli-compressed WASM/data bytes that the production server actually delivers; candidate verification serves those exact compressed bytes                                        | Artifact identity prevents a false promotion but does not earn product capability until the candidate runs                                                |
 
-## Locked next scoring checkpoint
+## Completion target
 
-The score remains **49 / 100** until one immutable `browser-undo-v7` runtime
-passes every condition below. Passing the complete checkpoint earns exactly
-**5 points**, taking the score to **54 / 100**; partial completion earns no
-fractional point and does not change either the denominator or this allocation.
+The delivery target is **100 / 100**, not the next intermediate score. Browser
+runtime admission, command breadth, direct manipulation, AI collaboration,
+fidelity, public infrastructure and launch evidence are one product scope and
+remain in execution until every row in the main table is fully earned. An
+intermediate score may be recorded as truthful evidence, but it is not a
+release milestone and must not be presented as completion or as the next
+product target.
 
-| Existing product outcome                      | Delta | Required evidence in the same candidate run                                                                |
-| --------------------------------------------- | ----: | ---------------------------------------------------------------------------------------------------------- |
-| PowerPoint-like direct editing UX             |    +2 | All 17 element operations execute through the product bridge and each restores through Undo/Redo           |
-| PPT feature breadth for people and AI         |    +1 | The 13 candidate-only operations are advertised and executed only by the exact receipt-bound patched build |
-| Fidelity, Undo, save and PowerPoint integrity |    +1 | Native CppUnit plus localized package save/reopen and PowerPoint reopen pass without collateral OOXML      |
-| Public infrastructure, performance and safety |    +1 | One document session completes 100 mixed edit/observe/Undo/Redo/save cycles without a hang or divergence   |
+Implementation proceeds across the complete remaining scope before the final
+release claim. Focused tests may run while code is changing to catch defects
+close to their source, but the score reaches 100 only after one immutable
+release candidate passes the full browser, engine, PowerPoint, AI, self-host,
+managed-service, security, load and rollback matrix.
 
 ## What the last three days produced
 
