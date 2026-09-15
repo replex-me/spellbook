@@ -8,12 +8,24 @@ proved this vertical with a PPTX: load, show an editable Impress canvas, insert
 a slide, save, undo the insertion, save again, and reopen both outputs in
 Microsoft PowerPoint. The probed binary identifies itself as ZetaOffice 24.2 at
 LibreOffice commit `efaf0670b4d055f838a2849becb10f08aa06a257`; it is not the
-same source line as Spellbook's current server-side Collabora engine.
+same source line as Spellbook's current server-side Collabora engine. The
+browser source candidate is now pinned separately at
+`dced3bc711d18407a2cc2400eb46e8261b663d95`; the only upstream change after the
+probed binary moves browser execution to the browser main thread and does not
+fix whole-file OOXML rewriting.
 
 [`upstream.json`](./upstream.json) pins that exact source identity, ZetaJS
 identity, wire bytes, and browser isolation headers. The upstream URL contains
 `latest`, so its name is not trusted: every downloaded byte must match the
 manifest before it can be hosted.
+
+The candidate source line also pins the Allotropia Emscripten and Qt commits
+and a browser-specific patch series. The first admitted patch carries four
+generic native invariants already proven on the server engine: table-cell Undo,
+page-background Undo, real slide-name Undo, and object identity across slide
+moves. Collabora-only JSON command plumbing is intentionally excluded because
+ZetaJS calls the shared bounded operation program through UNO directly. See
+[`libreoffice/README.md`](./libreoffice/README.md) for the source boundary.
 
 ```sh
 pnpm browser-office:fetch

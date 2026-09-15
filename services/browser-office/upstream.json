@@ -5,7 +5,40 @@
   "source": {
     "repository": "https://git.libreoffice.org/core",
     "ref": "distro/allotropia/zeta-24-2",
-    "buildCommit": "efaf0670b4d055f838a2849becb10f08aa06a257"
+    "buildCommit": "efaf0670b4d055f838a2849becb10f08aa06a257",
+    "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
+  },
+  "sourceCandidate": {
+    "patchLevel": "browser-undo-v1",
+    "patchSeriesReady": true,
+    "buildReady": false,
+    "patchSeriesSha256": "c5719dda9be9ebbcac2963b1d9b58cf199f409d9c9194bda814d85416fe00777",
+    "patches": [
+      "libreoffice/patches/0001-core-undo-identity.patch"
+    ],
+    "invariants": [
+      "table-cell-native-undo",
+      "page-background-native-undo",
+      "slide-real-name-undo",
+      "moved-page-object-identity"
+    ],
+    "requiredCppunitTargets": [
+      "CppunitTest_sd_uiimpress",
+      "CppunitTest_sd_misc_tests"
+    ]
+  },
+  "toolchain": {
+    "emscripten": {
+      "repository": "https://github.com/allotropia/emscripten.git",
+      "ref": "fixed-3.1.65",
+      "commit": "949ee1d40467b80e90a9fdc67155d443426fef2d"
+    },
+    "qt": {
+      "repository": "https://github.com/allotropia/qt5.git",
+      "ref": "5.15.2+wasm",
+      "commit": "3d440b7787f9b5ba15e5f8bcd7aef39b388f94fa",
+      "qtbaseCommit": "a320678c85ec8029d5394bcd673d4c208af1de3a"
+    }
   },
   "javascriptBridge": {
     "repository": "https://github.com/allotropia/zetajs.git",

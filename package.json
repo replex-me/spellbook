@@ -12,6 +12,7 @@
     "build": "pnpm -r --if-present build",
     "browser-office:fetch": "node services/browser-office/fetch-runtime.mjs",
     "browser-office:build": "node services/browser-office/build-harness.mjs",
+    "browser-office:engine:verify": "node services/browser-office/libreoffice/verify-source.mjs",
     "browser-office:prepare": "pnpm browser-office:fetch && pnpm browser-office:build",
     "browser-office:serve": "pnpm browser-office:prepare && node services/browser-office/server.mjs",
     "browser-office:verify": "pnpm browser-office:prepare && node services/browser-office/verify-harness.mjs",
