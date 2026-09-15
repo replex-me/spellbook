@@ -887,7 +887,7 @@ describe("shared open document agent", () => {
           "native_edit",
           {
             op: "insert_image",
-            assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
+            assetId: "99999999-9999-4999-8999-999999999999",
             slideIndex: 0,
           },
           "unobserved",

@@ -1,7 +1,7 @@
-diff --git a/engine/docmodel/source/theme/Theme.cxx b/engine/docmodel/source/theme/Theme.cxx
+diff --git a/docmodel/source/theme/Theme.cxx b/docmodel/source/theme/Theme.cxx
 index 61e4814c9..67b0de7a6 100644
---- a/engine/docmodel/source/theme/Theme.cxx
-+++ b/engine/docmodel/source/theme/Theme.cxx
+--- a/docmodel/source/theme/Theme.cxx
++++ b/docmodel/source/theme/Theme.cxx
 @@ -35,8 +35,9 @@ Theme::Theme(OUString const& rName)
  
  Theme::Theme(Theme const& rTheme)
@@ -56,10 +56,10 @@ index 61e4814c9..67b0de7a6 100644
      return pTheme;
  }
  
-diff --git a/engine/sd/qa/unit/uiimpress.cxx b/engine/sd/qa/unit/uiimpress.cxx
+diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 index c5dc4a1d4..df15e4493 100644
---- a/engine/sd/qa/unit/uiimpress.cxx
-+++ b/engine/sd/qa/unit/uiimpress.cxx
+--- a/sd/qa/unit/uiimpress.cxx
++++ b/sd/qa/unit/uiimpress.cxx
 @@ -1828,6 +1828,74 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureAnimationLifecycleUnd
      CPPUNIT_ASSERT_EQUAL(nOriginalCount + 1, pPage->getMainSequence()->getCount());
  }
@@ -135,10 +135,10 @@ index c5dc4a1d4..df15e4493 100644
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextRangePreservesFormatting)
  {
      createSdImpressDoc();
-diff --git a/engine/sd/source/ui/view/drviews2.cxx b/engine/sd/source/ui/view/drviews2.cxx
+diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
 index b6bbf86e3..7da06679f 100644
---- a/engine/sd/source/ui/view/drviews2.cxx
-+++ b/engine/sd/source/ui/view/drviews2.cxx
+--- a/sd/source/ui/view/drviews2.cxx
++++ b/sd/source/ui/view/drviews2.cxx
 @@ -137,6 +137,10 @@
  #include <tools/UnitConversion.hxx>
  

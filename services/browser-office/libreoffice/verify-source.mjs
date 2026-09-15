@@ -12,7 +12,9 @@ import {
 
 const sourceFlag = process.argv.indexOf("--source");
 if (sourceFlag < 0 || !process.argv[sourceFlag + 1])
-  throw new Error("Usage: node verify-source.mjs --source /path/to/libreoffice-core");
+  throw new Error(
+    "Usage: node verify-source.mjs --source /path/to/libreoffice-core",
+  );
 
 const source = path.resolve(process.argv[sourceFlag + 1]);
 const expectedCommit = upstreamManifest.source.candidateCommit;
@@ -56,10 +58,21 @@ try {
     expectedCommit,
   ]);
   git(verificationRoot, ["sparse-checkout", "init", "--no-cone"]);
-  git(verificationRoot, ["sparse-checkout", "set", "--no-cone", "--", ...sourcePaths]);
+  git(verificationRoot, [
+    "sparse-checkout",
+    "set",
+    "--no-cone",
+    "--",
+    ...sourcePaths,
+  ]);
   git(verificationRoot, ["checkout", "--quiet", "--detach", expectedCommit]);
   for (const patchFile of patches) {
-    git(verificationRoot, ["apply", "--check", "--whitespace=error-all", patchFile]);
+    git(verificationRoot, [
+      "apply",
+      "--check",
+      "--whitespace=error-all",
+      patchFile,
+    ]);
     git(verificationRoot, ["apply", "--whitespace=error-all", patchFile]);
   }
   git(verificationRoot, ["diff", "--check"]);

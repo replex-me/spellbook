@@ -123,5 +123,5 @@ test("extension keeps binary presentation assets behind one typed native transac
   assert.match(source, /operation: "asset_abort"/u);
   assert.match(source, /insertgraphic/u);
   assert.match(source, /insertmultimedia/u);
-  assert.match(source, /asset_insert_readback_failed/u);
+  assert.match(source, /asset_was_not_inserted/u);
 });

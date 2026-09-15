@@ -88,14 +88,14 @@ export function applyOoxmlCommand(input, command) {
     command.op === "set_sections"
       ? updateSections(context, command)
       : command.op === "add_slide" || command.op === "duplicate_slide"
-      ? createSlide(context, command)
-      : command.op === "delete_slide"
-        ? deleteSlide(context, command)
-        : command.op === "move_slide"
-          ? moveSlide(context, command)
-          : slideMetadataOperations.has(command.op)
-            ? updateSlideMetadata(context, command)
-            : updateElement(context, command);
+        ? createSlide(context, command)
+        : command.op === "delete_slide"
+          ? deleteSlide(context, command)
+          : command.op === "move_slide"
+            ? moveSlide(context, command)
+            : slideMetadataOperations.has(command.op)
+              ? updateSlideMetadata(context, command)
+              : updateElement(context, command);
   return {
     bytes: zipSync(context.entries, {
       level: 6,
@@ -244,7 +244,9 @@ function readSections(context) {
     const slideIndexes = numericIds.map((numericId) => {
       const slideIndex = slideIndexById.get(numericId);
       if (slideIndex === undefined || seenSlideIds.has(numericId))
-        throw new Error(`PPTX section ${sectionIndex} has an invalid slide id.`);
+        throw new Error(
+          `PPTX section ${sectionIndex} has an invalid slide id.`,
+        );
       seenSlideIds.add(numericId);
       return slideIndex;
     });
@@ -337,9 +339,7 @@ function writeSections(context, sections) {
       ),
     ];
     for (const list of extensionLists)
-      if (
-        ![...list.childNodes].some((node) => node.nodeType === 1)
-      )
+      if (![...list.childNodes].some((node) => node.nodeType === 1))
         list.parentNode.removeChild(list);
     return;
   }
@@ -361,7 +361,6 @@ function writeSections(context, sections) {
     powerpoint2010Namespace,
     "p14:sectionLst",
   );
-  list.setAttribute("xmlns:p14", powerpoint2010Namespace);
   const slideIds = currentSlideIds(context);
   sections.forEach((section, index) => {
     const entry = context.presentation.createElementNS(
@@ -393,7 +392,11 @@ function writeSections(context, sections) {
 function updateSections(context, command) {
   const previous = readSections(context);
   const value = normalizedSections(command.sections, context.slideIds.length);
-  if (JSON.stringify(previous.map(({ slideCount: _count, ...section }) => section)) === JSON.stringify(value))
+  if (
+    JSON.stringify(
+      previous.map(({ slideCount: _count, ...section }) => section),
+    ) === JSON.stringify(value)
+  )
     return {
       operation: command.op,
       slideCount: context.slideIds.length,
@@ -1456,8 +1459,7 @@ function deleteSlide(context, command) {
         const end =
           sectionsBefore[index + 1]?.startSlideIndex ?? context.slideIds.length;
         return !(
-          section.startSlideIndex === sourceIndex &&
-          end === sourceIndex + 1
+          section.startSlideIndex === sourceIndex && end === sourceIndex + 1
         );
       })
       .map(({ slideCount: _slideCount, ...section }) => ({

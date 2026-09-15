@@ -302,8 +302,8 @@ export default function Dashboard({
                   disabled={connecting}
                 >
                   {connecting
-                      ? "연결 준비 중…"
-                      : aiMode === "local"
+                    ? "연결 준비 중…"
+                    : aiMode === "local"
                       ? "내 AI 구독 연결"
                       : "설정을 켰어요 · 연결 계속"}
                 </button>

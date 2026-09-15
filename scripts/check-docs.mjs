@@ -66,6 +66,9 @@ const availabilityCount = (availability) =>
   mutationOperations.filter(
     (operation) => operation.availability === availability,
   ).length;
+const candidateOperationCount =
+  availabilityCount("engine_patch_ready") +
+  availabilityCount("runtime_validation_required");
 const formatSupport = fs.readFileSync(
   path.join(root, "docs/product/format-support.md"),
   "utf8",
@@ -74,7 +77,7 @@ for (const requiredStatement of [
   `classifies ${operationCount} operations`,
   `of which ${exposedOperationCount} bounded operations are exposed`,
   `${availabilityCount("runtime_verified")} have passed the live runtime path`,
-  `${availabilityCount("engine_patch_ready")} are implemented against the cumulative \`${editorUpstream.patchLevel}\` engine candidate`,
+  `${candidateOperationCount} are implemented against the cumulative \`${editorUpstream.patchLevel}\` engine candidate and require final runtime validation`,
 ]) {
   if (!formatSupport.includes(requiredStatement))
     failures.push(

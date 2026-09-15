@@ -9,10 +9,10 @@ Subject: [PATCH] native-edit: preserve semantic asset and accessibility edits
  engine/sd/source/ui/view/drviews2.cxx | 406 +++++++++++++++++++++++++-
  3 files changed, 647 insertions(+), 4 deletions(-)
 
-diff --git a/engine/sd/qa/unit/uiimpress.cxx b/engine/sd/qa/unit/uiimpress.cxx
+diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 index df15e4493..3c9b16dcb 100644
---- a/engine/sd/qa/unit/uiimpress.cxx
-+++ b/engine/sd/qa/unit/uiimpress.cxx
+--- a/sd/qa/unit/uiimpress.cxx
++++ b/sd/qa/unit/uiimpress.cxx
 @@ -133,6 +133,8 @@
  #include <editeng/outlobj.hxx>
  #include <sdmod.hxx>
@@ -267,10 +267,10 @@ index df15e4493..3c9b16dcb 100644
  }
  
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectInteractionUndoRedo)
-diff --git a/engine/sd/source/ui/unoidl/unoobj.cxx b/engine/sd/source/ui/unoidl/unoobj.cxx
+diff --git a/sd/source/ui/unoidl/unoobj.cxx b/sd/source/ui/unoidl/unoobj.cxx
 index 04f37834c..41d8263c0 100644
---- a/engine/sd/source/ui/unoidl/unoobj.cxx
-+++ b/engine/sd/source/ui/unoidl/unoobj.cxx
+--- a/sd/source/ui/unoidl/unoobj.cxx
++++ b/sd/source/ui/unoidl/unoobj.cxx
 @@ -21,6 +21,7 @@
  
  #include <memory>
@@ -339,10 +339,10 @@ index 04f37834c..41d8263c0 100644
      const SfxItemPropertyMapEntry* pEntry = mpPropSet->getPropertyMapEntry(PropertyName);
  
      if( pEntry && mpShape->GetSdrObject() )
-diff --git a/engine/sd/source/ui/view/drviews2.cxx b/engine/sd/source/ui/view/drviews2.cxx
+diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
 index de1b17bf0..9afc1fa09 100644
---- a/engine/sd/source/ui/view/drviews2.cxx
-+++ b/engine/sd/source/ui/view/drviews2.cxx
+--- a/sd/source/ui/view/drviews2.cxx
++++ b/sd/source/ui/view/drviews2.cxx
 @@ -52,6 +52,7 @@
  #include <com/sun/star/container/XIndexReplace.hpp>
  #include <com/sun/star/lang/XInitialization.hpp>

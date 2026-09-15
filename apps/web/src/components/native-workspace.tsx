@@ -203,18 +203,23 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
         };
       };
     }) => {
-      const operation = task.request?.operation ?? "";
+      const request = task.request;
+      const operation = request?.operation ?? "";
       const assetOperations = new Set([
         "insert_image",
         "replace_image",
         "insert_media",
         "replace_media",
       ]);
-      if (!assetOperations.has(operation) || typeof task.id !== "string") {
+      if (
+        !request ||
+        !assetOperations.has(operation) ||
+        typeof task.id !== "string"
+      ) {
         port.current?.postMessage(task);
         return;
       }
-      const assetId = task.request.assetId ?? "";
+      const assetId = request.assetId ?? "";
       if (
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
           assetId,
@@ -238,7 +243,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           {
             id: task.id,
             request: {
-              ...task.request,
+              ...request,
               mediaType: payload.mediaType,
               fileName: payload.fileName,
               assetBytes: bytes,

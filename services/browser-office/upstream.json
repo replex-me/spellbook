@@ -6,7 +6,7 @@
     "repository": "https://git.libreoffice.org/core",
     "ref": "distro/allotropia/zeta-24-2",
     "buildCommit": "efaf0670b4d055f838a2849becb10f08aa06a257",
-    "candidateCommit": "265fe78f618caa0614832cd678244f0d6ffc9fac"
+    "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
     "patchLevel": "browser-undo-v11",

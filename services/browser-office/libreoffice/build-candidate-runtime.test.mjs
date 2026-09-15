@@ -17,7 +17,7 @@ test("keeps native tests independent from translation history", () => {
 });
 
 test("fetches only the exact shallow translations gitlink for the Korean WASM build", () => {
-  const shallowFetch = script.indexOf("git -C \"$source_root\" submodule update");
+  const shallowFetch = script.indexOf('git -C "$source_root" submodule update');
   const wasmConfigure = script.indexOf('cd "$wasm_build"');
   assert.ok(shallowFetch >= 0 && shallowFetch < wasmConfigure);
   assert.match(script, /--depth=1[\s\\]*\n[\s\\]*--recommend-shallow/u);

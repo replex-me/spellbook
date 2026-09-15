@@ -1,7 +1,7 @@
-diff --git a/engine/sd/qa/unit/uiimpress.cxx b/engine/sd/qa/unit/uiimpress.cxx
+diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 index 9c4dd5287..c5dc4a1d4 100644
---- a/engine/sd/qa/unit/uiimpress.cxx
-+++ b/engine/sd/qa/unit/uiimpress.cxx
+--- a/sd/qa/unit/uiimpress.cxx
++++ b/sd/qa/unit/uiimpress.cxx
 @@ -1740,6 +1740,94 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureAnimationTimingUndoRe
                           pRedoneEffect->getNodeType());
  }
@@ -97,10 +97,10 @@ index 9c4dd5287..c5dc4a1d4 100644
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextRangePreservesFormatting)
  {
      createSdImpressDoc();
-diff --git a/engine/sd/source/ui/view/drviews2.cxx b/engine/sd/source/ui/view/drviews2.cxx
+diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
 index 9de193a51..bb36eff98 100644
---- a/engine/sd/source/ui/view/drviews2.cxx
-+++ b/engine/sd/source/ui/view/drviews2.cxx
+--- a/sd/source/ui/view/drviews2.cxx
++++ b/sd/source/ui/view/drviews2.cxx
 @@ -176,6 +176,7 @@
  #include <AnimationChildWindow.hxx>
  #include <anminfo.hxx>

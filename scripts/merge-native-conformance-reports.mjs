@@ -59,7 +59,9 @@ export function mergeConformanceEvidence({
     (scenario) => !scenarios.has(scenario),
   );
   if (missingScenarios.length)
-    throw new Error(`missing_conformance_scenarios:${missingScenarios.join(",")}`);
+    throw new Error(
+      `missing_conformance_scenarios:${missingScenarios.join(",")}`,
+    );
 
   const selectedOperations = sortedUnique(
     Object.values(plan.families).flatMap((family) => family.operations),
@@ -178,10 +180,14 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
       path.resolve(args.conformance ?? DEFAULT_CONFORMANCE),
     ),
   });
-  fs.writeFileSync(path.resolve(args.output), `${JSON.stringify(merged, null, 2)}\n`, {
-    flag: "wx",
-    mode: 0o644,
-  });
+  fs.writeFileSync(
+    path.resolve(args.output),
+    `${JSON.stringify(merged, null, 2)}\n`,
+    {
+      flag: "wx",
+      mode: 0o644,
+    },
+  );
   process.stdout.write(
     `${JSON.stringify({ status: merged.status, operations: merged.executedOperations.length, scenarios: merged.scenarios.length }, null, 2)}\n`,
   );

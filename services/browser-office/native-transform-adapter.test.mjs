@@ -314,8 +314,8 @@ function fixture() {
 test("browser adapter advertises the complete bounded PPTX operation surface", () => {
   const { adapter } = fixture();
   assert.deepEqual(
-    Array.from(adapter.supportedOperations),
-    completeNativeOperationSurface,
+    Array.from(adapter.supportedOperations).sort(),
+    [...completeNativeOperationSurface].sort(),
   );
   assert.equal(
     adapter.supportedOperations.length,

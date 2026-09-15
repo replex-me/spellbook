@@ -19,7 +19,7 @@ function fixture() {
     runtime: {
       image: `registry/runtime@sha256:${"a".repeat(64)}`,
       engineImage: `registry/engine@sha256:${"b".repeat(64)}`,
-      patchLevel: "undo-v18",
+      patchLevel: "undo-v24",
       patchSeriesSha256: "d".repeat(64),
       collaboraSourceCommit: "e".repeat(40),
     },
@@ -35,7 +35,7 @@ function fixture() {
     collaboraSourceCommit: release.runtime.collaboraSourceCommit,
   };
   const plan = buildConformancePlan(capabilities, conformance, {
-    enginePatchLevel: 18,
+    enginePatchLevel: 24,
   });
   const operationsByScenario = Object.fromEntries(
     Object.keys(plan.scenarios).map((name) => [name, []]),
@@ -61,8 +61,24 @@ function fixture() {
       containerId: "2".repeat(64),
     },
     reports: [
-      { path: "part-1.json", sha256: "3".repeat(64), report: { enginePatchLevel: 18, status: "failed", scenarios: scenarios.slice(0, 4) } },
-      { path: "part-2.json", sha256: "4".repeat(64), report: { enginePatchLevel: 18, status: "browser_runtime_passed", scenarios: scenarios.slice(4) } },
+      {
+        path: "part-1.json",
+        sha256: "3".repeat(64),
+        report: {
+          enginePatchLevel: 24,
+          status: "failed",
+          scenarios: scenarios.slice(0, 4),
+        },
+      },
+      {
+        path: "part-2.json",
+        sha256: "4".repeat(64),
+        report: {
+          enginePatchLevel: 24,
+          status: "browser_runtime_passed",
+          scenarios: scenarios.slice(4),
+        },
+      },
     ],
     capabilities,
     conformance,
@@ -70,10 +86,13 @@ function fixture() {
 }
 
 test("merges checkpointed scenarios only when the full release contract is covered", () => {
+  const expected = buildConformancePlan(capabilities, conformance, {
+    enginePatchLevel: 24,
+  });
   const merged = mergeConformanceEvidence(fixture());
   assert.equal(merged.status, "browser_runtime_passed");
-  assert.equal(merged.scenarios.length, 10);
-  assert.equal(merged.executedOperations.length, 63);
+  assert.equal(merged.scenarios.length, expected.summary.scenarios);
+  assert.equal(merged.executedOperations.length, expected.summary.operations);
   assert.equal(merged.runtime.container.status, "passed");
 });
 
@@ -88,7 +107,9 @@ test("rejects a checkpoint set with a missing scenario", () => {
 
 test("rejects browser evidence from another engine identity", () => {
   const value = fixture();
-  value.reports[0].report.scenarios[0].engineIdentity.publicCommit = "9".repeat(40);
+  value.reports[0].report.scenarios[0].engineIdentity.publicCommit = "9".repeat(
+    40,
+  );
   assert.throws(
     () => mergeConformanceEvidence(value),
     /observed_engine_identity_mismatch/u,
