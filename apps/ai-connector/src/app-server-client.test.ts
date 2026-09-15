@@ -246,6 +246,55 @@ describe("structured turn isolation", () => {
     h.client.close();
   });
 
+  it("propagates an early generated-image insertion failure without an unhandled rejection", async () => {
+    const h = await harness();
+    const pending = h.client.runStructuredTurn([], {}, 2000, {
+      tools: [],
+      onTool: vi.fn(),
+      allowImageGeneration: true,
+      onGeneratedImage: vi.fn(async () => {
+        throw new Error("generated_image_download_failed");
+      }),
+    });
+    const rejected = expect(pending).rejects.toThrow(
+      "generated_image_download_failed",
+    );
+    await vi.waitFor(() =>
+      expect(h.calls.some((call) => call.method === "turn/start")).toBe(true),
+    );
+    h.send({
+      method: "item/completed",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-thread-1",
+        item: {
+          type: "imageGeneration",
+          status: "completed",
+          result: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString(
+            "base64",
+          ),
+        },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(h.calls.some((call) => call.method === "turn/start")).toBe(true),
+    );
+    h.send({
+      method: "turn/completed",
+      params: {
+        threadId: "thread-1",
+        turn: {
+          id: "turn-thread-1",
+          status: "completed",
+          items: [{ type: "agentMessage", text: "완료" }],
+        },
+      },
+    });
+    await rejected;
+    expect(h.child.exitCode).toBeNull();
+    h.client.close();
+  });
+
   it("discovers account models and applies selected settings to both new and resumed turns", async () => {
     const h = await harness();
     expect((await h.client.models()).map((item) => item.model)).toEqual([

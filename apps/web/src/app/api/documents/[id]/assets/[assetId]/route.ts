@@ -1,0 +1,25 @@
+import { requireSession, routeError } from "@/lib/http";
+import { getImageAsset } from "@/lib/image-assets";
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string; assetId: string }> },
+) {
+  try {
+    const { id, assetId } = await context.params;
+    const asset = await getImageAsset(
+      await requireSession(request),
+      id,
+      assetId,
+    );
+    return new Response(new Uint8Array(asset.data), {
+      headers: {
+        "content-type": asset.contentType,
+        "cache-control": "private, max-age=300",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  } catch (error) {
+    return routeError(error);
+  }
+}

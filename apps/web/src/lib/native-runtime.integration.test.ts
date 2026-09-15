@@ -60,6 +60,7 @@ import {
 } from "./native-session";
 import { requireNativeRequestSession } from "./native-request-auth";
 import { authorizeNativeConnectorJob } from "./native-connector-auth";
+import { getImageAsset } from "./image-assets";
 import { POST as postNativeConnectorTool } from "../app/api/native/jobs/[jobId]/tools/route";
 import { POST as postNativeConnectorCallback } from "../app/api/native/jobs/[jobId]/callback/route";
 
@@ -973,6 +974,17 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
       png,
       "image/png",
     );
+    storage.getObject.mockResolvedValueOnce(png);
+    await expect(
+      getImageAsset(session, f.documentId, asset.assetId),
+    ).resolves.toMatchObject({ data: png, contentType: "image/png" });
+    await expect(
+      getImageAsset(
+        { ...session, accountId: "another-account" },
+        f.documentId,
+        asset.assetId,
+      ),
+    ).rejects.toThrow("asset_not_found");
   });
 
   it("cancellation prevents a late worker from completing the turn", async () => {

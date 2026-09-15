@@ -380,9 +380,14 @@ export class AppServerClient {
             options.onGeneratedImage
           ) {
             const generated = decodeGeneratedImage(item);
-            generatedImages.push(
-              Promise.resolve(options.onGeneratedImage(generated)),
+            const insertion = Promise.resolve(
+              options.onGeneratedImage(generated),
             );
+            generatedImages.push(insertion);
+            // Image insertion can fail before Codex emits turn/completed.
+            // Observe the rejection immediately so Node does not terminate the
+            // connector; Promise.all below still propagates it to this turn.
+            void insertion.catch(() => undefined);
           }
         }
         if (notification.method === "turn/completed") {

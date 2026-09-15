@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { db, ensureSchema } from "./db";
 import { HttpError } from "./http";
-import { accountPrefix, putObject } from "./storage";
+import { accountPrefix, getObject, putObject } from "./storage";
 import type { Session } from "./models";
 
 export function imageInfo(data: Buffer) {
@@ -66,6 +66,28 @@ export async function uploadImage(
     data,
     file.name.slice(0, 200),
   );
+}
+
+export async function getImageAsset(
+  session: Session,
+  documentId: string,
+  assetId: string,
+) {
+  await ensureSchema();
+  if (!/^[0-9a-f-]{36}$/i.test(assetId))
+    throw new HttpError(404, "asset_not_found");
+  const [asset] = await db()`
+    select a.object_name, a.content_type
+    from spellbook_assets a
+    join spellbook_documents d on d.id=a.document_id
+    where a.id=${assetId} and a.document_id=${documentId}
+      and d.account_id=${session.accountId}
+  `;
+  if (!asset) throw new HttpError(404, "asset_not_found");
+  return {
+    data: await getObject(asset.object_name),
+    contentType: asset.content_type as string,
+  };
 }
 
 export async function saveImageAsset(

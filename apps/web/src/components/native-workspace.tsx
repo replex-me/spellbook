@@ -212,10 +212,9 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       if (loadingImages.current.has(task.id)) return;
       loadingImages.current.add(task.id);
       const imageUrl = new URL(
-        `/api/wopi/files/${launch.documentId}/assets/${assetId}`,
+        `/api/documents/${launch.documentId}/assets/${assetId}`,
         window.location.origin,
       );
-      imageUrl.searchParams.set("access_token", launch.accessToken);
       void fetch(imageUrl, { cache: "no-store" })
         .then(async (response) => {
           if (!response.ok) throw new Error("generated_image_download_failed");
