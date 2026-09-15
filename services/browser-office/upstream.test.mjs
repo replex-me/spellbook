@@ -47,6 +47,9 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "content-placeholder-editability",
     "placeholder-local-property-precedence",
     "non-layout-undo-master-safety",
+    "page-property-uno-undo",
+    "object-property-uno-undo",
+    "browser-property-pptx-roundtrip",
   ]);
   assert.match(manifest.toolchain.emscripten.commit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.toolchain.qt.commit, /^[0-9a-f]{40}$/u);
