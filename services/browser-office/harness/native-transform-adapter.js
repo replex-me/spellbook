@@ -5,14 +5,22 @@
 (function installBrowserNativeTransformAdapter(global) {
   const candidateOperations = Object.freeze([
     "crop_image",
+    "bold",
+    "font_family",
+    "font_size",
+    "italic",
     "rename_slide",
+    "replace_text_range",
     "set_alt_text",
     "set_object_interaction",
     "set_object_lock",
+    "set_character_spacing",
     "set_shape_name",
     "set_shape_shadow",
     "set_slide_hidden",
     "set_slide_transition",
+    "set_speaker_notes",
+    "set_script_position",
     "set_text_box",
   ]);
 
@@ -44,7 +52,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v4";
+      runtimeIdentity.patchLevel === "browser-undo-v5";
     const supportedOperations = Object.freeze(
       admitted ? [...candidateOperations] : [],
     );
@@ -89,6 +97,26 @@
     };
     const propertyWrite = (target, name, typeName, value) => () =>
       target.setPropertyValue(name, any(typeName, value));
+    const selectAllText = (shape, label) => {
+      if (
+        typeof shape.createTextCursor !== "function" ||
+        typeof shape.getString !== "function"
+      )
+        throw new Error(`${label} has no editable text.`);
+      const cursor = shape.createTextCursor();
+      cursor.gotoStart(false);
+      cursor.gotoEnd(true);
+      return cursor;
+    };
+    const moveCursorRight = (cursor, count, expand, label) => {
+      let remaining = count;
+      while (remaining > 0) {
+        const step = Math.min(remaining, 32767);
+        if (!cursor.goRight(step, expand))
+          throw new Error(`${label} is unavailable.`);
+        remaining -= step;
+      }
+    };
 
     const registry = [
       {
@@ -174,6 +202,235 @@
               transition.Duration,
             ),
           ];
+          return {
+            mutates: true,
+            apply: () => writes.forEach((write) => write()),
+          };
+        },
+      },
+      {
+        match: (key) => key === "SetNotes",
+        prepare: ({ value, state }) => {
+          if (typeof value !== "string")
+            throw new Error("Browser speaker notes are invalid.");
+          const notesPage = state.currentPage.getNotesPage();
+          let notesShape = null;
+          for (let index = 0; index < notesPage.getCount(); index += 1) {
+            const candidate = notesPage.getByIndex(index);
+            if (String(candidate.getShapeType()).endsWith("NotesShape")) {
+              notesShape = candidate;
+              break;
+            }
+          }
+          if (!notesShape || typeof notesShape.setString !== "function")
+            throw new Error(
+              "Browser speaker notes placeholder is unavailable.",
+            );
+          return {
+            mutates: true,
+            apply: () => notesShape.setString(value),
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("SetTextRange."),
+        prepare: ({ key, value, state }) => {
+          const replacement = assertRecord(value, "Browser text range");
+          assertExactKeys(
+            replacement,
+            ["Paragraph", "Start", "End", "ExpectedText", "Text"],
+            "Browser text range",
+          );
+          if (
+            !Number.isSafeInteger(replacement.Paragraph) ||
+            replacement.Paragraph < 0 ||
+            !Number.isSafeInteger(replacement.Start) ||
+            replacement.Start < 0 ||
+            !Number.isSafeInteger(replacement.End) ||
+            replacement.End < replacement.Start ||
+            typeof replacement.ExpectedText !== "string" ||
+            typeof replacement.Text !== "string"
+          )
+            throw new Error("Browser text range is invalid.");
+          const path = parsePath(
+            key.slice("SetTextRange.".length),
+            "Browser text range target",
+          );
+          const shape = resolveShape(
+            state.currentPage,
+            path,
+            "Browser text range target",
+          );
+          if (
+            typeof shape.getString !== "function" ||
+            typeof shape.createTextCursor !== "function"
+          )
+            throw new Error("Browser text range target has no editable text.");
+          const paragraphs = shape.getString().split("\n");
+          assertIndex(
+            replacement.Paragraph,
+            paragraphs.length,
+            "Browser text paragraph",
+          );
+          const paragraph = paragraphs[replacement.Paragraph];
+          if (
+            replacement.End > paragraph.length ||
+            paragraph.slice(replacement.Start, replacement.End) !==
+              replacement.ExpectedText
+          )
+            throw new Error("Browser text range changed after observation.");
+          const absoluteStart =
+            paragraphs
+              .slice(0, replacement.Paragraph)
+              .reduce((length, text) => length + text.length + 1, 0) +
+            replacement.Start;
+          const cursor = shape.createTextCursor();
+          cursor.gotoStart(false);
+          moveCursorRight(
+            cursor,
+            absoluteStart,
+            false,
+            "Browser text range start",
+          );
+          const rangeLength = replacement.End - replacement.Start;
+          moveCursorRight(cursor, rangeLength, true, "Browser text range end");
+          if (cursor.getString() !== replacement.ExpectedText)
+            throw new Error("Browser text range selection changed.");
+          return {
+            mutates: true,
+            apply: () => cursor.setString(replacement.Text),
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("SetTextProperties."),
+        prepare: ({ key, value, state }) => {
+          const properties = assertRecord(value, "Browser text properties");
+          const names = assertExactKeys(
+            properties,
+            [
+              "Bold",
+              "Kerning",
+              "Escapement",
+              "EscapementHeight",
+              "FontFamily",
+              "FontHeightPoints",
+              "Italic",
+            ],
+            "Browser text properties",
+          );
+          if (!names.length)
+            throw new Error("Browser text properties are empty.");
+          const path = parsePath(
+            key.slice("SetTextProperties.".length),
+            "Browser text property target",
+          );
+          const shape = resolveShape(
+            state.currentPage,
+            path,
+            "Browser text property target",
+          );
+          const cursor = selectAllText(shape, "Browser text property target");
+          const css = uno.idl.com.sun.star;
+          const writes = [];
+          const addWrite = (name, typeName, propertyValue) =>
+            writes.push(propertyWrite(cursor, name, typeName, propertyValue));
+          if (Object.hasOwn(properties, "FontHeightPoints")) {
+            if (
+              typeof properties.FontHeightPoints !== "number" ||
+              !Number.isFinite(properties.FontHeightPoints) ||
+              properties.FontHeightPoints <= 0 ||
+              properties.FontHeightPoints > 400
+            )
+              throw new Error("Browser font height is invalid.");
+            for (const name of [
+              "CharHeight",
+              "CharHeightAsian",
+              "CharHeightComplex",
+            ])
+              addWrite(name, "float", properties.FontHeightPoints);
+          }
+          if (Object.hasOwn(properties, "FontFamily")) {
+            if (
+              typeof properties.FontFamily !== "string" ||
+              !properties.FontFamily.trim() ||
+              properties.FontFamily.length > 255 ||
+              /[\u0000-\u001f]/u.test(properties.FontFamily)
+            )
+              throw new Error("Browser font family is invalid.");
+            for (const name of [
+              "CharFontName",
+              "CharFontNameAsian",
+              "CharFontNameComplex",
+            ])
+              addWrite(name, "string", properties.FontFamily);
+          }
+          if (Object.hasOwn(properties, "Bold")) {
+            if (typeof properties.Bold !== "boolean")
+              throw new Error("Browser font weight is invalid.");
+            for (const name of [
+              "CharWeight",
+              "CharWeightAsian",
+              "CharWeightComplex",
+            ])
+              addWrite(name, "float", properties.Bold ? 150 : 100);
+          }
+          if (Object.hasOwn(properties, "Italic")) {
+            if (typeof properties.Italic !== "boolean")
+              throw new Error("Browser font posture is invalid.");
+            const posture = properties.Italic
+              ? css.awt.FontSlant_ITALIC
+              : css.awt.FontSlant_NONE;
+            const postureType = uno.type.enum(css.awt.FontSlant);
+            for (const name of [
+              "CharPosture",
+              "CharPostureAsian",
+              "CharPostureComplex",
+            ])
+              writes.push(() =>
+                cursor.setPropertyValue(
+                  name,
+                  new uno.Any(postureType, posture),
+                ),
+              );
+          }
+          if (Object.hasOwn(properties, "Kerning")) {
+            if (
+              !Number.isSafeInteger(properties.Kerning) ||
+              properties.Kerning < -32768 ||
+              properties.Kerning > 32767
+            )
+              throw new Error("Browser text kerning is invalid.");
+            addWrite(
+              "CharKerning",
+              "short",
+              Math.round((properties.Kerning * 72 * 20) / 2540),
+            );
+          }
+          const hasEscapement = Object.hasOwn(properties, "Escapement");
+          const hasEscapementHeight = Object.hasOwn(
+            properties,
+            "EscapementHeight",
+          );
+          if (hasEscapement !== hasEscapementHeight)
+            throw new Error("Browser text escapement is incomplete.");
+          if (hasEscapement) {
+            if (
+              !Number.isSafeInteger(properties.Escapement) ||
+              properties.Escapement < -100 ||
+              properties.Escapement > 100 ||
+              !Number.isSafeInteger(properties.EscapementHeight) ||
+              properties.EscapementHeight < 1 ||
+              properties.EscapementHeight > 100
+            )
+              throw new Error("Browser text escapement is invalid.");
+            addWrite("CharEscapement", "short", properties.Escapement);
+            addWrite(
+              "CharEscapementHeight",
+              "byte",
+              properties.EscapementHeight,
+            );
+          }
           return {
             mutates: true,
             apply: () => writes.forEach((write) => write()),

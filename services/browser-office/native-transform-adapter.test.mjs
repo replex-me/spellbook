@@ -42,35 +42,93 @@ function fixture() {
       writes.push(["undo"]);
     },
   };
-  const shape = (name) => ({
+  const shape = (name, initialText = "Alpha Beta\nSecond paragraph") => ({
     name,
+    text: initialText,
     properties: {},
+    textProperties: {},
+    getString() {
+      return this.text;
+    },
+    setString(value) {
+      this.text = value;
+      mutations.push([name, "Text", "string", value]);
+    },
+    createTextCursor() {
+      const target = this;
+      let start = 0;
+      let end = 0;
+      return {
+        gotoStart(expand) {
+          if (expand) start = 0;
+          else start = end = 0;
+        },
+        gotoEnd(expand) {
+          if (expand) end = target.text.length;
+          else start = end = target.text.length;
+        },
+        goRight(count, expand) {
+          if (end + count > target.text.length) return false;
+          if (expand) end += count;
+          else start = end += count;
+          return true;
+        },
+        getString() {
+          return target.text.slice(start, end);
+        },
+        setString(value) {
+          target.text =
+            target.text.slice(0, start) + value + target.text.slice(end);
+          end = start + value.length;
+          mutations.push([name, "TextRange", "string", value]);
+        },
+        setPropertyValue(property, value) {
+          target.textProperties[property] = value.val;
+          mutations.push([name, property, value.type, value.val]);
+        },
+      };
+    },
     setPropertyValue(property, value) {
       this.properties[property] = value.val;
       mutations.push([name, property, value.type, value.val]);
     },
   });
-  const page = (name, children) => ({
-    name,
-    properties: {},
-    getName() {
-      return this.name;
-    },
-    setName(value) {
-      this.name = value;
-      mutations.push([name, "Name", "string", value]);
-    },
-    setPropertyValue(property, value) {
-      this.properties[property] = value.val;
-      mutations.push([name, property, value.type, value.val]);
-    },
-    getCount() {
-      return children.length;
-    },
-    getByIndex(index) {
-      return children[index];
-    },
-  });
+  const page = (name, children) => {
+    const notesShape = shape(`${name}-notes`, "Existing notes");
+    notesShape.getShapeType = () => "com.sun.star.presentation.NotesShape";
+    const notesPage = {
+      getCount: () => 1,
+      getByIndex: (index) => {
+        assert.equal(index, 0);
+        return notesShape;
+      },
+    };
+    return {
+      name,
+      notesShape,
+      properties: {},
+      getName() {
+        return this.name;
+      },
+      setName(value) {
+        this.name = value;
+        mutations.push([name, "Name", "string", value]);
+      },
+      setPropertyValue(property, value) {
+        this.properties[property] = value.val;
+        mutations.push([name, property, value.type, value.val]);
+      },
+      getCount() {
+        return children.length;
+      },
+      getByIndex(index) {
+        return children[index];
+      },
+      getNotesPage() {
+        return notesPage;
+      },
+    };
+  };
   const firstShape = shape("first-shape");
   const secondShape = shape("second-shape");
   const firstPage = page("Slide 1", [firstShape]);
@@ -111,25 +169,36 @@ function fixture() {
     ClickAction_LASTPAGE: "last",
     ClickAction_STOPPRESENTATION: "stop",
   };
+  const FontSlant = function FontSlant() {};
+  const awt = {
+    FontSlant,
+    FontSlant_NONE: "none",
+    FontSlant_ITALIC: "italic",
+  };
   const uno = {
     Any,
     type: {
       string: "string",
       boolean: "boolean",
+      byte: "byte",
       short: "short",
       long: "long",
+      float: "float",
       double: "double",
-      enum: () => "enum:ClickAction",
+      enum: (value) =>
+        value === FontSlant ? "enum:FontSlant" : "enum:ClickAction",
       struct: () => "struct:GraphicCrop",
     },
-    idl: { com: { sun: { star: { presentation, text: { GraphicCrop } } } } },
+    idl: {
+      com: { sun: { star: { awt, presentation, text: { GraphicCrop } } } },
+    },
   };
   const factory = loadFactory();
   const runtimeIdentity = {
     buildReady: true,
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v4",
+    patchLevel: "browser-undo-v5",
   };
   return {
     adapter: factory({ uno, runtimeIdentity }),
@@ -151,14 +220,22 @@ test("browser adapter advertises only its exact operation families", () => {
   const { adapter } = fixture();
   assert.deepEqual(Array.from(adapter.supportedOperations), [
     "crop_image",
+    "bold",
+    "font_family",
+    "font_size",
+    "italic",
     "rename_slide",
+    "replace_text_range",
     "set_alt_text",
     "set_object_interaction",
     "set_object_lock",
+    "set_character_spacing",
     "set_shape_name",
     "set_shape_shadow",
     "set_slide_hidden",
     "set_slide_transition",
+    "set_speaker_notes",
+    "set_script_position",
     "set_text_box",
   ]);
 });
@@ -171,7 +248,7 @@ test("browser adapter advertises no patched operation on an unbuilt runtime", ()
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v4",
+      patchLevel: "browser-undo-v5",
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
@@ -259,6 +336,53 @@ test("browser adapter writes only bounded object, crop and interaction fields", 
   );
   assert.equal(runtime.secondShape.properties.OnClick, "bookmark");
   assert.equal(runtime.secondShape.properties.Bookmark, "Slide 1");
+});
+
+test("browser adapter writes text, formatting and notes in one native Undo group", () => {
+  const runtime = fixture();
+  runtime.adapter.transformSlides({
+    commands: [
+      { JumpToSlide: 1 },
+      {
+        "SetTextRange.0": {
+          Paragraph: 0,
+          Start: 0,
+          End: 5,
+          ExpectedText: "Alpha",
+          Text: "Gamma",
+        },
+      },
+      {
+        "SetTextProperties.0": {
+          Bold: true,
+          Italic: true,
+          FontFamily: "Aptos",
+          FontHeightPoints: 20,
+          Kerning: 35,
+          Escapement: 33,
+          EscapementHeight: 58,
+        },
+      },
+      { SetNotes: "Updated speaker notes" },
+    ],
+    ...runtime,
+  });
+
+  assert.equal(runtime.secondShape.text, "Gamma Beta\nSecond paragraph");
+  assert.equal(runtime.secondPage.notesShape.text, "Updated speaker notes");
+  assert.equal(runtime.secondShape.textProperties.CharWeight, 150);
+  assert.equal(runtime.secondShape.textProperties.CharWeightAsian, 150);
+  assert.equal(runtime.secondShape.textProperties.CharPosture, "italic");
+  assert.equal(runtime.secondShape.textProperties.CharFontName, "Aptos");
+  assert.equal(runtime.secondShape.textProperties.CharHeight, 20);
+  assert.equal(runtime.secondShape.textProperties.CharKerning, 20);
+  assert.equal(runtime.secondShape.textProperties.CharEscapement, 33);
+  assert.equal(runtime.secondShape.textProperties.CharEscapementHeight, 58);
+  assert.deepEqual(runtime.writes, [
+    ["enter", "AI presentation edit"],
+    ["page", "Slide 2"],
+    ["leave"],
+  ]);
 });
 
 test("browser adapter closes and rolls back a failed native Undo group", () => {
