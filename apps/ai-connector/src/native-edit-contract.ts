@@ -24,6 +24,7 @@ interface NativeEditContract {
     multiElement: string[];
     element: string[];
   };
+  candidateOperations: string[];
   mutationModel: {
     version: string;
     domains: Record<string, { atomicBoundary: string; description: string }>;

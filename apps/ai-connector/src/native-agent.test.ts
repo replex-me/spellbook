@@ -12,7 +12,10 @@ import {
 
 const state: NativeObservation = {
   unit: "1/100mm",
-  engine: { patchLevel: "undo-v18" },
+  engine: {
+    patchLevel: "undo-v18",
+    supportedOperations: nativeEditContract.candidateOperations,
+  },
   revision: "v2-test",
   activeSlide: 0,
   selectedElementIds: ["0/0"],
@@ -178,6 +181,9 @@ describe("shared open document agent", () => {
           "set_slide_transition",
           "set_animation_timing",
           "set_object_interaction",
+          "set_slide_metadata",
+          "set_line_style",
+          "set_paragraph_format",
         ]),
       );
       expect(schema.properties.op.enum).toHaveLength(nativeEditOperationCount);
@@ -194,7 +200,7 @@ describe("shared open document agent", () => {
     await f.run();
   });
 
-  it("authorizes every bounded operation on the verified undo-v18 engine", async () => {
+  it("authorizes every bounded operation on undo-v18 plus live browser capabilities", async () => {
     const f = fixture(async (o) => {
       await o.onTool(
         "native_observe",
@@ -260,6 +266,42 @@ describe("shared open document agent", () => {
       permission,
       changedState,
       stockState,
+    );
+    await f.run();
+  });
+
+  it("accepts a newer operation only when the live runtime advertises it", async () => {
+    const withoutRuntimeSupport: NativeObservation = {
+      ...structuredClone(state),
+      engine: { patchLevel: "undo-v18", supportedOperations: [] },
+    };
+    const f = fixture(
+      async (o) => {
+        await o.onTool(
+          "native_observe",
+          { detailSlideIndex: null },
+          "observe",
+          f.signal,
+        );
+        const result = await o.onTool(
+          "native_edit",
+          {
+            op: "set_slide_metadata",
+            slideIndex: 0,
+            slideMetadata: { footerVisible: true },
+          },
+          "edit",
+          f.signal,
+        );
+        expect(result.success).toBe(false);
+        expect(result.contentItems[0]).toMatchObject({
+          type: "inputText",
+          text: expect.stringContaining("undo-v19"),
+        });
+      },
+      permission,
+      changedState,
+      withoutRuntimeSupport,
     );
     await f.run();
   });

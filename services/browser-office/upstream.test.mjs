@@ -25,7 +25,7 @@ const candidateBuilder = readFileSync(
 );
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v7");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v8");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
@@ -68,6 +68,9 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "browser-text-pptx-roundtrip",
     "shape-appearance-property-native-undo",
     "text-appearance-property-native-undo",
+    "slide-metadata-property-native-undo",
+    "line-style-property-native-undo",
+    "paragraph-format-property-native-undo",
   ]);
   assert.match(manifest.toolchain.emscripten.commit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.toolchain.emsdk.commit, /^[0-9a-f]{40}$/u);

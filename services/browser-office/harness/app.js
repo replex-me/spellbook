@@ -127,7 +127,7 @@ function patchedBrowserRuntimeAdmitted() {
   return (
     runtime?.buildReady === true &&
     runtime.buildCommit === runtime.candidateCommit &&
-    runtime.patchLevel === "browser-undo-v7"
+    runtime.patchLevel === "browser-undo-v8"
   );
 }
 

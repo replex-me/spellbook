@@ -78,7 +78,7 @@ export function promoteNativeRuntimeEvidence({
   nextCapabilities.verifiedWith = {
     date: validation.createdAt.slice(0, 10),
     probe:
-      "scripts/native-mutation-conformance-runner.mjs (undo-v18: complete browser operation set, native Undo/Redo, save/reopen, change budget, visual, playback and PowerPoint evidence)",
+      `scripts/native-mutation-conformance-runner.mjs (${upstream.patchLevel}: complete browser operation set, native Undo/Redo, save/reopen, change budget, visual, playback and PowerPoint evidence)`,
     evidence: {
       patchLevel: upstream.patchLevel,
       operationCount: expectedOperations.length,

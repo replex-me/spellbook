@@ -30,7 +30,7 @@ test("browser runtime receipt binds every artifact to source and toolchain ident
       platform: "test-platform",
     });
     assert.equal(receipt.status, "built_unverified");
-    assert.equal(receipt.libreOffice.patchLevel, "browser-undo-v7");
+    assert.equal(receipt.libreOffice.patchLevel, "browser-undo-v8");
     assert.equal(receipt.spellbookSourceRevision, "a".repeat(40));
     assert.deepEqual(
       receipt.artifacts.map(({ name }) => name),

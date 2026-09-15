@@ -12,7 +12,7 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
-The cumulative `browser-undo-v7` source series ports generic document behavior:
+The cumulative `browser-undo-v8` source series ports generic document behavior:
 table structure, formatting and Undo; page and object identity; master-safe
 layout support; sparse-master insertion; object-creation Undo; text-layout
 invalidation; slide names and text shadows; object locks; object interactions;
@@ -24,9 +24,10 @@ response. Text size, family, weight, posture, underline, strikeout, color and
 paragraph alignment likewise share one bounded text-property transaction
 instead of mixing property writes with UI dispatch commands. The page/object
 tests cover one-step Undo/Redo and PPTX save/reopen for slide names, visibility,
-transition state, text margins, shadows and object locks. Browser-source CppUnit regressions are part of the
+transition state, slide metadata, text margins, paragraph formatting, line
+dash/arrow names, shadows and object locks. Browser-source CppUnit regressions are part of the
 series but have not run yet. The browser-native adapter now accepts the complete
-63-operation typed mutation contract and persists both its commands and direct
+66-operation typed mutation contract and persists both its commands and direct
 human edits as native PPTX snapshots; the clean native and integrated browser
 runs remain the admission evidence. `nativeSlideStructureReady` is
 independent of `buildReady`: a compiled runtime must also survive the product
@@ -46,7 +47,7 @@ Build the admitted series from the pinned Linux, Emscripten and Qt toolchain:
 docker buildx build \
   --platform=linux/amd64 \
   --file services/browser-office/libreoffice/Dockerfile.toolchain \
-  --tag spellbook-browser-office-toolchain:v7 \
+  --tag spellbook-browser-office-toolchain:v8 \
   --load .
 
 docker run --rm --user=1000:1000 \
@@ -56,7 +57,7 @@ docker run --rm --user=1000:1000 \
   --env SPELLBOOK_SOURCE_REVISION="$(git rev-parse HEAD)" \
   --env SPELLBOOK_BROWSER_BUILD_ROOT=/build \
   --env SPELLBOOK_BROWSER_OUTPUT_DIR=/output \
-  spellbook-browser-office-toolchain:v7 \
+  spellbook-browser-office-toolchain:v8 \
   /workspace/services/browser-office/libreoffice/build-candidate-runtime.sh
 ```
 
@@ -81,22 +82,22 @@ pnpm browser-office:prepare
 node services/browser-office/verify-product-bridge.mjs \
   --candidate-runtime /absolute/output \
   --endurance-cycles 100 \
-  --output artifacts/browser-office/candidate-v7
+  --output artifacts/browser-office/candidate-v8
 
 pnpm browser-office:verify:native-conformance -- \
   --candidate-runtime /absolute/output \
-  --output artifacts/browser-office/candidate-v7-native
+  --output artifacts/browser-office/candidate-v8-native
 
 pnpm browser-office:verify:candidate-powerpoint -- \
-  --browser-evidence artifacts/browser-office/candidate-v7 \
-  --native-conformance artifacts/browser-office/candidate-v7-native/conformance-report.json
+  --browser-evidence artifacts/browser-office/candidate-v8 \
+  --native-conformance artifacts/browser-office/candidate-v8-native/conformance-report.json
 
 pnpm browser-office:promote:candidate -- \
   --candidate-runtime /absolute/output \
-  --browser-report artifacts/browser-office/candidate-v7/result.json \
-  --native-conformance artifacts/browser-office/candidate-v7-native/conformance-report.json \
+  --browser-report artifacts/browser-office/candidate-v8/result.json \
+  --native-conformance artifacts/browser-office/candidate-v8-native/conformance-report.json \
   --powerpoint-report /absolute/candidate-powerpoint-run/result.json \
-  --output artifacts/browser-office/candidate-v7/promotion-receipt.json
+  --output artifacts/browser-office/candidate-v8/promotion-receipt.json
 ```
 
 This verifier accepts only the four raw artifacts whose byte lengths and
@@ -107,7 +108,7 @@ only in that verification server; the tracked manifest remains fail-closed
 until all promotion evidence passes. The product bridge keeps one browser and
 document session alive for 100 edit/history/save cycles, while the native
 conformance command reuses the same ten scenario programs and fixtures that
-admitted the server engine to exercise all 63 typed operations in the browser.
+admitted the server engine to exercise all 66 typed operations in the browser.
 Each scenario requires apply readback, Undo/Redo, save/reopen and its declared
 OOXML change budget; a command name advertised by the adapter is not evidence.
 The endurance loop performs edit, observation, Undo, restored-state

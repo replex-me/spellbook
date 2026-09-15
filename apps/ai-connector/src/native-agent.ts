@@ -54,6 +54,7 @@ export interface NativeObservation {
   }>;
   engine?: {
     patchLevel?: string;
+    supportedOperations?: string[];
     [key: string]: unknown;
   };
   changedSlideIndexes: number[];
@@ -215,7 +216,13 @@ export async function runNativeTurn(
     const patchLevel = patchMatch?.groups?.version
       ? Number(patchMatch.groups.version)
       : 0;
-    if (operationContract.minEnginePatch > patchLevel)
+    const runtimeSupported =
+      Array.isArray(state.engine?.supportedOperations) &&
+      state.engine.supportedOperations.every(
+        (candidate) => typeof candidate === "string",
+      ) &&
+      state.engine.supportedOperations.includes(operation);
+    if (operationContract.minEnginePatch > patchLevel && !runtimeSupported)
       throw new Error(
         `${operation}에는 undo-v${operationContract.minEnginePatch} 이상의 편집 엔진이 필요합니다.`,
       );

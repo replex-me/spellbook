@@ -14,6 +14,7 @@
     "rename_slide",
     "set_slide_hidden",
     "set_slide_transition",
+    "set_slide_metadata",
     "add_text_box",
     "add_shape",
     "add_table",
@@ -54,6 +55,7 @@
     "set_script_position",
     "set_shape_shadow",
     "set_object_lock",
+    "set_line_style",
     "set_object_interaction",
     "replace_text_range",
     "insert_table_rows",
@@ -67,6 +69,7 @@
     "set_table_cell_format",
     "set_animation_timing",
     "crop_image",
+    "set_paragraph_format",
   ]);
 
   const objectPropertyTypes = Object.freeze({
@@ -94,6 +97,9 @@
     FillTransparence: "short",
     LineTransparence: "short",
     RotateAngle: "long",
+    LineDashName: "string",
+    LineStartName: "string",
+    LineEndName: "string",
   });
 
   function createSpellbookBrowserNativeAdapter({ uno, runtimeIdentity }) {
@@ -102,7 +108,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v7";
+      runtimeIdentity.patchLevel === "browser-undo-v8";
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(
@@ -398,6 +404,55 @@
         },
       },
       {
+        match: (key) => key === "SetSlideProperties",
+        prepare: ({ value, state }) => {
+          const properties = assertRecord(value, "Browser slide properties");
+          const propertyTypes = {
+            IsFooterVisible: "boolean",
+            FooterText: "string",
+            IsPageNumberVisible: "boolean",
+            IsDateTimeVisible: "boolean",
+            IsDateTimeFixed: "boolean",
+            DateTimeText: "string",
+            DateTimeFormat: "long",
+            HighResDuration: "double",
+            IsBackgroundObjectsVisible: "boolean",
+          };
+          const names = assertExactKeys(
+            properties,
+            Object.keys(propertyTypes),
+            "Browser slide properties",
+          );
+          if (!names.length)
+            throw new Error("Browser slide properties are empty.");
+          const writes = names.map((name) => {
+            const typeName = propertyTypes[name];
+            const propertyValue = properties[name];
+            if (
+              (typeName === "string" && typeof propertyValue !== "string") ||
+              (typeName === "boolean" && typeof propertyValue !== "boolean") ||
+              (typeName === "long" && !Number.isSafeInteger(propertyValue)) ||
+              (typeName === "double" &&
+                (typeof propertyValue !== "number" ||
+                  !Number.isFinite(propertyValue)))
+            )
+              throw new Error(
+                `Browser slide property ${name} has the wrong type.`,
+              );
+            return propertyWrite(
+              state.currentPage,
+              name,
+              typeName,
+              propertyValue,
+            );
+          });
+          return {
+            mutates: true,
+            apply: () => writes.forEach((write) => write()),
+          };
+        },
+      },
+      {
         match: (key) => key.startsWith("SetAnimationTiming."),
         prepare: ({ key, value, state }) => {
           const timing = assertRecord(value, "Browser animation timing");
@@ -681,8 +736,8 @@
             if (typeof properties.Italic !== "boolean")
               throw new Error("Browser font posture is invalid.");
             const posture = properties.Italic
-              ? css.awt.FontSlant_ITALIC
-              : css.awt.FontSlant_NONE;
+              ? css.awt.FontSlant.ITALIC
+              : css.awt.FontSlant.NONE;
             const postureType = uno.type.enum(css.awt.FontSlant);
             for (const name of [
               "CharPosture",
@@ -712,8 +767,8 @@
               "CharUnderline",
               "short",
               properties.Underline
-                ? css.awt.FontUnderline_SINGLE
-                : css.awt.FontUnderline_NONE,
+                ? css.awt.FontUnderline.SINGLE
+                : css.awt.FontUnderline.NONE,
             );
           }
           if (Object.hasOwn(properties, "Strikethrough")) {
@@ -723,16 +778,16 @@
               "CharStrikeout",
               "short",
               properties.Strikethrough
-                ? css.awt.FontStrikeout_SINGLE
-                : css.awt.FontStrikeout_NONE,
+                ? css.awt.FontStrikeout.SINGLE
+                : css.awt.FontStrikeout.NONE,
             );
           }
           if (Object.hasOwn(properties, "ParagraphAlignment")) {
             const paragraphAdjust = {
-              left: css.style.ParagraphAdjust_LEFT,
-              center: css.style.ParagraphAdjust_CENTER,
-              right: css.style.ParagraphAdjust_RIGHT,
-              justify: css.style.ParagraphAdjust_BLOCK,
+              left: css.style.ParagraphAdjust.LEFT,
+              center: css.style.ParagraphAdjust.CENTER,
+              right: css.style.ParagraphAdjust.RIGHT,
+              justify: css.style.ParagraphAdjust.BLOCK,
             }[properties.ParagraphAlignment];
             if (paragraphAdjust === undefined)
               throw new Error("Browser paragraph alignment is invalid.");
@@ -782,6 +837,106 @@
               "byte",
               properties.EscapementHeight,
             );
+          }
+          return {
+            mutates: true,
+            apply: () => writes.forEach((write) => write()),
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("SetParagraphProperties."),
+        prepare: ({ key, value, state }) => {
+          const payload = assertRecord(value, "Browser paragraph properties");
+          const names = assertExactKeys(
+            payload,
+            [
+              "Paragraph",
+              "LastLineAlignment",
+              "LeftMargin",
+              "RightMargin",
+              "FirstLineIndent",
+              "TopMargin",
+              "BottomMargin",
+              "Direction",
+            ],
+            "Browser paragraph properties",
+          );
+          if (!names.includes("Paragraph"))
+            throw new Error("Browser paragraph index is required.");
+          if (names.length === 1)
+            throw new Error("Browser paragraph properties are empty.");
+          const path = parsePath(
+            key.slice("SetParagraphProperties.".length),
+            "Browser paragraph target",
+          );
+          const shape = resolveShape(
+            state.currentPage,
+            path,
+            "Browser paragraph target",
+          );
+          if (typeof shape.createEnumeration !== "function")
+            throw new Error("Browser paragraph target has no paragraphs.");
+          const paragraphs = [];
+          const enumeration = shape.createEnumeration();
+          while (enumeration.hasMoreElements())
+            paragraphs.push(enumeration.nextElement());
+          const paragraphIndex = assertIndex(
+            payload.Paragraph,
+            paragraphs.length,
+            "Browser paragraph",
+          );
+          const paragraph = paragraphs[paragraphIndex];
+          if (typeof paragraph.setPropertyValue !== "function")
+            throw new Error("Browser paragraph is not editable.");
+          const css = uno.idl.com.sun.star;
+          const writes = [];
+          const addWrite = (name, typeName, propertyValue) =>
+            writes.push(
+              propertyWrite(paragraph, name, typeName, propertyValue),
+            );
+          if (Object.hasOwn(payload, "LastLineAlignment")) {
+            const valueByName = {
+              left: css.style.ParagraphAdjust.LEFT,
+              center: css.style.ParagraphAdjust.CENTER,
+              right: css.style.ParagraphAdjust.RIGHT,
+              justify: css.style.ParagraphAdjust.BLOCK,
+            };
+            if (!Object.hasOwn(valueByName, payload.LastLineAlignment))
+              throw new Error(
+                "Browser paragraph last-line alignment is invalid.",
+              );
+            writes.push(() =>
+              paragraph.setPropertyValue(
+                "ParaLastLineAdjust",
+                new uno.Any(
+                  uno.type.enum(css.style.ParagraphAdjust),
+                  valueByName[payload.LastLineAlignment],
+                ),
+              ),
+            );
+          }
+          for (const [payloadName, unoName] of [
+            ["LeftMargin", "ParaLeftMargin"],
+            ["RightMargin", "ParaRightMargin"],
+            ["FirstLineIndent", "ParaFirstLineIndent"],
+            ["TopMargin", "ParaTopMargin"],
+            ["BottomMargin", "ParaBottomMargin"],
+          ]) {
+            if (!Object.hasOwn(payload, payloadName)) continue;
+            if (!Number.isSafeInteger(payload[payloadName]))
+              throw new Error(`Browser paragraph ${payloadName} is invalid.`);
+            addWrite(unoName, "long", payload[payloadName]);
+          }
+          if (Object.hasOwn(payload, "Direction")) {
+            const valueByName = {
+              "left-to-right": css.text.WritingMode2.LR_TB,
+              "right-to-left": css.text.WritingMode2.RL_TB,
+              "top-to-bottom": css.text.WritingMode2.TB_RL,
+            };
+            if (!Object.hasOwn(valueByName, payload.Direction))
+              throw new Error("Browser paragraph direction is invalid.");
+            addWrite("WritingMode", "short", valueByName[payload.Direction]);
           }
           return {
             mutates: true,
@@ -912,14 +1067,14 @@
           );
           const css = uno.idl.com.sun.star;
           const clickActions = {
-            none: css.presentation.ClickAction_NONE,
-            external_url: css.presentation.ClickAction_DOCUMENT,
-            internal_slide: css.presentation.ClickAction_BOOKMARK,
-            next_slide: css.presentation.ClickAction_NEXTPAGE,
-            previous_slide: css.presentation.ClickAction_PREVPAGE,
-            first_slide: css.presentation.ClickAction_FIRSTPAGE,
-            last_slide: css.presentation.ClickAction_LASTPAGE,
-            end_show: css.presentation.ClickAction_STOPPRESENTATION,
+            none: css.presentation.ClickAction.NONE,
+            external_url: css.presentation.ClickAction.DOCUMENT,
+            internal_slide: css.presentation.ClickAction.BOOKMARK,
+            next_slide: css.presentation.ClickAction.NEXTPAGE,
+            previous_slide: css.presentation.ClickAction.PREVPAGE,
+            first_slide: css.presentation.ClickAction.FIRSTPAGE,
+            last_slide: css.presentation.ClickAction.LASTPAGE,
+            end_show: css.presentation.ClickAction.STOPPRESENTATION,
           };
           if (!Object.hasOwn(clickActions, interaction.Action))
             throw new Error("Browser object interaction action is invalid.");

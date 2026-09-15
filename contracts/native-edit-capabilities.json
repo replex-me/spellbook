@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "coordinateUnit": "1/100mm",
   "nativeUndoRequired": true,
   "verifiedWith": {
@@ -15,7 +15,7 @@
     }
   },
   "aiExposure": {
-    "operationCount": 63,
+    "operationCount": 66,
     "policy": "Expose every bounded operation except format-excluded mutations. Before execution, authorize against the current document permission and the live editor engine patch level. Availability records release-evidence maturity; it does not silently remove an implemented operation from the model schema."
   },
   "transaction": {
@@ -620,6 +620,14 @@
         "availability": "runtime_verified",
         "minEnginePatch": 9
       },
+      "set_line_style": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 19
+      },
       "set_printable": {
         "family": "object_style",
         "target": "element",
@@ -724,6 +732,14 @@
         "availability": "runtime_verified",
         "minEnginePatch": 7
       },
+      "set_slide_metadata": {
+        "family": "slide_properties",
+        "target": "slide",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 19
+      },
       "set_animation_timing": {
         "family": "animation",
         "target": "animation_effect",
@@ -739,6 +755,14 @@
         "identityEffect": "preserve",
         "availability": "runtime_verified",
         "minEnginePatch": 6
+      },
+      "set_paragraph_format": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 19
       }
     }
   },
@@ -753,7 +777,8 @@
       "set_background",
       "rename_slide",
       "set_slide_hidden",
-      "set_slide_transition"
+      "set_slide_transition",
+      "set_slide_metadata"
     ],
     "create": ["add_text_box", "add_shape", "add_table"],
     "multiElement": ["align", "distribute", "group"],
@@ -792,6 +817,7 @@
       "set_script_position",
       "set_shape_shadow",
       "set_object_lock",
+      "set_line_style",
       "set_object_interaction",
       "replace_text_range",
       "insert_table_rows",
@@ -804,10 +830,15 @@
       "set_table_column_width",
       "set_table_cell_format",
       "set_animation_timing",
-      "crop_image"
+      "crop_image",
+      "set_paragraph_format"
     ]
   },
-  "candidateOperations": [],
+  "candidateOperations": [
+    "set_slide_metadata",
+    "set_line_style",
+    "set_paragraph_format"
+  ],
   "formatExcludedOperations": [
     {
       "op": "set_printable",
@@ -883,6 +914,7 @@
           "set_script_position",
           "set_shape_shadow",
           "set_object_lock",
+          "set_line_style",
           "set_object_interaction",
           "replace_text_range",
           "insert_table_rows",
@@ -895,8 +927,10 @@
           "set_table_column_width",
           "set_table_cell_format",
           "set_slide_transition",
+          "set_slide_metadata",
           "set_animation_timing",
-          "crop_image"
+          "crop_image",
+          "set_paragraph_format"
         ]
       },
       "elementId": { "type": ["string", "null"] },
@@ -953,6 +987,40 @@
         "minimum": 0,
         "maximum": 60,
         "description": "Slide transition duration in seconds."
+      },
+      "slideMetadata": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "footerVisible": { "type": ["boolean", "null"] },
+          "footerText": { "type": ["string", "null"], "maxLength": 1024 },
+          "pageNumberVisible": { "type": ["boolean", "null"] },
+          "dateTimeVisible": { "type": ["boolean", "null"] },
+          "dateTimeFixed": { "type": ["boolean", "null"] },
+          "dateTimeText": { "type": ["string", "null"], "maxLength": 1024 },
+          "dateTimeFormat": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 255
+          },
+          "duration": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 86400
+          },
+          "backgroundObjectsVisible": { "type": ["boolean", "null"] }
+        },
+        "required": [
+          "footerVisible",
+          "footerText",
+          "pageNumberVisible",
+          "dateTimeVisible",
+          "dateTimeFixed",
+          "dateTimeText",
+          "dateTimeFormat",
+          "duration",
+          "backgroundObjectsVisible"
+        ]
       },
       "animationId": {
         "type": ["string", "null"],
@@ -1025,6 +1093,50 @@
       "lockPosition": { "type": ["boolean", "null"] },
       "lockSize": { "type": ["boolean", "null"] },
       "printable": { "type": ["boolean", "null"] },
+      "lineStyle": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "dashName": { "type": ["string", "null"], "maxLength": 255 },
+          "startArrowName": {
+            "type": ["string", "null"],
+            "maxLength": 255
+          },
+          "endArrowName": {
+            "type": ["string", "null"],
+            "maxLength": 255
+          }
+        },
+        "required": ["dashName", "startArrowName", "endArrowName"]
+      },
+      "paragraphFormat": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "lastLineAlignment": {
+            "type": ["string", "null"],
+            "enum": ["left", "center", "right", "justify", null]
+          },
+          "leftMargin": { "type": ["number", "null"], "minimum": -100000, "maximum": 100000 },
+          "rightMargin": { "type": ["number", "null"], "minimum": -100000, "maximum": 100000 },
+          "firstLineIndent": { "type": ["number", "null"], "minimum": -100000, "maximum": 100000 },
+          "topMargin": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
+          "bottomMargin": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
+          "direction": {
+            "type": ["string", "null"],
+            "enum": ["left-to-right", "right-to-left", "top-to-bottom", null]
+          }
+        },
+        "required": [
+          "lastLineAlignment",
+          "leftMargin",
+          "rightMargin",
+          "firstLineIndent",
+          "topMargin",
+          "bottomMargin",
+          "direction"
+        ]
+      },
       "alignment": {
         "type": ["string", "null"],
         "enum": [
@@ -1263,6 +1375,7 @@
       "layout",
       "transitionEffect",
       "transitionDuration",
+      "slideMetadata",
       "animationId",
       "duration",
       "delay",
@@ -1310,6 +1423,8 @@
       "lockPosition",
       "lockSize",
       "printable",
+      "lineStyle",
+      "paragraphFormat",
       "alignment",
       "axis",
       "position",

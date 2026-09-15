@@ -56,7 +56,7 @@ test("execution plan assigns a real PPTX and bounded operation routes to every s
     scenarios.every((scenario) => /^[0-9a-f]{64}$/.test(scenario.sourceSha256)),
   );
   assert.ok(
-    scenarios.every((scenario) => scenario.expectedPatchLevel === "undo-v18"),
+    scenarios.every((scenario) => scenario.expectedPatchLevel === "undo-v19"),
   );
   assert.ok(scenarios.every((scenario) => scenario.allowedOperations.length));
   assert.deepEqual(
@@ -97,6 +97,9 @@ test("the runner supplies the contract-derived operation set to each probe", () 
   assert.ok(general.allowedOperations.includes("insert_slide"));
   assert.ok(general.allowedOperations.includes("set_slide_layout"));
   assert.ok(general.allowedOperations.includes("text_shadow"));
+  assert.ok(general.allowedOperations.includes("set_slide_metadata"));
+  assert.ok(general.allowedOperations.includes("set_line_style"));
+  assert.ok(general.allowedOperations.includes("set_paragraph_format"));
 });
 
 test("report operation extraction is stable for broad and dedicated probes", () => {

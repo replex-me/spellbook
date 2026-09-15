@@ -1110,6 +1110,73 @@ try {
     );
     if (!propertyTarget)
       throw new Error("No top-level text object for property patch probe.");
+    if (engineOperationAvailable("set_slide_metadata")) {
+      const metadataSlide = observed.slides[propertySlideIndex];
+      await editWithUndoRoundTrip({
+        op: "set_slide_metadata",
+        slideIndex: propertySlideIndex,
+        slideMetadata: {
+          footerVisible: true,
+          footerText: "Spellbook verified",
+          pageNumberVisible: true,
+          dateTimeVisible: true,
+          dateTimeFixed: true,
+          dateTimeText: "2026-09-16",
+          dateTimeFormat: 18,
+          duration:
+            metadataSlide.timing?.highResolutionDuration === 12.5
+              ? 7.25
+              : 12.5,
+          backgroundObjectsVisible:
+            metadataSlide.backgroundObjectsVisible === false,
+        },
+      });
+    }
+    if (engineOperationAvailable("set_line_style")) {
+      const dashName = observed.styleCatalog?.lineDashNames?.find(
+        (name) => name && name !== propertyTarget.lineDashName,
+      );
+      const markerNames = observed.styleCatalog?.lineMarkerNames ?? [];
+      const startArrowName = markerNames.find(
+        (name) => name && name !== propertyTarget.lineStartName,
+      );
+      const endArrowName = markerNames.find(
+        (name) =>
+          name &&
+          name !== propertyTarget.lineEndName &&
+          name !== startArrowName,
+      );
+      if (!dashName || !startArrowName || !endArrowName)
+        throw new Error("Document line style catalog is incomplete.");
+      await editWithUndoRoundTrip({
+        op: "set_line_style",
+        elementId: propertyTarget.elementId,
+        lineStyle: { dashName, startArrowName, endArrowName },
+      });
+    }
+    if (engineOperationAvailable("set_paragraph_format")) {
+      const paragraph = propertyTarget.paragraphFormats?.[0];
+      if (!paragraph)
+        throw new Error("No observed paragraph for paragraph-format probe.");
+      await editWithUndoRoundTrip({
+        op: "set_paragraph_format",
+        elementId: propertyTarget.elementId,
+        paragraphId: paragraph.paragraphId,
+        paragraphFormat: {
+          lastLineAlignment:
+            paragraph.lastLineAlignment === "right" ? "left" : "right",
+          leftMargin: Number(paragraph.leftMargin ?? 0) + 101,
+          rightMargin: Number(paragraph.rightMargin ?? 0) + 37,
+          firstLineIndent: Number(paragraph.firstLineIndent ?? 0) - 23,
+          topMargin: Number(paragraph.topMargin ?? 0) + 19,
+          bottomMargin: Number(paragraph.bottomMargin ?? 0) + 29,
+          direction:
+            paragraph.writingMode === "right-to-left"
+              ? "left-to-right"
+              : "right-to-left",
+        },
+      });
+    }
     await editWithUndoRoundTrip({
       op: "set_alt_text",
       elementId: propertyTarget.elementId,

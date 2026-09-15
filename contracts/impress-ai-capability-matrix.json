@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "reviewedAt": "2026-09-15",
+  "reviewedAt": "2026-09-16",
   "purpose": "Route the complete raw Impress command inventory into product-level families, track release-evidence maturity, and distinguish it from AI tool exposure. Raw UNO commands are evidence inputs, not an AI API.",
   "engineBaseline": {
     "product": "Collabora Online cp-26.04.4-1 source / stock CODE 26.04.3.2.1 runtime",
@@ -39,7 +39,7 @@
       "policy": "Every observed Impress UI command is routed to a product semantic family. Routing proves inventory coverage only; it does not make a raw UNO command an AI tool or satisfy that family's runtime release gates."
     },
     "aiToolExposure": {
-      "count": 63,
+      "count": 66,
       "source": "native-edit-capabilities.json#toolInputSchema.properties.op.enum",
       "runtimeGuard": "The connector checks the live editor patch level and document permission before every operation."
     },
@@ -109,7 +109,11 @@
       "crop_image"
     ],
     "enginePatchReady": [],
-    "runtimeValidationRequired": [],
+    "runtimeValidationRequired": [
+      "set_slide_metadata",
+      "set_line_style",
+      "set_paragraph_format"
+    ],
     "formatExcluded": ["set_printable"],
     "enginePatchReadyTransactions": [],
     "runtimeVerifiedAuxiliaryTools": [
@@ -140,6 +144,7 @@
       "states": [
         "runtime_verified",
         "observation_verified",
+        "runtime_validation_required",
         "typed_adapter_required",
         "visual_validation_required"
       ],
@@ -160,11 +165,11 @@
       "scope": "fill, outline, opacity, dash, arrowheads, gradients, patterns, shadows and effects",
       "states": [
         "runtime_verified",
+        "runtime_validation_required",
         "typed_adapter_required",
         "visual_validation_required"
       ],
       "next": [
-        "add line style and arrowhead adapters with exact readback",
         "gate gradient/effects on serialized and visual equivalence"
       ]
     },
@@ -194,12 +199,12 @@
       "scope": "alignment, vertical alignment, bullets, numbering, indentation, spacing, direction, columns, margins and autofit",
       "states": [
         "runtime_verified",
-        "observation_required",
+        "runtime_validation_required",
         "typed_adapter_required",
         "visual_validation_required"
       ],
       "next": [
-        "add paragraph/list structure before mutation",
+        "add list structure and numbering identities before list mutation",
         "detect overflow with engine metrics plus screenshot review"
       ]
     },

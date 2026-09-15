@@ -51,11 +51,26 @@ function fixture() {
       writes.push(["undo"]);
     },
   };
-  const shape = (name, initialText = "Alpha Beta\nSecond paragraph") => ({
+  const shape = (name, initialText = "Alpha Beta\nSecond paragraph") => {
+    const paragraphs = initialText.split("\n").map((text, index) => ({
+      text,
+      properties: {},
+      setPropertyValue(property, value) {
+        this.properties[property] = value.val;
+        mutations.push([
+          `${name}-paragraph-${index}`,
+          property,
+          value.type,
+          value.val,
+        ]);
+      },
+    }));
+    return {
     name,
     text: initialText,
     properties: {},
     textProperties: {},
+    paragraphs,
     getString() {
       return this.text;
     },
@@ -97,11 +112,19 @@ function fixture() {
         },
       };
     },
+    createEnumeration() {
+      let index = 0;
+      return {
+        hasMoreElements: () => index < paragraphs.length,
+        nextElement: () => paragraphs[index++],
+      };
+    },
     setPropertyValue(property, value) {
       this.properties[property] = value.val;
       mutations.push([name, property, value.type, value.val]);
     },
-  });
+  };
+  };
   const page = (name, children) => {
     const notesShape = shape(`${name}-notes`, "Existing notes");
     notesShape.getShapeType = () => "com.sun.star.presentation.NotesShape";
@@ -192,35 +215,36 @@ function fixture() {
       Object.assign(this, value);
     }
   }
-  const ClickAction = function ClickAction() {};
-  const presentation = {
-    ClickAction,
-    ClickAction_NONE: "none",
-    ClickAction_DOCUMENT: "document",
-    ClickAction_BOOKMARK: "bookmark",
-    ClickAction_NEXTPAGE: "next",
-    ClickAction_PREVPAGE: "previous",
-    ClickAction_FIRSTPAGE: "first",
-    ClickAction_LASTPAGE: "last",
-    ClickAction_STOPPRESENTATION: "stop",
-  };
-  const FontSlant = function FontSlant() {};
+  const ClickAction = Object.assign(function ClickAction() {}, {
+    NONE: "none",
+    DOCUMENT: "document",
+    BOOKMARK: "bookmark",
+    NEXTPAGE: "next",
+    PREVPAGE: "previous",
+    FIRSTPAGE: "first",
+    LASTPAGE: "last",
+    STOPPRESENTATION: "stop",
+  });
+  const presentation = { ClickAction };
+  const FontSlant = Object.assign(function FontSlant() {}, {
+    NONE: "none",
+    ITALIC: "italic",
+  });
   const awt = {
     FontSlant,
-    FontSlant_NONE: "none",
-    FontSlant_ITALIC: "italic",
-    FontStrikeout_NONE: 0,
-    FontStrikeout_SINGLE: 1,
-    FontUnderline_NONE: 0,
-    FontUnderline_SINGLE: 1,
+    FontStrikeout: { NONE: 0, SINGLE: 1 },
+    FontUnderline: { NONE: 0, SINGLE: 1 },
   };
-  const ParagraphAdjust = function ParagraphAdjust() {};
-  const style = {
-    ParagraphAdjust,
-    ParagraphAdjust_LEFT: "left",
-    ParagraphAdjust_RIGHT: "right",
-    ParagraphAdjust_BLOCK: "justify",
-    ParagraphAdjust_CENTER: "center",
+  const ParagraphAdjust = Object.assign(function ParagraphAdjust() {}, {
+    LEFT: "left",
+    RIGHT: "right",
+    BLOCK: "justify",
+    CENTER: "center",
+  });
+  const style = { ParagraphAdjust };
+  const text = {
+    GraphicCrop,
+    WritingMode2: { LR_TB: 0, RL_TB: 1, TB_RL: 2 },
   };
   const uno = {
     Any,
@@ -242,7 +266,7 @@ function fixture() {
     },
     idl: {
       com: {
-        sun: { star: { awt, presentation, style, text: { GraphicCrop } } },
+        sun: { star: { awt, presentation, style, text } },
       },
     },
   };
@@ -251,7 +275,7 @@ function fixture() {
     buildReady: true,
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v7",
+    patchLevel: "browser-undo-v8",
   };
   return {
     adapter: factory({ uno, runtimeIdentity }),
@@ -276,7 +300,10 @@ test("browser adapter advertises the complete bounded PPTX operation surface", (
     Array.from(adapter.supportedOperations),
     completeNativeOperationSurface,
   );
-  assert.equal(adapter.supportedOperations.length, 63);
+  assert.equal(
+    adapter.supportedOperations.length,
+    nativeCapabilities.aiExposure.operationCount,
+  );
 });
 
 test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime", () => {
@@ -287,7 +314,7 @@ test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime",
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v7",
+      patchLevel: "browser-undo-v8",
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
@@ -321,7 +348,7 @@ test("browser adapter routes stock slide lifecycle through Impress commands", ()
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v7",
+      patchLevel: "browser-undo-v8",
     },
   });
   assert.equal(stockAdapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
@@ -353,7 +380,7 @@ test("browser adapter deletes a slide only after native structure admission", ()
       buildReady: true,
       buildCommit: "candidate",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v7",
+      patchLevel: "browser-undo-v8",
       nativeSlideStructureReady: true,
     },
   });
@@ -429,6 +456,9 @@ test("browser adapter writes only bounded object, crop and interaction fields", 
           LineColor: 0x123456,
           LineTransparence: 43,
           LineWidth: 200,
+          LineDashName: "Fine Dashed",
+          LineStartName: "Arrow",
+          LineEndName: "Square",
           RotateAngle: 1_500,
           TextLeftDistance: 420,
           Shadow: true,
@@ -452,6 +482,9 @@ test("browser adapter writes only bounded object, crop and interaction fields", 
   assert.equal(runtime.secondShape.properties.LineColor, 0x123456);
   assert.equal(runtime.secondShape.properties.LineTransparence, 43);
   assert.equal(runtime.secondShape.properties.LineWidth, 200);
+  assert.equal(runtime.secondShape.properties.LineDashName, "Fine Dashed");
+  assert.equal(runtime.secondShape.properties.LineStartName, "Arrow");
+  assert.equal(runtime.secondShape.properties.LineEndName, "Square");
   assert.equal(runtime.secondShape.properties.RotateAngle, 1_500);
   assert.deepEqual(
     runtime.mutations.filter(([, property]) =>
@@ -479,6 +512,74 @@ test("browser adapter writes only bounded object, crop and interaction fields", 
   );
   assert.equal(runtime.secondShape.properties.OnClick, "bookmark");
   assert.equal(runtime.secondShape.properties.Bookmark, "Slide 1");
+});
+
+test("browser adapter writes bounded slide metadata and paragraph formatting", () => {
+  const runtime = fixture();
+  runtime.adapter.transformSlides({
+    commands: [
+      { JumpToSlide: 1 },
+      {
+        SetSlideProperties: {
+          IsFooterVisible: true,
+          FooterText: "Confidential",
+          IsPageNumberVisible: true,
+          IsDateTimeVisible: true,
+          IsDateTimeFixed: true,
+          DateTimeText: "2026-09-16",
+          DateTimeFormat: 3,
+          HighResDuration: 12.5,
+          IsBackgroundObjectsVisible: false,
+        },
+      },
+      {
+        "SetParagraphProperties.0": {
+          Paragraph: 1,
+          LastLineAlignment: "right",
+          LeftMargin: 1200,
+          RightMargin: 300,
+          FirstLineIndent: -200,
+          TopMargin: 100,
+          BottomMargin: 200,
+          Direction: "right-to-left",
+        },
+      },
+    ],
+    ...runtime,
+  });
+
+  assert.deepEqual(runtime.secondPage.properties, {
+    IsFooterVisible: true,
+    FooterText: "Confidential",
+    IsPageNumberVisible: true,
+    IsDateTimeVisible: true,
+    IsDateTimeFixed: true,
+    DateTimeText: "2026-09-16",
+    DateTimeFormat: 3,
+    HighResDuration: 12.5,
+    IsBackgroundObjectsVisible: false,
+  });
+  assert.deepEqual(runtime.secondShape.paragraphs[1].properties, {
+    ParaLastLineAdjust: "right",
+    ParaLeftMargin: 1200,
+    ParaRightMargin: 300,
+    ParaFirstLineIndent: -200,
+    ParaTopMargin: 100,
+    ParaBottomMargin: 200,
+    WritingMode: 1,
+  });
+  assert.deepEqual(runtime.writes, [
+    ["enter", "AI presentation edit"],
+    ["page", "Slide 2"],
+    ["leave"],
+  ]);
+});
+
+test("browser adapter source uses the generated browser UNO enum shape", () => {
+  assert.doesNotMatch(
+    source,
+    /FontSlant_|FontUnderline_|FontStrikeout_|ParagraphAdjust_|ClickAction_/u,
+  );
 });
 
 test("browser adapter writes text, formatting and notes in one native Undo group", () => {

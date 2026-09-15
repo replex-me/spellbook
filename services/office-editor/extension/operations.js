@@ -67,6 +67,17 @@ function spellbookDocumentOperation(request) {
   const controller = frame.getController();
   const model = controller.getModel();
   const pages = model.getDrawPages();
+  const documentStyleNames = (serviceName) => {
+    try {
+      return Array.from(model.createInstance(serviceName).getElementNames());
+    } catch (_) {
+      return [];
+    }
+  };
+  const styleCatalog = {
+    lineDashNames: documentStyleNames("com.sun.star.drawing.DashTable"),
+    lineMarkerNames: documentStyleNames("com.sun.star.drawing.MarkerTable"),
+  };
   const prop = (Name, type, value) =>
     new uno.idl.com.sun.star.beans.PropertyValue({
       Name,
@@ -630,20 +641,49 @@ function spellbookDocumentOperation(request) {
           endOffset: shapeOffset + paragraphText.length,
           text: paragraphText,
           alignment: safeProperty(paragraph, "ParaAdjust"),
-          lastLineAlignment: safeProperty(paragraph, "ParaLastLineAdjust"),
+          lastLineAlignment: paragraphAdjustName(
+            safeProperty(paragraph, "ParaLastLineAdjust"),
+          ),
           leftMargin: safeProperty(paragraph, "ParaLeftMargin"),
           rightMargin: safeProperty(paragraph, "ParaRightMargin"),
           firstLineIndent: safeProperty(paragraph, "ParaFirstLineIndent"),
           topMargin: safeProperty(paragraph, "ParaTopMargin"),
           bottomMargin: safeProperty(paragraph, "ParaBottomMargin"),
           lineSpacing: safeProperty(paragraph, "ParaLineSpacing"),
-          writingMode: enumName(safeProperty(paragraph, "WritingMode")),
+          writingMode: writingModeName(safeProperty(paragraph, "WritingMode")),
           portions,
         });
         // UNO paragraph enumeration omits the paragraph separator from each
         // paragraph string. Count one logical separator between paragraphs so
         // offsets remain unambiguous inside the shape's full string.
         shapeOffset += paragraphText.length + 1;
+        paragraphIndex++;
+      }
+      return paragraphs;
+    } catch (_) {
+      return null;
+    }
+  };
+  const paragraphFormatDetails = (shape, elementId) => {
+    try {
+      const paragraphs = [];
+      const enumeration = shape.createEnumeration();
+      let paragraphIndex = 0;
+      while (enumeration.hasMoreElements()) {
+        const paragraph = enumeration.nextElement();
+        paragraphs.push({
+          paragraphId: `${elementId}:p${paragraphIndex}`,
+          paragraphIndex,
+          lastLineAlignment: paragraphAdjustName(
+            safeProperty(paragraph, "ParaLastLineAdjust"),
+          ),
+          leftMargin: safeProperty(paragraph, "ParaLeftMargin"),
+          rightMargin: safeProperty(paragraph, "ParaRightMargin"),
+          firstLineIndent: safeProperty(paragraph, "ParaFirstLineIndent"),
+          topMargin: safeProperty(paragraph, "ParaTopMargin"),
+          bottomMargin: safeProperty(paragraph, "ParaBottomMargin"),
+          writingMode: writingModeName(safeProperty(paragraph, "WritingMode")),
+        });
         paragraphIndex++;
       }
       return paragraphs;
@@ -696,6 +736,33 @@ function spellbookDocumentOperation(request) {
     } catch (_) {
       return null;
     }
+  };
+  const enumToken = (value) =>
+    String(enumName(value) ?? "")
+      .split(/[.:]/u)
+      .at(-1)
+      .toUpperCase();
+  const paragraphAdjustName = (value) => {
+    const numeric = Number(value);
+    if (Number.isInteger(numeric))
+      return ["left", "right", "justify", "center", "stretch"][numeric] ?? null;
+    return {
+      LEFT: "left",
+      RIGHT: "right",
+      BLOCK: "justify",
+      CENTER: "center",
+      STRETCH: "stretch",
+    }[enumToken(value)] ?? null;
+  };
+  const writingModeName = (value) => {
+    const numeric = Number(value);
+    if (Number.isInteger(numeric))
+      return ["left-to-right", "right-to-left", "top-to-bottom"][numeric] ?? null;
+    return {
+      LR_TB: "left-to-right",
+      RL_TB: "right-to-left",
+      TB_RL: "top-to-bottom",
+    }[enumToken(value)] ?? null;
   };
   const normalizeUnoValue = (value, depth = 0) => {
     if (depth > 8) return null;
@@ -1128,6 +1195,8 @@ function spellbookDocumentOperation(request) {
             geometryType: shapeGeometryType(shape, shapeKind),
             propertyStates: shapePropertyStates(shape, text),
             text,
+            paragraphFormats:
+              text === null ? null : paragraphFormatDetails(shape, elementId),
             wholeTextFormatting: wholeTextFormatting(shape, text),
             x: position.X,
             y: position.Y,
@@ -1454,7 +1523,11 @@ function spellbookDocumentOperation(request) {
     );
     return {
       unit: "1/100mm",
-      engine: engineIdentity,
+      engine: {
+        ...engineIdentity,
+        supportedOperations: [...runtimeOperations],
+      },
+      styleCatalog,
       revision: revisionOf({ slides, masters: revisionMasters }),
       masters,
       slides,
@@ -1588,6 +1661,7 @@ function spellbookDocumentOperation(request) {
         "bold",
         "italic",
         "font_family",
+        "set_paragraph_format",
       ].includes(command?.op) &&
       typeof command.elementId === "string" &&
       /^\d+(?:\/\d+)+$/.test(command.elementId)
@@ -1691,6 +1765,60 @@ function spellbookDocumentOperation(request) {
           permission.mode === "slides" &&
           permission.slideIndexes.includes(slideIndex));
       if (!allowed) throw new Error("outside_edit_permission");
+      let slideMetadataProperties = null;
+      let slideMetadataExpected = null;
+      if (command.op === "set_slide_metadata") {
+        const metadata = command.slideMetadata;
+        const allowedMetadataFields = {
+          footerVisible: ["IsFooterVisible", "boolean"],
+          footerText: ["FooterText", "string"],
+          pageNumberVisible: ["IsPageNumberVisible", "boolean"],
+          dateTimeVisible: ["IsDateTimeVisible", "boolean"],
+          dateTimeFixed: ["IsDateTimeFixed", "boolean"],
+          dateTimeText: ["DateTimeText", "string"],
+          dateTimeFormat: ["DateTimeFormat", "integer"],
+          duration: ["HighResDuration", "number"],
+          backgroundObjectsVisible: [
+            "IsBackgroundObjectsVisible",
+            "boolean",
+          ],
+        };
+        if (
+          !metadata ||
+          typeof metadata !== "object" ||
+          Array.isArray(metadata) ||
+          Object.keys(metadata).some(
+            (name) => !Object.hasOwn(allowedMetadataFields, name),
+          )
+        )
+          throw new Error("invalid_slide_metadata");
+        slideMetadataProperties = {};
+        slideMetadataExpected = {};
+        for (const [name, value] of Object.entries(metadata)) {
+          if (value === null || value === undefined) continue;
+          const [propertyName, type] = allowedMetadataFields[name];
+          const valid =
+            (type === "boolean" && typeof value === "boolean") ||
+            (type === "string" &&
+              typeof value === "string" &&
+              value.length <= 1024 &&
+              !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value)) ||
+            (type === "integer" &&
+              Number.isInteger(value) &&
+              value >= 0 &&
+              value <= 255) ||
+            (type === "number" &&
+              typeof value === "number" &&
+              Number.isFinite(value) &&
+              value >= 0 &&
+              value <= 86400);
+          if (!valid) throw new Error("invalid_slide_metadata");
+          slideMetadataProperties[propertyName] = value;
+          slideMetadataExpected[name] = value;
+        }
+        if (!Object.keys(slideMetadataProperties).length)
+          throw new Error("no_slide_metadata_supplied");
+      }
       if (command.op === "delete_slide" && before.slides.length === 1)
         throw new Error("cannot_delete_only_slide");
       if (
@@ -1765,6 +1893,19 @@ function spellbookDocumentOperation(request) {
         command.op === "set_slide_layout"
           ? before.masters[command.masterIndex]
           : null;
+      const slideMetadataValue = (slide, name) =>
+        name === "duration"
+          ? slide?.timing?.highResolutionDuration
+          : name === "backgroundObjectsVisible"
+            ? slide?.backgroundObjectsVisible
+            : slide?.footer?.[name];
+      if (
+        command.op === "set_slide_metadata" &&
+        Object.entries(slideMetadataExpected).every(
+          ([name, value]) => slideMetadataValue(before.slides[slideIndex], name) === value,
+        )
+      )
+        return result(before, slideIndex);
       if (
         selectedLayoutMaster &&
         before.slides[slideIndex].masterIndex === command.masterIndex &&
@@ -1843,6 +1984,11 @@ function spellbookDocumentOperation(request) {
             },
           },
         ]);
+      else if (command.op === "set_slide_metadata")
+        transformSlides([
+          { JumpToSlide: slideIndex },
+          { SetSlideProperties: slideMetadataProperties },
+        ]);
       else throw new Error("unsupported_slide_command");
       const after = read();
       const pageIndexAfter = () => {
@@ -1897,8 +2043,16 @@ function spellbookDocumentOperation(request) {
                             duration: command.transitionDuration,
                             fadeColor:
                               slideTransitionPresets[command.transitionEffect]
-                                .FadeColor,
+                              .FadeColor,
                           })
+                        : command.op === "set_slide_metadata"
+                          ? Object.entries(slideMetadataExpected).every(
+                              ([name, value]) =>
+                                slideMetadataValue(
+                                  after.slides[pageIndexAfter()],
+                                  name,
+                                ) === value,
+                            )
                         : after.slides[pageIndexAfter()]?.backgroundColor ===
                           command.color;
       const changed =
@@ -2620,6 +2774,122 @@ function spellbookDocumentOperation(request) {
       return result(after, slideIndex);
     }
 
+    if (command.op === "set_paragraph_format") {
+      if (!runtimeSupports(command.op) && !hasEnginePatch(19))
+        throw new Error("native_engine_paragraph_format_patch_required");
+      const format = command.paragraphFormat;
+      const allowedFields = {
+        lastLineAlignment: "LastLineAlignment",
+        leftMargin: "LeftMargin",
+        rightMargin: "RightMargin",
+        firstLineIndent: "FirstLineIndent",
+        topMargin: "TopMargin",
+        bottomMargin: "BottomMargin",
+        direction: "Direction",
+      };
+      if (
+        !element.text ||
+        typeof command.paragraphId !== "string" ||
+        !format ||
+        typeof format !== "object" ||
+        Array.isArray(format) ||
+        Object.keys(format).some((name) => !Object.hasOwn(allowedFields, name))
+      )
+        throw new Error("invalid_paragraph_format");
+      const paragraph = element.paragraphFormats?.find(
+        (candidate) => candidate.paragraphId === command.paragraphId,
+      );
+      if (!paragraph) throw new Error("observed_paragraph_not_found");
+      const payload = { Paragraph: paragraph.paragraphIndex };
+      const expected = {};
+      for (const [name, value] of Object.entries(format)) {
+        if (value === null || value === undefined) continue;
+        if (name === "lastLineAlignment") {
+          if (!["left", "center", "right", "justify"].includes(value))
+            throw new Error("invalid_paragraph_format");
+        } else if (name === "direction") {
+          if (
+            !["left-to-right", "right-to-left", "top-to-bottom"].includes(
+              value,
+            )
+          )
+            throw new Error("invalid_paragraph_format");
+        } else if (
+          typeof value !== "number" ||
+          !Number.isFinite(value) ||
+          value < (name === "leftMargin" || name === "rightMargin" || name === "firstLineIndent" ? -100000 : 0) ||
+          value > 100000
+        )
+          throw new Error("invalid_paragraph_format");
+        const normalized =
+          typeof value === "number" ? Math.round(value) : value;
+        payload[allowedFields[name]] = normalized;
+        expected[name === "direction" ? "writingMode" : name] = normalized;
+      }
+      if (Object.keys(payload).length === 1)
+        throw new Error("no_paragraph_format_supplied");
+      if (
+        Object.entries(expected).every(
+          ([name, value]) => paragraph[name] === value,
+        )
+      )
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, slideIndex);
+
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      const objectPath = command.elementId.split("/").slice(1).join("/");
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        { [`SetParagraphProperties.${objectPath}`]: payload },
+      ]);
+      const after = read(slideIndex);
+      const target = after.slides[slideIndex]?.elements.find(
+        (candidate) => candidate.elementId === command.elementId,
+      );
+      const afterParagraph = target?.paragraphFormats?.find(
+        (candidate) => candidate.paragraphIndex === paragraph.paragraphIndex,
+      );
+      const expectedParagraph = { ...paragraph, ...expected };
+      const expectedTarget = {
+        ...element,
+        paragraphFormats: element.paragraphFormats.map((candidate) =>
+          candidate.paragraphIndex === paragraph.paragraphIndex
+            ? expectedParagraph
+            : candidate,
+        ),
+      };
+      const expectedSlides = before.slides.map((slide, index) => ({
+        ...slide,
+        elements: slide.elements.map((candidate) =>
+          index === slideIndex && candidate.elementId === command.elementId
+            ? expectedTarget
+            : candidate,
+        ),
+      }));
+      const applied = stableJson(afterParagraph) === stableJson(expectedParagraph);
+      const unrelatedChanged =
+        documentStateJson(after.masters) !==
+          documentStateJson(before.masters) ||
+        documentStateJson(after.slides) !== documentStateJson(expectedSlides);
+      if (
+        !applied ||
+        unrelatedChanged ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length <= undoCount)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          unrelatedChanged
+            ? "unexpected_edit_scope"
+            : !applied
+              ? "native_command_not_applied"
+              : "native_undo_not_recorded",
+        );
+      }
+      return result(after, slideIndex);
+    }
+
     if (command.op === "replace_text_range") {
       if (!patchedTextRangeEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_text_range_patch_required");
@@ -2893,6 +3163,7 @@ function spellbookDocumentOperation(request) {
       "set_text_box",
       "set_shape_shadow",
       "set_object_lock",
+      "set_line_style",
       "set_printable",
     ]);
     if (objectPropertyOperations.has(command.op)) {
@@ -3011,6 +3282,38 @@ function spellbookDocumentOperation(request) {
           properties.MoveProtect = command.lockPosition;
         if (command.lockSize !== null && command.lockSize !== undefined)
           properties.SizeProtect = command.lockSize;
+      } else if (command.op === "set_line_style") {
+        const lineStyle = command.lineStyle;
+        const propertyByField = {
+          dashName: "LineDashName",
+          startArrowName: "LineStartName",
+          endArrowName: "LineEndName",
+        };
+        if (
+          !lineStyle ||
+          typeof lineStyle !== "object" ||
+          Array.isArray(lineStyle) ||
+          Object.keys(lineStyle).some(
+            (name) => !Object.hasOwn(propertyByField, name),
+          )
+        )
+          throw new Error("invalid_line_style");
+        for (const [name, value] of Object.entries(lineStyle)) {
+          if (value === null || value === undefined) continue;
+          if (
+            typeof value !== "string" ||
+            value.length > 255 ||
+            /[\u0000-\u001f]/u.test(value)
+          )
+            throw new Error("invalid_line_style");
+          const availableNames =
+            name === "dashName"
+              ? styleCatalog.lineDashNames
+              : styleCatalog.lineMarkerNames;
+          if (value && !availableNames.includes(value))
+            throw new Error("line_style_name_not_in_document_catalog");
+          properties[propertyByField[name]] = value;
+        }
       } else if (command.op === "set_printable") {
         if (typeof command.printable !== "boolean")
           throw new Error("invalid_printable");
@@ -3038,6 +3341,9 @@ function spellbookDocumentOperation(request) {
         ShadowBlur: ["shadow", "blur"],
         MoveProtect: "moveProtected",
         SizeProtect: "sizeProtected",
+        LineDashName: "lineDashName",
+        LineStartName: "lineStartName",
+        LineEndName: "lineEndName",
         Printable: "printable",
       };
       const readPath = (value, path) =>
@@ -3052,10 +3358,10 @@ function spellbookDocumentOperation(request) {
       if (request.dryRun) return result(before, before.activeSlide);
       const undo = model.getUndoManager();
       const undoCount = undo.getAllUndoActionTitles().length;
-      const objectIndex = Number(command.elementId.split("/")[1]);
+      const objectPath = command.elementId.split("/").slice(1).join("/");
       transformSlides([
         { JumpToSlide: slideIndex },
-        { [`SetObjectProperties.${objectIndex}`]: properties },
+        { [`SetObjectProperties.${objectPath}`]: properties },
       ]);
       const after = read();
       const target = after.slides[slideIndex].elements.find(
@@ -5163,6 +5469,7 @@ function spellbookDocumentOperation(request) {
     const expectedLayouts = [];
     const expectedNotes = [];
     const expectedTransitions = [];
+    const expectedMetadata = [];
     const expectedNames = [];
     const expectedVisibility = [];
     const setFinalExpectedState = (states, next) => {
@@ -5273,6 +5580,35 @@ function spellbookDocumentOperation(request) {
           },
         );
         setFinalExpectedState(expectedTransitions, { reference, transition });
+      } else if (command.op === "set_slide_metadata") {
+        const propertyByField = {
+          footerVisible: "IsFooterVisible",
+          footerText: "FooterText",
+          pageNumberVisible: "IsPageNumberVisible",
+          dateTimeVisible: "IsDateTimeVisible",
+          dateTimeFixed: "IsDateTimeFixed",
+          dateTimeText: "DateTimeText",
+          dateTimeFormat: "DateTimeFormat",
+          duration: "HighResDuration",
+          backgroundObjectsVisible: "IsBackgroundObjectsVisible",
+        };
+        const properties = Object.fromEntries(
+          Object.entries(command.slideMetadata)
+            .filter(([, value]) => value !== null && value !== undefined)
+            .map(([name, value]) => [propertyByField[name], value]),
+        );
+        transforms.push(
+          { JumpToSlide: slideIndex },
+          { SetSlideProperties: properties },
+        );
+        setFinalExpectedState(expectedMetadata, {
+          reference,
+          metadata: Object.fromEntries(
+            Object.entries(command.slideMetadata).filter(
+              ([, value]) => value !== null && value !== undefined,
+            ),
+          ),
+        });
       }
     }
     try {
@@ -5312,6 +5648,20 @@ function spellbookDocumentOperation(request) {
           );
         },
       );
+      const metadataApplied = expectedMetadata.every(
+        ({ reference, metadata }) => {
+          const slide = after.slides[currentPageIndex(reference)];
+          return Object.entries(metadata).every(([name, value]) => {
+            const observed =
+              name === "duration"
+                ? slide?.timing?.highResolutionDuration
+                : name === "backgroundObjectsVisible"
+                  ? slide?.backgroundObjectsVisible
+                  : slide?.footer?.[name];
+            return observed === value;
+          });
+        },
+      );
       const namesApplied = expectedNames.every(({ reference, name }) => {
         const index = currentPageIndex(reference);
         return after.slides[index]?.name === name;
@@ -5328,6 +5678,7 @@ function spellbookDocumentOperation(request) {
         !layoutsApplied ||
         !notesApplied ||
         !transitionsApplied ||
+        !metadataApplied ||
         !namesApplied ||
         !visibilityApplied ||
         (changed && undoActionsAdded !== 1)
@@ -5337,6 +5688,7 @@ function spellbookDocumentOperation(request) {
           !layoutsApplied ||
           !notesApplied ||
           !transitionsApplied ||
+          !metadataApplied ||
           !namesApplied ||
           !visibilityApplied
             ? `native_command_not_applied:${stableJson({
@@ -5344,6 +5696,7 @@ function spellbookDocumentOperation(request) {
                 layoutsApplied,
                 notesApplied,
                 transitionsApplied,
+                metadataApplied,
                 namesApplied,
                 visibilityApplied,
                 expectedTransitions: expectedTransitions.map(

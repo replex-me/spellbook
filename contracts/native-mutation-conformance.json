@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.0.0",
-  "enginePatchLevel": 18,
+  "enginePatchLevel": 19,
   "executionOrder": [
     "table-structure",
     "layout-master",
@@ -161,6 +161,18 @@
       "target": "CppunitTest_sd_uiimpress",
       "name": "testDocumentStructureObjectInteractionUndoRedo",
       "proves": ["single_undo", "exact_undo_redo", "save_reopen"]
+    },
+    "metadata-line-paragraph-history": {
+      "minEnginePatch": 19,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureMetadataLineAndParagraphUndoRedo",
+      "proves": [
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen",
+        "structure",
+        "visual"
+      ]
     },
     "table-cell-history": {
       "minEnginePatch": 6,
@@ -394,7 +406,8 @@
         "rename-slide-history",
         "slide-visibility-history",
         "layout-master-history",
-        "layout-animation-tree-history"
+        "layout-animation-tree-history",
+        "metadata-line-paragraph-history"
       ]
     },
     "speaker-notes": {
@@ -414,7 +427,8 @@
       "nativeTests": [
         "strict-transform-rollback",
         "object-properties-history",
-        "object-lock-roundtrip"
+        "object-lock-roundtrip",
+        "metadata-line-paragraph-history"
       ]
     },
     "object-text": {
@@ -423,7 +437,8 @@
         "strict-transform-rollback",
         "text-range-history",
         "text-properties-history",
-        "text-shadow-roundtrip"
+        "text-shadow-roundtrip",
+        "metadata-line-paragraph-history"
       ]
     },
     "object-topology": {
