@@ -35,6 +35,7 @@
     "office:engine:verify-patches": "bash services/office-editor/libreoffice/verify-patch.sh",
     "office:conformance:plan": "node scripts/native-mutation-conformance.mjs",
     "office:conformance:run": "node scripts/native-mutation-conformance-runner.mjs",
+    "office:conformance:merge": "node scripts/merge-native-conformance-reports.mjs",
     "office:editor:corpus": "node scripts/evaluate-office-editor-corpus.mjs",
     "office:runtime:build": "bash services/office-editor/libreoffice/build-runtime.sh",
     "office:runtime:build:candidate": "bash services/office-editor/libreoffice/build-candidate-runtime.sh",
