@@ -53,6 +53,8 @@
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
       runtimeIdentity.patchLevel === "browser-undo-v5";
+    const nativeSlideStructureReady =
+      admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(
       admitted ? [...candidateOperations] : [],
     );
@@ -132,6 +134,78 @@
           return {
             mutates: false,
             apply: () => controller.setCurrentPage(page),
+          };
+        },
+      },
+      {
+        match: (key) => key === "DuplicateSlide",
+        prepare: ({ value, controller, pages, dispatch }) => {
+          const slideIndex = assertIndex(
+            value,
+            pages.getCount(),
+            "Browser duplicate slide target",
+          );
+          return {
+            mutates: true,
+            apply: () => {
+              controller.setCurrentPage(pages.getByIndex(slideIndex));
+              dispatch(".uno:DuplicatePage");
+            },
+          };
+        },
+      },
+      {
+        match: (key) => key === "DeleteSlide",
+        prepare: ({ value, controller, pages }) => {
+          const slideIndex = assertIndex(
+            value,
+            pages.getCount(),
+            "Browser delete slide target",
+          );
+          if (pages.getCount() === 1)
+            throw new Error("The final browser slide cannot be deleted.");
+          const targetPage = pages.getByIndex(slideIndex);
+          const survivingPage = pages.getByIndex(
+            slideIndex + 1 < pages.getCount() ? slideIndex + 1 : slideIndex - 1,
+          );
+          return {
+            mutates: true,
+            nativeUndoManaged: true,
+            apply: () => {
+              controller.setCurrentPage(survivingPage);
+              pages.remove(targetPage);
+            },
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("MoveSlide."),
+        prepare: ({ key, value, controller, pages, dispatch }) => {
+          const sourceIndex = assertIndex(
+            Number(key.slice("MoveSlide.".length)),
+            pages.getCount(),
+            "Browser move slide source",
+          );
+          const targetIndex = assertIndex(
+            value,
+            pages.getCount(),
+            "Browser move slide destination",
+          );
+          return {
+            mutates: sourceIndex !== targetIndex,
+            apply: () => {
+              controller.setCurrentPage(pages.getByIndex(sourceIndex));
+              const command =
+                targetIndex < sourceIndex
+                  ? ".uno:MovePageUp"
+                  : ".uno:MovePageDown";
+              for (
+                let step = 0;
+                step < Math.abs(targetIndex - sourceIndex);
+                step += 1
+              )
+                dispatch(command);
+            },
           };
         },
       },
@@ -585,7 +659,7 @@
       },
     ];
 
-    function transformSlides({ commands, controller, model, pages }) {
+    function transformSlides({ commands, controller, dispatch, model, pages }) {
       if (!Array.isArray(commands) || !commands.length)
         throw new Error("Browser native transform list is empty.");
       const state = { currentPage: controller.getCurrentPage() };
@@ -600,10 +674,16 @@
           controller,
           model,
           pages,
+          dispatch,
           state,
         });
       });
       if (!prepared.some(({ mutates }) => mutates)) {
+        for (const { apply } of prepared) apply();
+        return;
+      }
+      const mutations = prepared.filter(({ mutates }) => mutates);
+      if (mutations.every(({ nativeUndoManaged }) => nativeUndoManaged)) {
         for (const { apply } of prepared) apply();
         return;
       }
@@ -624,7 +704,30 @@
       }
     }
 
-    return Object.freeze({ supportedOperations, transformSlides });
+    const stockStructuralKey = (key) =>
+      key === "JumpToSlide" ||
+      key === "DuplicateSlide" ||
+      key.startsWith("MoveSlide.");
+    const supportsTransform = (commands) => {
+      if (!Array.isArray(commands) || commands.length === 0) return false;
+      const keys = commands.map((command) => {
+        const entries = Object.entries(command ?? {});
+        return entries.length === 1 ? entries[0][0] : null;
+      });
+      if (keys.some((key) => key === null)) return false;
+      if (keys.includes("DeleteSlide") && !nativeSlideStructureReady)
+        return false;
+      if (!admitted && !keys.every(stockStructuralKey)) return false;
+      return keys.every((key) =>
+        registry.some((candidate) => candidate.match(key)),
+      );
+    };
+
+    return Object.freeze({
+      supportedOperations,
+      supportsTransform,
+      transformSlides,
+    });
   }
 
   global.createSpellbookBrowserNativeAdapter =

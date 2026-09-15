@@ -64,6 +64,14 @@ const productElementOperations = new Set([
   "font_color",
   "paragraph_alignment",
 ]);
+const productSlideOperations = new Set([
+  "insert_slide",
+  "duplicate_slide",
+  "delete_slide",
+  "move_slide",
+  "rename_slide",
+  "set_slide_hidden",
+]);
 const nativeExactUndoOperations = new Set([
   "replace_text",
   "move",
@@ -79,6 +87,9 @@ const patchedRuntimeOnlyProductOperations = new Set([
   "font_family",
   "font_color",
   "paragraph_alignment",
+  "insert_slide",
+  "rename_slide",
+  "set_slide_hidden",
 ]);
 const paragraphAlignmentByUnoValue = new Map([
   [0, "left"],
@@ -111,6 +122,20 @@ function patchedBrowserRuntimeAdmitted() {
     runtime?.buildReady === true &&
     runtime.buildCommit === runtime.candidateCommit &&
     runtime.patchLevel === "browser-undo-v5"
+  );
+}
+
+function nativeSlideStructureAdmitted() {
+  return (
+    patchedBrowserRuntimeAdmitted() &&
+    globalThis.spellbookBrowserRuntimeCandidate?.nativeSlideStructureReady ===
+      true
+  );
+}
+
+function nativeUndoAvailableFor(operation) {
+  return (
+    nativeExactUndoOperations.has(operation) || patchedBrowserRuntimeAdmitted()
   );
 }
 
@@ -445,7 +470,7 @@ function everyTextFormattingValue(element, property, predicate) {
   );
 }
 
-function productMutationMatches(command, target) {
+function productElementMutationMatches(command, target) {
   if (!target) return false;
   try {
     switch (command.op) {
@@ -514,6 +539,34 @@ function productMutationMatches(command, target) {
   }
 }
 
+function productMutationMatches(prepared, nativeValue) {
+  const command = prepared.command;
+  const slides = nativeValue?.slides;
+  if (!Array.isArray(slides)) return false;
+  switch (command.op) {
+    case "add_slide":
+    case "duplicate_slide":
+      return (
+        slides.length === prepared.beforeSlides.length + 1 &&
+        Boolean(slides[command.insertIndex])
+      );
+    case "delete_slide":
+      return slides.length === prepared.beforeSlides.length - 1;
+    case "move_slide":
+      return slides.length === prepared.beforeSlides.length;
+    case "rename_slide":
+      return slides[command.slideIndex]?.name === command.name;
+    case "set_slide_hidden":
+      return slides[command.slideIndex]?.hidden === command.hidden;
+    default: {
+      const target = slides
+        .flatMap((slide) => slide.elements ?? [])
+        .find((element) => element.elementId === command.elementId);
+      return productElementMutationMatches(command, target);
+    }
+  }
+}
+
 async function prepareProductPackageMutation(nativeRequest) {
   if (nativeRequest?.operation !== "edit" || nativeRequest.dryRun === true)
     return null;
@@ -527,20 +580,27 @@ async function prepareProductPackageMutation(nativeRequest) {
   const command = nativeRequest.command;
   if (!command || typeof command !== "object" || Array.isArray(command))
     throw new Error("Browser edit command is invalid.");
-  if (!productElementOperations.has(command.op))
+  if (
+    !productElementOperations.has(command.op) &&
+    !productSlideOperations.has(command.op)
+  )
     throw new Error(`browser_ooxml_reconciliation_required:${command.op}`);
+  if (productSlideOperations.has(command.op) && !nativeSlideStructureAdmitted())
+    throw new Error("browser_native_slide_structure_not_ready");
   if (
     patchedRuntimeOnlyProductOperations.has(command.op) &&
     !patchedBrowserRuntimeAdmitted()
   )
-    throw new Error("browser_native_text_undo_patch_required");
-  if (typeof command.elementId !== "string")
+    throw new Error("browser_native_runtime_patch_required");
+  if (
+    productElementOperations.has(command.op) &&
+    typeof command.elementId !== "string"
+  )
     throw new Error("Browser element command is invalid.");
   const expectedSlides = parseExpectedSlides(nativeRequest.expectedSlides);
-  const expectedElement = expectedElementForId(
-    expectedSlides,
-    command.elementId,
-  );
+  const expectedElement = productElementOperations.has(command.op)
+    ? expectedElementForId(expectedSlides, command.elementId)
+    : null;
   const packageCommand = productPackageCommand(command, expectedElement);
   const beforeBytes = currentBytes.slice();
   const mutation = await applyMutation(beforeBytes, packageCommand);
@@ -558,6 +618,38 @@ async function prepareProductPackageMutation(nativeRequest) {
 function productPackageCommand(command, expectedElement) {
   const base = { op: command.op, elementId: command.elementId };
   switch (command.op) {
+    case "insert_slide":
+      return {
+        op: "add_slide",
+        templateSlideIndex: command.slideIndex,
+        insertIndex: command.slideIndex + 1,
+      };
+    case "duplicate_slide":
+      return {
+        op: command.op,
+        slideIndex: command.slideIndex,
+        insertIndex: command.slideIndex + 1,
+      };
+    case "delete_slide":
+      return { op: command.op, slideIndex: command.slideIndex };
+    case "move_slide":
+      return {
+        op: command.op,
+        slideIndex: command.slideIndex,
+        insertIndex: command.targetSlideIndex,
+      };
+    case "rename_slide":
+      return {
+        op: command.op,
+        slideIndex: command.slideIndex,
+        name: String(command.name).trim(),
+      };
+    case "set_slide_hidden":
+      return {
+        op: command.op,
+        slideIndex: command.slideIndex,
+        hidden: command.hidden,
+      };
     case "replace_text":
       if (
         typeof expectedElement.text !== "string" ||
@@ -702,10 +794,7 @@ async function commitProductPackageMutation(prepared, nativeValue) {
     !nativeValue.revision
   )
     throw new Error("Browser native edit has no resulting revision.");
-  const target = nativeValue.slides
-    ?.flatMap((slide) => slide.elements ?? [])
-    .find((element) => element.elementId === prepared.command.elementId);
-  if (!productMutationMatches(prepared.command, target)) {
+  if (!productMutationMatches(prepared, nativeValue)) {
     await request("dispatch", { unoCommand: "Undo" });
     const restored = await observeNativeDocument();
     if (restored.revision !== prepared.beforeRevision) {
@@ -741,9 +830,7 @@ async function commitProductPackageMutation(prepared, nativeValue) {
     nativeCommand: prepared.nativeCommand,
     permission: prepared.permission,
     command: journalCommand,
-    nativeUndoAvailable:
-      nativeExactUndoOperations.has(prepared.command.op) ||
-      patchedBrowserRuntimeAdmitted(),
+    nativeUndoAvailable: nativeUndoAvailableFor(prepared.nativeCommand.op),
     nativeRedoAvailable: false,
   });
   commands.push(journalCommand);
@@ -916,12 +1003,12 @@ async function redoProductMutation() {
         },
       })
     ).value;
-    const target = replayed?.slides
-      ?.flatMap((slide) => slide.elements ?? [])
-      .find((element) => element.elementId === next.command.elementId);
     if (
       replayed?.revision !== next.afterRevision ||
-      !productMutationMatches(next.command, target)
+      !productMutationMatches(
+        { command: next.command, beforeSlides: current.slides },
+        replayed,
+      )
     ) {
       await request("dispatch", { unoCommand: "Undo" });
       const recovered = await observeNativeDocument();
@@ -930,7 +1017,7 @@ async function redoProductMutation() {
       throw new Error("browser_native_replay_revision_mismatch");
     }
     currentBytes = next.afterBytes.slice();
-    next.nativeUndoAvailable = true;
+    next.nativeUndoAvailable = nativeUndoAvailableFor(next.nativeCommand.op);
     next.nativeRedoAvailable = false;
   } else {
     await writeAndOpen(next.afterBytes, filename);

@@ -129,10 +129,14 @@ function spellbookDocumentOperation(request) {
       uno.componentContext,
     ).executeDispatch(frame, command, "", 0, args);
   const transformSlides = (commands) => {
-    if (typeof request.nativeAdapter?.transformSlides === "function")
+    if (
+      typeof request.nativeAdapter?.transformSlides === "function" &&
+      request.nativeAdapter?.supportsTransform?.(commands) === true
+    )
       return request.nativeAdapter.transformSlides({
         commands,
         controller,
+        dispatch,
         model,
         pages,
       });
@@ -1772,6 +1776,12 @@ function spellbookDocumentOperation(request) {
       const undo = model.getUndoManager();
       const undoCount = undo.getAllUndoActionTitles().length;
       const targetPage = pages.getByIndex(slideIndex);
+      const expectedPagesAfterDelete =
+        command.op === "delete_slide"
+          ? Array.from({ length: pages.getCount() }, (_, index) =>
+              pages.getByIndex(index),
+            ).filter((_, index) => index !== slideIndex)
+          : null;
       if (command.op === "insert_slide")
         transformSlides([
           { JumpToSlide: slideIndex },
@@ -1779,9 +1789,15 @@ function spellbookDocumentOperation(request) {
         ]);
       else if (command.op === "duplicate_slide")
         transformSlides([{ DuplicateSlide: slideIndex }]);
-      else if (command.op === "delete_slide")
-        transformSlides([{ DeleteSlide: slideIndex }]);
-      else if (command.op === "move_slide")
+      else if (command.op === "delete_slide") {
+        try {
+          transformSlides([{ DeleteSlide: slideIndex }]);
+        } catch (error) {
+          throw new Error(
+            `native_slide_delete_failed:${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } else if (command.op === "move_slide")
         transformSlides([
           {
             [`MoveSlide.${slideIndex}`]: command.targetSlideIndex,
@@ -1838,7 +1854,10 @@ function spellbookDocumentOperation(request) {
       const applied =
         command.op === "delete_slide"
           ? after.slides.length === before.slides.length - 1 &&
-            pageIndexAfter() === -1
+            pages.getCount() === expectedPagesAfterDelete.length &&
+            expectedPagesAfterDelete.every((page, index) =>
+              uno.sameUnoObject(page, pages.getByIndex(index)),
+            )
           : ["insert_slide", "duplicate_slide"].includes(command.op)
             ? after.slides.length === before.slides.length + 1 &&
               pageIndexAfter() === slideIndex &&

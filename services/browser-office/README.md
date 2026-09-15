@@ -74,9 +74,21 @@ shadows, locks, crop and click interactions. It preflights the complete command
 list, follows slide navigation without mutating during validation, groups the
 write into one native Undo context and rolls the context back on failure. These
 operations are advertised to the shared program only when the pinned runtime's
-build commit equals the candidate source commit, the exact `browser-undo-v4`
+build commit equals the candidate source commit, the exact `browser-undo-v5`
 patch level is present and `buildReady` has been promoted. The current stock
 binary therefore advertises none of these candidate-only operations.
+
+Slide structure has a separate admission flag. The stock browser binary can
+duplicate and move a slide in isolated probes, but deleting a slide and then
+observing its shapes traps in WASM with an unaligned atomic access. Reopening
+multiple package candidates in the same runtime can likewise end in an
+out-of-bounds access. The product bridge therefore rejects all six slide
+structure operations before mutation while `nativeSlideStructureReady` is
+false; partial success is not advertised as product support. The product
+verifier asserts both the rejection and the unchanged document revision. A
+future runtime may set this flag only after the full add/duplicate/move/delete/
+rename/hide sequence, native observation, Undo/Redo, reload recovery and exact
+package save all pass in one browser session.
 
 Browser candidates and their replayable command journal are checkpointed in
 OPFS with two alternating slots. Each slot writes the base package and

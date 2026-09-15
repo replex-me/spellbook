@@ -22,6 +22,7 @@ test("browser Office runtime is reproducible and remains unapproved by default",
   assert.notEqual(manifest.source.candidateCommit, manifest.source.buildCommit);
   assert.equal(manifest.sourceCandidate.patchSeriesReady, true);
   assert.equal(manifest.sourceCandidate.buildReady, false);
+  assert.equal(manifest.sourceCandidate.nativeSlideStructureReady, false);
   assert.equal(
     computePatchSeriesSha256(),
     manifest.sourceCandidate.patchSeriesSha256,

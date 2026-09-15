@@ -15,6 +15,8 @@ const browserCandidate = {
   patchLevel: upstreamManifest.sourceCandidate.patchLevel,
   patchSeriesSha256: upstreamManifest.sourceCandidate.patchSeriesSha256,
   buildReady: upstreamManifest.sourceCandidate.buildReady,
+  nativeSlideStructureReady:
+    upstreamManifest.sourceCandidate.nativeSlideStructureReady,
 };
 await writeFile(
   path.join(runtimeRoot, "browser-candidate.js"),

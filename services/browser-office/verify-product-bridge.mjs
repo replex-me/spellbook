@@ -7,6 +7,7 @@ import { chromium } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 
 import { createHarnessServer } from "./server.mjs";
+import { applyOoxmlCommand } from "./ooxml-worker-source.mjs";
 
 const serviceRoot = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(serviceRoot, "../..");
@@ -245,7 +246,7 @@ try {
         },
         suppressCapture: true,
       }),
-      /browser_native_text_undo_patch_required/u,
+      /browser_native_runtime_patch_required/u,
     );
   }
   const replacement = `${target.text} · product bridge`;
@@ -398,6 +399,8 @@ try {
   await waitForEvent(page, { type: "save-response", success: true });
   await waitForEvent(page, { type: "modified", modified: false });
 
+  const slideStructure = await verifyProductSlideStructure(browser, origin);
+
   const result = {
     status: "browser-product-bridge-verified",
     crossOriginIsolated: await page.evaluate(() => crossOriginIsolated),
@@ -409,6 +412,7 @@ try {
     savedRevision,
     savedBytes: savedBytes.length,
     changedParts,
+    slideStructure,
     pageErrors,
     requestFailures,
   };
@@ -429,6 +433,224 @@ try {
   await new Promise((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   );
+}
+
+async function verifyProductSlideStructure(browser, origin) {
+  const sourceDuplicated = applyOoxmlCommand(fixture, {
+    op: "duplicate_slide",
+    slideIndex: 0,
+    insertIndex: 1,
+  });
+  const source = applyOoxmlCommand(sourceDuplicated.bytes, {
+    op: "replace_text",
+    elementId: "1/0",
+    expectedText: "Spellbook 검증 العربية",
+    text: "Spellbook 두 번째 슬라이드",
+  }).bytes;
+  const fileName = `product-structure-${Date.now()}.pptx`;
+  const page = await browser.newPage({
+    viewport: { width: 1440, height: 960 },
+  });
+  const pageErrors = [];
+  const requestFailures = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("requestfailed", (request) =>
+    requestFailures.push({
+      url: request.url(),
+      error: request.failure()?.errorText ?? "unknown",
+    }),
+  );
+  try {
+    await page.goto(
+      `${origin}/workspace?hostOrigin=${encodeURIComponent(origin)}`,
+      { waitUntil: "domcontentloaded", timeout: 30_000 },
+    );
+    await connectProductHost(page, origin);
+    await openProductFixture(page, source, "structure-open", fileName);
+    const opened = await waitForEvent(page, {
+      type: "open-complete",
+      requestId: "structure-open",
+    });
+    assert.equal(opened.recovered, false);
+    const before = await nativeTask(page, "structure-before", {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.equal(before.slides.length, 2);
+    const permission = {
+      mode: "document",
+      elementIds: [],
+      slideIndexes: [],
+    };
+    const nativeSlideStructureReady = await page.evaluate(() => {
+      const runtime = globalThis.spellbookBrowserRuntimeCandidate;
+      return (
+        runtime?.buildReady === true &&
+        runtime.buildCommit === runtime.candidateCommit &&
+        runtime.patchLevel === "browser-undo-v5" &&
+        runtime.nativeSlideStructureReady === true
+      );
+    });
+    if (!nativeSlideStructureReady) {
+      const gatedCommands = [
+        { op: "insert_slide", slideIndex: 0 },
+        { op: "duplicate_slide", slideIndex: 0 },
+        { op: "delete_slide", slideIndex: 0 },
+        { op: "move_slide", slideIndex: 0, targetSlideIndex: 1 },
+        { op: "rename_slide", slideIndex: 0, name: "Renamed slide" },
+        { op: "set_slide_hidden", slideIndex: 0, hidden: true },
+      ];
+      for (const command of gatedCommands)
+        await assert.rejects(
+          nativeTask(page, `structure-gated-${command.op}`, {
+            operation: "edit",
+            expectedRevision: before.revision,
+            expectedSlides: JSON.stringify(before.slides),
+            command,
+            permission,
+            suppressCapture: true,
+          }),
+          /browser_native_slide_structure_not_ready/u,
+        );
+      const unchanged = await nativeTask(page, "structure-gated-after", {
+        operation: "observe",
+        captureSlideIndexes: [],
+      });
+      assert.equal(unchanged.revision, before.revision);
+      assert.equal(unchanged.slides.length, before.slides.length);
+      return {
+        status: "browser-product-slide-structure-gated",
+        nativeSlideStructureReady,
+        rejectedOperations: gatedCommands.map(({ op }) => op),
+        unchangedRevision: unchanged.revision,
+        pageErrors,
+        requestFailures,
+      };
+    }
+    const duplicated = await nativeTask(page, "structure-duplicate", {
+      operation: "edit",
+      expectedRevision: before.revision,
+      expectedSlides: JSON.stringify(before.slides),
+      command: { op: "duplicate_slide", slideIndex: 0 },
+      permission,
+      suppressCapture: true,
+    });
+    assert.equal(duplicated.slides.length, 3);
+    const moved = await nativeTask(page, "structure-move", {
+      operation: "edit",
+      expectedRevision: duplicated.revision,
+      expectedSlides: JSON.stringify(duplicated.slides),
+      command: {
+        op: "move_slide",
+        slideIndex: 2,
+        targetSlideIndex: 0,
+      },
+      permission,
+      suppressCapture: true,
+    });
+    assert.equal(moved.slides.length, 3);
+    const deleted = await nativeTask(page, "structure-delete", {
+      operation: "edit",
+      expectedRevision: moved.revision,
+      expectedSlides: JSON.stringify(moved.slides),
+      command: { op: "delete_slide", slideIndex: 1 },
+      permission,
+      suppressCapture: true,
+    });
+    assert.equal(deleted.slides.length, 2);
+
+    let expected = applyOoxmlCommand(source, {
+      op: "duplicate_slide",
+      slideIndex: 0,
+      insertIndex: 1,
+    }).bytes;
+    expected = applyOoxmlCommand(expected, {
+      op: "move_slide",
+      slideIndex: 2,
+      insertIndex: 0,
+    }).bytes;
+    expected = applyOoxmlCommand(expected, {
+      op: "delete_slide",
+      slideIndex: 1,
+    }).bytes;
+
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
+    await connectProductHost(page, origin);
+    await openProductFixture(page, source, "structure-recovered", fileName);
+    const recovered = await waitForEvent(page, {
+      type: "open-complete",
+      requestId: "structure-recovered",
+    });
+    assert.equal(recovered.recovered, true);
+    const observed = await nativeTask(page, "structure-observed", {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.equal(observed.revision, deleted.revision);
+
+    await sendHostCommand(page, "Send_UNO_Command", {
+      Command: ".uno:Undo",
+    });
+    const undone = await nativeTask(page, "structure-undone", {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.equal(undone.revision, moved.revision);
+    await sendHostCommand(page, "Send_UNO_Command", {
+      Command: ".uno:Redo",
+    });
+    const redone = await nativeTask(page, "structure-redone", {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.equal(redone.revision, deleted.revision);
+
+    await page.evaluate(() =>
+      globalThis.__spellbookProductHost.port.postMessage({
+        type: "command",
+        messageId: "Action_Save",
+        values: { Notify: true },
+      }),
+    );
+    const save = await waitForEvent(page, { type: "save" });
+    const savedBytes = Uint8Array.from(
+      await page.evaluate((requestId) => {
+        const event = globalThis.__spellbookProductHost.events.find(
+          (candidate) =>
+            candidate.type === "save" && candidate.requestId === requestId,
+        );
+        return Array.from(new Uint8Array(event.bytes));
+      }, save.requestId),
+    );
+    assert.deepEqual(savedBytes, expected);
+    await page.evaluate(
+      ({ requestId }) =>
+        globalThis.__spellbookProductHost.port.postMessage({
+          type: "save-result",
+          requestId,
+          ok: true,
+          revision:
+            '"structure:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"',
+        }),
+      { requestId: save.requestId },
+    );
+    await waitForEvent(page, { type: "save-response", success: true });
+    assert.deepEqual(pageErrors, []);
+    assert.deepEqual(requestFailures, []);
+    return {
+      status: "browser-product-slide-structure-verified",
+      sourceSlideCount: before.slides.length,
+      savedSlideCount: redone.slides.length,
+      recovered: recovered.recovered,
+      exactPackageBytes: true,
+      changedParts: changedLogicalParts(
+        unzipSync(source),
+        unzipSync(savedBytes),
+      ),
+    };
+  } finally {
+    await page.close();
+  }
 }
 
 async function connectProductHost(page, origin) {
@@ -458,15 +680,20 @@ async function connectProductHost(page, origin) {
   await waitForEvent(page, { type: "ready" });
 }
 
-async function openProductFixture(page, bytes, requestId) {
+async function openProductFixture(
+  page,
+  bytes,
+  requestId,
+  fileName = "product-bridge.pptx",
+) {
   await page.evaluate(
-    ({ source, id }) => {
+    ({ source, id, name }) => {
       const value = Uint8Array.from(source);
       globalThis.__spellbookProductHost.port.postMessage(
         {
           type: "open",
           requestId: id,
-          fileName: "product-bridge.pptx",
+          fileName: name,
           revision:
             '"baseline:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
           maxBytes: 64 * 1024 * 1024,
@@ -475,7 +702,7 @@ async function openProductFixture(page, bytes, requestId) {
         [value.buffer],
       );
     },
-    { source: Array.from(bytes), id: requestId },
+    { source: Array.from(bytes), id: requestId, name: fileName },
   );
 }
 

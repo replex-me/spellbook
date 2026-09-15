@@ -138,6 +138,12 @@ function fixture() {
   const pages = {
     getCount: () => pageList.length,
     getByIndex: (index) => pageList[index],
+    remove: (target) => {
+      const index = pageList.indexOf(target);
+      assert.ok(index >= 0);
+      pageList.splice(index, 1);
+      writes.push(["remove", target.name]);
+    },
   };
   const controller = {
     getCurrentPage: () => activePage,
@@ -145,6 +151,26 @@ function fixture() {
       activePage = next;
       writes.push(["page", next.name]);
     },
+  };
+  const dispatch = (command) => {
+    const index = pageList.indexOf(activePage);
+    if (command === ".uno:DuplicatePage") {
+      const duplicate = page(`${activePage.name} copy`, []);
+      pageList.splice(index + 1, 0, duplicate);
+      activePage = duplicate;
+    } else if (command === ".uno:DeletePage") {
+      pageList.splice(index, 1);
+      activePage = pageList[Math.min(index, pageList.length - 1)];
+    } else if (command === ".uno:MovePageUp") {
+      assert.ok(index > 0);
+      const [current] = pageList.splice(index, 1);
+      pageList.splice(index - 1, 0, current);
+    } else if (command === ".uno:MovePageDown") {
+      assert.ok(index >= 0 && index < pageList.length - 1);
+      const [current] = pageList.splice(index, 1);
+      pageList.splice(index + 1, 0, current);
+    } else throw new Error(`Unexpected dispatch ${command}`);
+    writes.push(["dispatch", command]);
   };
   class Any {
     constructor(type, val) {
@@ -205,6 +231,7 @@ function fixture() {
     factory,
     uno,
     controller,
+    dispatch,
     model: { getUndoManager: () => undo },
     pages,
     firstPage,
@@ -240,7 +267,7 @@ test("browser adapter advertises only its exact operation families", () => {
   ]);
 });
 
-test("browser adapter advertises no patched operation on an unbuilt runtime", () => {
+test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime", () => {
   const runtime = fixture();
   const adapter = runtime.factory({
     uno: runtime.uno,
@@ -252,6 +279,82 @@ test("browser adapter advertises no patched operation on an unbuilt runtime", ()
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
+  assert.equal(adapter.supportsTransform([{ JumpToSlide: 0 }]), true);
+  assert.equal(adapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
+  assert.equal(adapter.supportsTransform([{ DeleteSlide: 0 }]), false);
+  assert.equal(adapter.supportsTransform([{ RenameSlide: "Renamed" }]), false);
+});
+
+test("browser adapter claims only complete admitted transform lists", () => {
+  const { adapter } = fixture();
+  assert.equal(
+    adapter.supportsTransform([
+      { JumpToSlide: 1 },
+      { RenameSlide: "Target slide" },
+    ]),
+    true,
+  );
+  assert.equal(
+    adapter.supportsTransform([{ JumpToSlide: 1 }, { DuplicateSlide: 1 }]),
+    true,
+  );
+  assert.equal(adapter.supportsTransform([]), false);
+});
+
+test("browser adapter routes stock slide lifecycle through Impress commands", () => {
+  const runtime = fixture();
+  const stockAdapter = runtime.factory({
+    uno: runtime.uno,
+    runtimeIdentity: {
+      buildReady: false,
+      buildCommit: "stock",
+      candidateCommit: "candidate",
+      patchLevel: "browser-undo-v5",
+    },
+  });
+  assert.equal(stockAdapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
+  stockAdapter.transformSlides({
+    commands: [{ DuplicateSlide: 0 }],
+    ...runtime,
+  });
+  assert.equal(runtime.pages.getCount(), 3);
+  stockAdapter.transformSlides({
+    commands: [{ "MoveSlide.2": 0 }],
+    ...runtime,
+  });
+  assert.equal(runtime.controller.getCurrentPage().name, "Slide 2");
+  assert.deepEqual(
+    runtime.writes.filter(([kind]) => ["dispatch", "remove"].includes(kind)),
+    [
+      ["dispatch", ".uno:DuplicatePage"],
+      ["dispatch", ".uno:MovePageUp"],
+      ["dispatch", ".uno:MovePageUp"],
+    ],
+  );
+});
+
+test("browser adapter deletes a slide only after native structure admission", () => {
+  const runtime = fixture();
+  const admittedAdapter = runtime.factory({
+    uno: runtime.uno,
+    runtimeIdentity: {
+      buildReady: true,
+      buildCommit: "candidate",
+      candidateCommit: "candidate",
+      patchLevel: "browser-undo-v5",
+      nativeSlideStructureReady: true,
+    },
+  });
+  assert.equal(admittedAdapter.supportsTransform([{ DeleteSlide: 1 }]), true);
+  admittedAdapter.transformSlides({
+    commands: [{ DeleteSlide: 1 }],
+    ...runtime,
+  });
+  assert.equal(runtime.pages.getCount(), 1);
+  assert.deepEqual(
+    runtime.writes.filter(([kind]) => kind === "remove"),
+    [["remove", "Slide 2"]],
+  );
 });
 
 test("browser adapter preflights a complete list before mutating", () => {
