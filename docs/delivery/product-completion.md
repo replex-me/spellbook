@@ -43,6 +43,17 @@ This four-point delta is limited to the proven text-edit path. It does not
 claim browser parity for other commands, free-form canvas edits, PowerPoint
 desktop reopen, production deployment or final UI quality.
 
+## Unscored implementation evidence
+
+These changes reduce product risk or prepare a missing capability, but they do
+not change the completion score until the user outcome in the main table is
+proven.
+
+| Date       | Commit    | Improvement                                                                                                                                                                                                                          | Why it earns no point yet                                                                                                                |
+| ---------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-15 | `19f7806` | The product rejects six slide-structure commands before mutation when the browser runtime cannot safely observe and undo them; the verifier proves the revision and slide count remain unchanged                                     | It prevents corruption but does not make slide insertion, duplication, deletion, movement, rename or hide available to the user          |
+| 2026-09-15 | `27b08cc` | The stock product path proves text replacement, move, resize and fill color through edit and Undo; unsafe rotation and line/transparency paths are gated; the `browser-undo-v6` source and bounded property adapter cover those gaps | The v6 C++ patch applies cleanly, but it has not yet been compiled or passed the integrated browser edit, Undo, recovery and save matrix |
+
 ## What the last three days produced
 
 The initial public extraction was 261 files and 47,613 inserted lines. After
