@@ -28,7 +28,7 @@ Docker Compose, Node.js 22와 pnpm 10.26이 필요하다.
 
 ```bash
 pnpm selfhost:setup
-docker compose up --build
+pnpm selfhost:up
 ```
 
 설정 명령이 출력한 이메일과 비밀번호로 <http://localhost:3000>에 로그인한다. 작업공간에서
@@ -36,7 +36,9 @@ docker compose up --build
 수 있다.
 
 첫 빌드는 고정된 LibreOffice·Collabora 이미지를 내려받으므로 시간이 걸릴 수 있다. 이후에는
-이미지와 영속 volume을 재사용한다. 설정과 서비스 상태는 `pnpm selfhost:doctor`로 확인한다.
+이미지와 영속 volume을 재사용한다. 이 명령은 서비스가 정상 상태가 된 뒤 사용 중인 이미지와
+구성요소별 롤백 이미지 하나만 남기고 이전 Spellbook 이미지를 정리한다. 다른 프로젝트 이미지와
+문서·데이터베이스 volume은 건드리지 않는다. 설정과 서비스 상태는 `pnpm selfhost:doctor`로 확인한다.
 
 ## 제품 계약
 

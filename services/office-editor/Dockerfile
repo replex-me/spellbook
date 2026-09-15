@@ -116,3 +116,4 @@ USER cool
 EXPOSE 9980
 ENTRYPOINT ["/usr/local/bin/spellbook-office-gateway"]
 LABEL org.spellbook.collabora-patch-level=${SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL}
+LABEL org.spellbook.component="office-editor"

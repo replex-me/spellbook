@@ -30,6 +30,7 @@
     "connector:package:macos": "node scripts/build-macos-connector.mjs",
     "connector:start": "pnpm connector:build && node --env-file-if-exists=.env scripts/start-local-connector.mjs",
     "connector:verify:claude": "pnpm connector:build && node scripts/verify-claude-code-connector.mjs",
+    "docker:cleanup": "node scripts/cleanup-local-docker.mjs",
     "office:engine:audit": "node services/office-editor/libreoffice/audit-all.mjs",
     "office:engine:build": "bash services/office-editor/libreoffice/build-engine.sh",
     "office:engine:verify-patches": "bash services/office-editor/libreoffice/verify-patch.sh",
@@ -58,7 +59,7 @@
     "selfhost:verify:storage-pressure": "node scripts/verify-storage-pressure.mjs",
     "selfhost:verify:worker-storage-pressure": "node scripts/verify-document-worker-storage-pressure.mjs",
     "selfhost:restore": "node scripts/selfhost-restore.mjs",
-    "selfhost:up": "docker compose up --build",
+    "selfhost:up": "node scripts/selfhost-up.mjs",
     "selfhost:down": "docker compose down"
   },
   "devDependencies": {

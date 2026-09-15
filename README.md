@@ -18,7 +18,7 @@ Prerequisites: Docker with Compose, Node.js 22, and pnpm 10.26.
 
 ```bash
 pnpm selfhost:setup
-docker compose up --build
+pnpm selfhost:up
 ```
 
 Open <http://localhost:3000> and sign in with the email and generated password printed by the setup command. Connect a supported local AI subscription from the workspace when you want AI editing; direct editing remains available without an AI connection.
@@ -26,6 +26,14 @@ Open <http://localhost:3000> and sign in with the email and generated password p
 The Compose profile uses its private connector by default. The optional user-device flow used by hosted deployments is available with `SPELLBOOK_AI_CONNECTOR_MODE=local` and `pnpm connector:start`; see [self-hosting](docs/delivery/self-hosting.md) for the exact boundary and current verification status.
 
 The first build downloads pinned LibreOffice and Collabora images and can take several minutes. Subsequent starts reuse the images and persistent volumes. Run `pnpm selfhost:doctor` to validate configuration and service health.
+
+`pnpm selfhost:up` builds the services, waits for their health checks and then
+retires old Spellbook service images automatically. Runtime images carry a
+Spellbook component label so this lifecycle never prunes another project's
+Docker data. `pnpm docker:cleanup` shows the exact plan; its explicit
+`--execute` mode keeps every image used by a container plus one unused rollback
+per component and removes only older Spellbook images. Persistent document and
+database volumes are never part of this cleanup.
 
 ## Product contract
 

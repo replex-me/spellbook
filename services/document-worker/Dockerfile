@@ -31,6 +31,7 @@ RUN case "$TARGETARCH" in \
       --runtime "$runtime_id" --self-contained true
 
 FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS runtime
+LABEL org.spellbook.component="document-worker"
 ARG LIBREOFFICE_VERSION=26.8.0.3
 ARG LIBREOFFICE_DEBIAN_VERSION=26.8.0.3-2~bpo13+1
 COPY services/fonts/install-open-fonts.sh /usr/local/bin/install-spellbook-open-fonts

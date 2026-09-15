@@ -14,11 +14,19 @@ The document worker builds natively for both `linux/amd64` and `linux/arm64`. It
 ```bash
 pnpm install --frozen-lockfile
 pnpm selfhost:setup
-docker compose up --build -d
+pnpm selfhost:up
 pnpm selfhost:doctor
 ```
 
 The setup command creates `.env` with mode `0600`, generates independent secrets, creates a persistent 4096-bit Collabora WOPI proof key under the ignored `.spellbook/secrets/` directory and prints the initial password once. Re-running setup preserves both `.env` and the proof key. Open `http://localhost:3000`, log in, then connect Codex from the AI panel if AI editing is needed.
+
+The start command removes older Spellbook service images before building,
+starts the new services in detached mode, waits for all declared health checks
+and runs the same bounded cleanup again. It always preserves images referenced
+by any container and one unused rollback per component. The cleanup recognizes
+the exact legacy Compose image names during migration, but it neither performs
+a global Docker prune nor removes another project's images, containers or
+volumes. Run `pnpm docker:cleanup` to inspect the plan without changing state.
 
 The default `internal` mode keeps the connector in the private Compose network. To exercise the same user-device boundary used by a hosted Spellbook service, set `SPELLBOOK_AI_CONNECTOR_MODE=local` in `.env`, recreate only the web container, and start the loopback connector on the user's computer:
 

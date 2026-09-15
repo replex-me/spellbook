@@ -68,7 +68,7 @@ process.stdout.write(
     `Login email: ${email}`,
     `One-time displayed password: ${password}`,
     "Store the password now; only its scrypt hash was written to .env.",
-    "Next: docker compose up --build",
+    "Next: pnpm selfhost:up",
   ].join("\n") + "\n",
 );
 

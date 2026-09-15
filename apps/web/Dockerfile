@@ -11,6 +11,7 @@ COPY apps/web ./apps/web
 RUN pnpm --filter @spellbook/web build
 
 FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
+LABEL org.spellbook.component="web"
 ENV NODE_ENV=production \
     PORT=8080 \
     HOSTNAME=0.0.0.0
