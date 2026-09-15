@@ -20,6 +20,12 @@ node services/office-session-spike/host.mjs \
 
 The page is available at `http://localhost:3190`. The host keeps the original immutable, stores each saved candidate separately and writes a receipt with hashes and WOPI events. Probe scripts use headless Playwright to execute typed commands in the extension and compare apply, one-step Undo, Redo, failure rollback and save/reopen state.
 
+Release conformance refuses to start unless the running Office container has at
+least 12 GiB free. The digest-pinned amd64 runtime can occupy tens of gigabytes
+after extraction on Docker Desktop, so complete release runs belong on a
+disposable native x86 worker. A local Mac is appropriate for focused probe
+development only; remove the dedicated probe container and image after use.
+
 Examples:
 
 ```bash

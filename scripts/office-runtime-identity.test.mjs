@@ -9,6 +9,7 @@ import {
   loadOfficeRuntimeRelease,
   releaseEngineIdentity,
   verifyRuntimeContainerInspection,
+  verifyRuntimeDiskOutput,
 } from "./office-runtime-identity.mjs";
 
 function releaseFixture() {
@@ -76,5 +77,25 @@ test("accepts only a running container configured from the release digest", () =
         Config: { Image: `registry/runtime@sha256:${"2".repeat(64)}` },
       }),
     /runtime_container_identity_mismatch/u,
+  );
+});
+
+test("rejects an Office conformance run before it consumes unsafe disk headroom", () => {
+  const gib = 1024 * 1024 * 1024;
+  const output = [
+    "Filesystem 1024-blocks Used Available Capacity Mounted on",
+    `/dev/root 100000000 80000000 ${Math.ceil((13 * gib) / 1024)} 80% /`,
+  ].join("\n");
+  assert.equal(verifyRuntimeDiskOutput(output).status, "passed");
+  assert.throws(
+    () =>
+      verifyRuntimeDiskOutput(
+        "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/root 60000000 58000000 2000000 97% /\n",
+      ),
+    /runtime_container_disk_headroom_insufficient/u,
+  );
+  assert.throws(
+    () => verifyRuntimeDiskOutput("not a df report"),
+    /runtime_container_disk_probe_invalid/u,
   );
 });

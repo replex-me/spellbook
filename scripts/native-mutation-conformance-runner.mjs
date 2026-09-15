@@ -9,6 +9,7 @@ import { buildConformancePlan } from "./native-mutation-conformance.mjs";
 import {
   assertObservedEngineIdentity,
   loadOfficeRuntimeRelease,
+  verifyRuntimeContainerDiskHeadroom,
   verifyRunningRuntimeContainer,
 } from "./office-runtime-identity.mjs";
 
@@ -592,6 +593,9 @@ export async function runConformance(options = {}) {
         options.runtimeContainer,
       )
     : null;
+  const diskVerification = releaseEvidence
+    ? verifyRuntimeContainerDiskHeadroom(options.runtimeContainer)
+    : null;
   const capabilities = JSON.parse(
     await fs.readFile(
       path.resolve(root, options.capabilitiesPath ?? DEFAULT_CAPABILITIES),
@@ -656,6 +660,7 @@ export async function runConformance(options = {}) {
           collaboraSourceCommit:
             releaseEvidence.release.runtime.collaboraSourceCommit,
           container: containerVerification,
+          disk: diskVerification,
         }
       : null,
     editorOrigin,

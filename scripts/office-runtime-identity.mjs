@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 
 export const digestImagePattern = /@sha256:[0-9a-f]{64}$/u;
+export const MIN_CONFORMANCE_DISK_BYTES = 12 * 1024 * 1024 * 1024;
 
 export function loadOfficeRuntimeRelease(releasePath) {
   const bytes = fs.readFileSync(releasePath);
@@ -83,6 +84,39 @@ export function verifyRunningRuntimeContainer(release, containerName) {
   if (!Array.isArray(inspections) || inspections.length !== 1)
     throw new Error("runtime_container_inspection_failed");
   return verifyRuntimeContainerInspection(release, inspections[0]);
+}
+
+export function verifyRuntimeDiskOutput(
+  output,
+  minimumAvailableBytes = MIN_CONFORMANCE_DISK_BYTES,
+) {
+  const lines = String(output).trim().split(/\r?\n/u);
+  const columns = lines.at(-1)?.trim().split(/\s+/u) ?? [];
+  const availableKiB = Number(columns[3]);
+  if (!Number.isFinite(availableKiB) || availableKiB < 0)
+    throw new Error("runtime_container_disk_probe_invalid");
+  const availableBytes = availableKiB * 1024;
+  if (availableBytes < minimumAvailableBytes)
+    throw new Error(
+      `runtime_container_disk_headroom_insufficient:${availableBytes}:${minimumAvailableBytes}`,
+    );
+  return { status: "passed", availableBytes, minimumAvailableBytes };
+}
+
+export function verifyRuntimeContainerDiskHeadroom(
+  containerName,
+  minimumAvailableBytes = MIN_CONFORMANCE_DISK_BYTES,
+) {
+  const name = requiredString(containerName, "runtime_container_name");
+  let output;
+  try {
+    output = execFileSync("docker", ["exec", "--", name, "df", "-Pk", "/"], {
+      encoding: "utf8",
+    });
+  } catch (error) {
+    throw new Error("runtime_container_disk_probe_failed", { cause: error });
+  }
+  return verifyRuntimeDiskOutput(output, minimumAvailableBytes);
 }
 
 function requiredString(value, name) {
