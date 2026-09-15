@@ -117,6 +117,7 @@ test("change budgets are derived from executed operation families and identity e
   );
 
   assert.equal(budget.allowPartCreationOrDeletion, true);
+  assert.ok(budget.allowedCategories.includes("document_properties"));
   assert.ok(budget.allowedCategories.includes("presentation"));
   assert.ok(budget.allowedCategories.includes("notes_parts"));
   assert.ok(!budget.allowedCategories.includes("unknown"));

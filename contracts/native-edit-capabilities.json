@@ -72,6 +72,7 @@
         "allowPartCreationOrDeletion": true,
         "changeBudget": [
           "package_manifest",
+          "document_properties",
           "presentation",
           "presentation_relationships",
           "slide_parts",
