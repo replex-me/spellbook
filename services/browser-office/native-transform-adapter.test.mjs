@@ -18,7 +18,21 @@ const completeNativeOperationSurface = Object.values(
 ).flat();
 
 function loadFactory() {
-  const context = {};
+  const context = {
+    spellbookMutationContracts: Object.fromEntries(
+      Object.entries(nativeCapabilities.mutationModel.operations).map(
+        ([operation, contract]) => [
+          operation,
+          {
+            ...contract,
+            domain:
+              nativeCapabilities.mutationModel.families[contract.family]
+                .domain,
+          },
+        ],
+      ),
+    ),
+  };
   vm.runInNewContext(source, context, {
     filename: "native-transform-adapter.js",
   });
