@@ -9,11 +9,11 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v21",
+  "patchLevel": "undo-v22",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "d9c4bcec680125d4cb4b6023ecbfd91fbb7cb5fc71a51cc64815f2f17605ad17",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v21-r8-candidate",
+  "patchSeriesSha256": "2b1d66f99786f96d9faef8008498a31f293c131fde0cb6b78ef2f0d21e58653b",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v22-r9-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -54,7 +54,8 @@
     "patches/0037-pptx-placeholder-local-properties.patch",
     "patches/0038-slide-metadata-line-paragraph-undo.patch",
     "patches/0039-slide-sections-undo-roundtrip.patch",
-    "patches/0040-animation-lifecycle-undo-roundtrip.patch"
+    "patches/0040-animation-lifecycle-undo-roundtrip.patch",
+    "patches/0041-document-design-theme-size.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
@@ -87,6 +88,7 @@
     "CppunitTest_sd_uiimpress:testDocumentStructureSlideTransitionUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureAnimationTimingUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureAnimationLifecycleUndoRoundtrip",
+    "CppunitTest_sd_uiimpress:testDocumentDesignSizeAndThemeUndoRoundtrip",
     "CppunitTest_sd_misc_tests:testApiTableCellTextUndo",
     "CppunitTest_sd_misc_tests:testApiTableInsertInheritsDimensions",
     "CppunitTest_sd_misc_tests:testApiTableCellPropertyUndo"

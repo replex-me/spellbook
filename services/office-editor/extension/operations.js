@@ -801,19 +801,41 @@ function spellbookDocumentOperation(request) {
     return Array.from({ length: masterPages.getCount() }, (_, masterIndex) => {
       const master = masterPages.getByIndex(masterIndex);
       const background = safeProperty(master, "Background");
+      const themeProperties = Object.fromEntries(
+        (normalizeUnoValue(
+          safeProperty(master, "ThemeUnoRepresentation"),
+        ) ?? [])
+          .filter((entry) => typeof entry?.name === "string")
+          .map((entry) => [entry.name, entry.value]),
+      );
       return {
         masterIndex,
         name: safeCall(master, "getName", ""),
         layout: safeProperty(master, "SlideLayout"),
+        width: safeProperty(master, "Width"),
+        height: safeProperty(master, "Height"),
         backgroundColor: background
           ? safeProperty(background, "FillColor")
           : null,
         backgroundFullSize: safeProperty(master, "BackgroundFullSize"),
         isBackgroundDark: safeProperty(master, "IsBackgroundDark"),
         shapeCount: safeCall(master, "getCount", 0),
-        theme: normalizeUnoValue(
-          safeProperty(master, "ThemeUnoRepresentation"),
-        ),
+        theme: Object.keys(themeProperties).length
+          ? {
+              name: themeProperties.Name ?? null,
+              colorSchemeName: themeProperties.ColorSchemeName ?? null,
+              colors: Array.isArray(themeProperties.ColorScheme)
+                ? themeProperties.ColorScheme
+                : null,
+              fontSchemeName: themeProperties.FontSchemeName ?? null,
+              majorLatin: themeProperties.MajorLatin ?? null,
+              majorAsian: themeProperties.MajorAsian ?? null,
+              majorComplex: themeProperties.MajorComplex ?? null,
+              minorLatin: themeProperties.MinorLatin ?? null,
+              minorAsian: themeProperties.MinorAsian ?? null,
+              minorComplex: themeProperties.MinorComplex ?? null,
+            }
+          : null,
       };
     });
   };
@@ -1904,6 +1926,152 @@ function spellbookDocumentOperation(request) {
       }));
       const applied =
         stableJson(persistedSections(after.sections)) === stableJson(expected);
+      if (
+        !applied ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length - undoCount !== 1)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        );
+      }
+      return result(after, after.activeSlide);
+    }
+    if (command.op === "set_slide_size") {
+      if (permission.mode !== "document")
+        throw new Error("outside_edit_permission");
+      if (
+        !runtimeSupports(command.op) &&
+        !hasEnginePatch(22)
+      )
+        throw new Error("native_engine_document_design_patch_required");
+      if (
+        !Number.isInteger(command.width) ||
+        command.width < 1000 ||
+        command.width > 100000 ||
+        !Number.isInteger(command.height) ||
+        command.height < 1000 ||
+        command.height > 100000 ||
+        typeof command.scaleContent !== "boolean"
+      )
+        throw new Error("invalid_slide_size");
+      if (
+        before.slides.every(
+          (slide) =>
+            slide.width === command.width && slide.height === command.height,
+        ) &&
+        before.masters.every(
+          (master) =>
+            master.width === command.width && master.height === command.height,
+        )
+      )
+        return result(before, before.activeSlide);
+      if (request.dryRun) return result(before, before.activeSlide);
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      transformSlides([
+        {
+          SetSlideSize: {
+            Width: command.width,
+            Height: command.height,
+            ScaleContent: command.scaleContent,
+          },
+        },
+      ]);
+      const after = read(before.activeSlide);
+      const applied =
+        after.slides.every(
+          (slide) =>
+            slide.width === command.width && slide.height === command.height,
+        ) &&
+        after.masters.every(
+          (master) =>
+            master.width === command.width && master.height === command.height,
+        );
+      if (
+        !applied ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length - undoCount !== 1)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        );
+      }
+      return result(after, after.activeSlide);
+    }
+    if (command.op === "set_master_theme") {
+      if (permission.mode !== "document")
+        throw new Error("outside_edit_permission");
+      if (!runtimeSupports(command.op) && !hasEnginePatch(22))
+        throw new Error("native_engine_document_design_patch_required");
+      const theme = command.theme;
+      const textFields = [
+        "name",
+        "colorSchemeName",
+        "fontSchemeName",
+        "majorLatin",
+        "majorAsian",
+        "majorComplex",
+        "minorLatin",
+        "minorAsian",
+        "minorComplex",
+      ];
+      const allowedFields = new Set([...textFields, "colors"]);
+      if (
+        !Number.isInteger(command.masterIndex) ||
+        command.masterIndex < 0 ||
+        command.masterIndex >= before.masters.length ||
+        !theme ||
+        typeof theme !== "object" ||
+        Array.isArray(theme) ||
+        Object.keys(theme).length !== allowedFields.size ||
+        Object.keys(theme).some((name) => !allowedFields.has(name)) ||
+        textFields.some(
+          (name) =>
+            typeof theme[name] !== "string" ||
+            !theme[name] ||
+            [...theme[name]].length > 255 ||
+            /[\u0000-\u001f\u007f]/u.test(theme[name]),
+        ) ||
+        !Array.isArray(theme.colors) ||
+        theme.colors.length !== 12 ||
+        theme.colors.some(
+          (color) =>
+            !Number.isInteger(color) || color < 0 || color > 16777215,
+        )
+      )
+        throw new Error("invalid_master_theme");
+      if (
+        stableJson(before.masters[command.masterIndex].theme) ===
+        stableJson(theme)
+      )
+        return result(before, before.activeSlide);
+      if (request.dryRun) return result(before, before.activeSlide);
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      transformSlides([
+        {
+          SetMasterTheme: {
+            MasterIndex: command.masterIndex,
+            Name: theme.name,
+            ColorSchemeName: theme.colorSchemeName,
+            Colors: theme.colors,
+            FontSchemeName: theme.fontSchemeName,
+            MajorLatin: theme.majorLatin,
+            MajorAsian: theme.majorAsian,
+            MajorComplex: theme.majorComplex,
+            MinorLatin: theme.minorLatin,
+            MinorAsian: theme.minorAsian,
+            MinorComplex: theme.minorComplex,
+          },
+        },
+      ]);
+      const after = read(before.activeSlide);
+      const applied =
+        stableJson(after.masters[command.masterIndex]?.theme) ===
+        stableJson(theme);
       if (
         !applied ||
         (!request.transactionActive &&

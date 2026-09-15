@@ -289,7 +289,7 @@ function fixture() {
     buildReady: true,
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v8",
+    patchLevel: "browser-undo-v9",
   };
   return {
     adapter: factory({ uno, runtimeIdentity }),
@@ -328,7 +328,7 @@ test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime",
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v8",
+      patchLevel: "browser-undo-v9",
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
@@ -362,7 +362,7 @@ test("browser adapter routes stock slide lifecycle through Impress commands", ()
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v8",
+      patchLevel: "browser-undo-v9",
     },
   });
   assert.equal(stockAdapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
@@ -394,7 +394,7 @@ test("browser adapter deletes a slide only after native structure admission", ()
       buildReady: true,
       buildCommit: "candidate",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v8",
+      patchLevel: "browser-undo-v9",
       nativeSlideStructureReady: true,
     },
   });

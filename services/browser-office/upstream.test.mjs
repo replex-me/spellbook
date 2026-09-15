@@ -25,7 +25,7 @@ const candidateBuilder = readFileSync(
 );
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v8");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v9");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);

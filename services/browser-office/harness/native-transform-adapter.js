@@ -48,7 +48,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v8";
+      runtimeIdentity.patchLevel === "browser-undo-v9";
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(
@@ -56,6 +56,21 @@
     );
 
     const any = (typeName, value) => new uno.Any(uno.type[typeName], value);
+    const propertyValue = (name, typeName, value) =>
+      new uno.idl.com.sun.star.beans.PropertyValue({
+        Name: name,
+        Value: new uno.Any(
+          typeof typeName === "string" ? uno.type[typeName] : typeName,
+          value,
+        ),
+      });
+    const propertySequence = (entries) =>
+      new uno.Any(
+        uno.type.sequence(
+          uno.type.struct(uno.idl.com.sun.star.beans.PropertyValue),
+        ),
+        entries,
+      );
     const assertSingleEntry = (command) => {
       const entries = Object.entries(command ?? {});
       if (entries.length !== 1)
@@ -393,6 +408,103 @@
         },
       },
       {
+        match: (key) => key === "SetSlideSize",
+        prepare: ({ value, pages }) => {
+          const size = assertRecord(value, "Browser slide size");
+          assertExactKeys(
+            size,
+            ["Width", "Height", "ScaleContent"],
+            "Browser slide size",
+          );
+          if (
+            !Number.isSafeInteger(size.Width) ||
+            size.Width < 1000 ||
+            size.Width > 100000 ||
+            !Number.isSafeInteger(size.Height) ||
+            size.Height < 1000 ||
+            size.Height > 100000 ||
+            typeof size.ScaleContent !== "boolean"
+          )
+            throw new Error("Browser slide size is invalid.");
+          const page = pages.getByIndex(0);
+          return {
+            mutates: true,
+            nativeUndoManaged: true,
+            apply: () =>
+              page.setPropertyValue(
+                "SpellbookSlideSizeCommand",
+                propertySequence([
+                  propertyValue("Width", "long", size.Width),
+                  propertyValue("Height", "long", size.Height),
+                  propertyValue("ScaleContent", "boolean", size.ScaleContent),
+                ]),
+              ),
+          };
+        },
+      },
+      {
+        match: (key) => key === "SetMasterTheme",
+        prepare: ({ value, model }) => {
+          const theme = assertRecord(value, "Browser master theme");
+          const textFields = [
+            "Name",
+            "ColorSchemeName",
+            "FontSchemeName",
+            "MajorLatin",
+            "MajorAsian",
+            "MajorComplex",
+            "MinorLatin",
+            "MinorAsian",
+            "MinorComplex",
+          ];
+          assertExactKeys(
+            theme,
+            ["MasterIndex", "Colors", ...textFields],
+            "Browser master theme",
+          );
+          const masters = model.getMasterPages();
+          const masterIndex = assertIndex(
+            theme.MasterIndex,
+            masters.getCount(),
+            "Browser master theme target",
+          );
+          if (
+            textFields.some(
+              (name) =>
+                typeof theme[name] !== "string" ||
+                !theme[name] ||
+                theme[name].length > 255,
+            ) ||
+            !Array.isArray(theme.Colors) ||
+            theme.Colors.length !== 12 ||
+            theme.Colors.some(
+              (color) =>
+                !Number.isSafeInteger(color) || color < 0 || color > 16777215,
+            )
+          )
+            throw new Error("Browser master theme is invalid.");
+          const master = masters.getByIndex(masterIndex);
+          return {
+            mutates: true,
+            nativeUndoManaged: true,
+            apply: () =>
+              master.setPropertyValue(
+                "SpellbookThemeCommand",
+                propertySequence([
+                  ...textFields.map((name) =>
+                    propertyValue(name, "string", theme[name]),
+                  ),
+                  propertyValue(
+                    "Colors",
+                    uno.type.sequence(uno.type.long),
+                    theme.Colors,
+                  ),
+                ]),
+              ),
+          };
+        },
+      },
+      {
         match: (key) => key.startsWith("SetAnimationTiming."),
         prepare: ({ key, value, state }) => {
           const timing = assertRecord(value, "Browser animation timing");
@@ -498,6 +610,99 @@
               nodeType.Value = semanticType;
               setMember("UserData", userData);
             },
+          };
+        },
+      },
+      {
+        match: (key) =>
+          [
+            "AddAnimationEffect.",
+            "RemoveAnimationEffect.",
+            "ReplaceAnimationEffect.",
+            "MoveAnimationEffect.",
+          ].some((prefix) => key.startsWith(prefix)),
+        prepare: ({ key, value, state }) => {
+          const prefixes = {
+            AddAnimationEffect: "add",
+            RemoveAnimationEffect: "remove",
+            ReplaceAnimationEffect: "replace",
+            MoveAnimationEffect: "move",
+          };
+          const operationName = key.slice(0, key.indexOf("."));
+          const action = prefixes[operationName];
+          const objectPath = key.slice(key.indexOf(".") + 1);
+          parsePath(objectPath, "Browser animation target");
+          const animation = assertRecord(value, "Browser animation effect");
+          const allowed = {
+            add: ["PresetId", "Duration", "Delay", "Start", "InsertIndex"],
+            remove: ["SequenceIndex", "ExpectedPresetId"],
+            replace: ["SequenceIndex", "ExpectedPresetId", "PresetId"],
+            move: ["SequenceIndex", "ExpectedPresetId", "TargetIndex"],
+          }[action];
+          assertExactKeys(animation, allowed, "Browser animation effect");
+          const preset = animation.PresetId;
+          const expectedPreset = animation.ExpectedPresetId;
+          if (
+            (preset !== undefined &&
+              (typeof preset !== "string" ||
+                !/^ooo-(entrance|emphasis|exit|motionpath)-[A-Za-z0-9._-]+$/u.test(
+                  preset,
+                ) ||
+                preset.length > 128)) ||
+            (expectedPreset !== undefined &&
+              (typeof expectedPreset !== "string" ||
+                !expectedPreset ||
+                expectedPreset.length > 128)) ||
+            (animation.SequenceIndex !== undefined &&
+              (!Number.isSafeInteger(animation.SequenceIndex) ||
+                animation.SequenceIndex < 0 ||
+                animation.SequenceIndex > 199)) ||
+            (animation.InsertIndex !== undefined &&
+              (!Number.isSafeInteger(animation.InsertIndex) ||
+                animation.InsertIndex < 0 ||
+                animation.InsertIndex > 199)) ||
+            (animation.TargetIndex !== undefined &&
+              (!Number.isSafeInteger(animation.TargetIndex) ||
+                animation.TargetIndex < 0 ||
+                animation.TargetIndex > 199)) ||
+            (action === "add" &&
+              (typeof animation.Duration !== "number" ||
+                !Number.isFinite(animation.Duration) ||
+                animation.Duration < 0.001 ||
+                animation.Duration > 60 ||
+                typeof animation.Delay !== "number" ||
+                !Number.isFinite(animation.Delay) ||
+                animation.Delay < 0 ||
+                animation.Delay > 60 ||
+                !["on-click", "with-previous", "after-previous"].includes(
+                  animation.Start,
+                )))
+          )
+            throw new Error("Browser animation effect is invalid.");
+          const entries = [
+            propertyValue("Action", "string", action),
+            propertyValue("ObjectPath", "string", objectPath),
+          ];
+          for (const [name, entry] of Object.entries(animation))
+            entries.push(
+              propertyValue(
+                name,
+                typeof entry === "number" && Number.isInteger(entry)
+                  ? "long"
+                  : typeof entry === "number"
+                    ? "double"
+                    : "string",
+                entry,
+              ),
+            );
+          return {
+            mutates: true,
+            nativeUndoManaged: true,
+            apply: () =>
+              state.currentPage.setPropertyValue(
+                "SpellbookAnimationCommand",
+                propertySequence(entries),
+              ),
           };
         },
       },

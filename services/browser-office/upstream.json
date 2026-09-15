@@ -9,11 +9,11 @@
     "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v8",
+    "patchLevel": "browser-undo-v9",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "c0745d2a08722187e4255e88c9b0772c3eba7612bfde2a55b65bbbd82d0766ce",
+    "patchSeriesSha256": "f44235bd022c8c171ba37c4505e12bd43d2bf732f28b1a402e51d14284ef5dc3",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
@@ -22,7 +22,8 @@
       "libreoffice/patches/0005-browser-uno-text-undo.patch",
       "libreoffice/patches/0006-browser-shape-appearance-undo.patch",
       "libreoffice/patches/0007-browser-text-appearance-undo.patch",
-      "libreoffice/patches/0008-browser-metadata-line-paragraph-undo.patch"
+      "libreoffice/patches/0008-browser-metadata-line-paragraph-undo.patch",
+      "libreoffice/patches/0009-browser-document-design-animation.patch"
     ],
     "invariants": [
       "table-cell-native-undo",
@@ -56,7 +57,11 @@
       "text-appearance-property-native-undo",
       "slide-metadata-property-native-undo",
       "line-style-property-native-undo",
-      "paragraph-format-property-native-undo"
+      "paragraph-format-property-native-undo",
+      "document-slide-size-native-undo",
+      "master-theme-native-undo",
+      "complete-theme-copy-roundtrip",
+      "animation-lifecycle-native-undo"
     ],
     "requiredCppunitTargets": [
       "CppunitTest_sd_uiimpress",

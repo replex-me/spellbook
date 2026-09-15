@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "2.11.0",
+  "version": "2.12.0",
   "coordinateUnit": "1/100mm",
   "nativeUndoRequired": true,
   "verifiedWith": {
@@ -15,7 +15,7 @@
     }
   },
   "aiExposure": {
-    "operationCount": 72,
+    "operationCount": 74,
     "policy": "Expose every bounded operation except format-excluded mutations. Before execution, authorize against the current document permission and the live editor engine patch level. Availability records release-evidence maturity; it does not silently remove an implemented operation from the model schema."
   },
   "transaction": {
@@ -102,6 +102,19 @@
         "fixture": "slide-properties",
         "verification": ["structure", "save_reopen", "change_budget", "visual"],
         "changeBudget": ["presentation", "slide_parts", "slide_relationships"]
+      },
+      "document_design": {
+        "domain": "slide_transform",
+        "undoProvider": "document_design_snapshot",
+        "fixture": "document-design",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": [
+          "presentation",
+          "slide_parts",
+          "slide_master_parts",
+          "slide_layout_parts",
+          "theme_parts"
+        ]
       },
       "speaker_notes": {
         "domain": "slide_transform",
@@ -272,6 +285,22 @@
         "identityEffect": "preserve",
         "availability": "runtime_validation_required",
         "minEnginePatch": 20
+      },
+      "set_slide_size": {
+        "family": "document_design",
+        "target": "document",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 22
+      },
+      "set_master_theme": {
+        "family": "document_design",
+        "target": "master",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 22
       },
       "set_speaker_notes": {
         "family": "speaker_notes",
@@ -820,6 +849,7 @@
     }
   },
   "operationGroups": {
+    "document": ["set_slide_size", "set_master_theme"],
     "slide": [
       "insert_slide",
       "duplicate_slide",
@@ -899,6 +929,8 @@
     "set_paragraph_format",
     "set_sections",
     "set_chart_format",
+    "set_slide_size",
+    "set_master_theme",
     "add_animation_effect",
     "remove_animation_effect",
     "replace_animation_effect",
@@ -935,6 +967,8 @@
           "delete_slide",
           "move_slide",
           "set_sections",
+          "set_slide_size",
+          "set_master_theme",
           "set_speaker_notes",
           "add_text_box",
           "add_shape",
@@ -1037,7 +1071,44 @@
       },
       "masterIndex": {
         "type": ["number", "null"],
-        "description": "Exact slide-layout index from the current native observation. Required by set_slide_layout."
+        "description": "Exact master index from the current native observation. Required by set_slide_layout and set_master_theme."
+      },
+      "scaleContent": {
+        "type": ["boolean", "null"],
+        "description": "When changing slide size, scale existing slide and master objects with the page."
+      },
+      "theme": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "colorSchemeName": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "colors": {
+            "type": "array",
+            "minItems": 12,
+            "maxItems": 12,
+            "items": { "type": "integer", "minimum": 0, "maximum": 16777215 }
+          },
+          "fontSchemeName": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "majorLatin": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "majorAsian": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "majorComplex": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "minorLatin": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "minorAsian": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "minorComplex": { "type": "string", "minLength": 1, "maxLength": 255 }
+        },
+        "required": [
+          "name",
+          "colorSchemeName",
+          "colors",
+          "fontSchemeName",
+          "majorLatin",
+          "majorAsian",
+          "majorComplex",
+          "minorLatin",
+          "minorAsian",
+          "minorComplex"
+        ]
       },
       "targetSlideIndex": { "type": ["number", "null"] },
       "interaction": {
@@ -1515,6 +1586,8 @@
       "slideIndex",
       "sections",
       "masterIndex",
+      "scaleContent",
+      "theme",
       "targetSlideIndex",
       "interaction",
       "url",
@@ -1762,6 +1835,16 @@
       "op": "set_animation_timing",
       "minimumVerifiedPatch": 8,
       "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_slide_size",
+      "minimumVerifiedPatch": 22,
+      "reason": "A document-wide page-size edit must resize every slide and master through one native page-format Undo group and preserve the PPTX presentation size."
+    },
+    {
+      "op": "set_master_theme",
+      "minimumVerifiedPatch": 22,
+      "reason": "Theme colors and major/minor font schemes require a complete master-theme snapshot and PPTX theme-part round-trip on the declared patch."
     },
     {
       "op": "add_animation_effect",
