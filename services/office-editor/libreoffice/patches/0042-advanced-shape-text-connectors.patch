@@ -185,7 +185,7 @@ index 7da06679f..de1b17bf0 100644
          if (!aAllowedKeys.contains(rEntry.first))
 @@ -2455,6 +2510,67 @@ void handleSetParagraphProperties(SlideCommandContext& rCtx, const std::string&
                                                    nullptr, 0);
-         aValues.emplace_back(u"WritingMode"_ustr, uno::Any(it->second));
+         aValues.emplace_back(u"WritingMode"_ustr, cpo::uno::Any(it->second));
      }
 +    if (const auto oListType = rValue.get_optional<std::string>("ListType"))
 +    {
@@ -200,7 +200,7 @@ index 7da06679f..de1b17bf0 100644
 +                                                  nullptr, 0);
 +        if (*oListType == "none")
 +        {
-+            aValues.emplace_back(u"NumberingLevel"_ustr, uno::Any(sal_Int16(-1)));
++            aValues.emplace_back(u"NumberingLevel"_ustr, cpo::uno::Any(sal_Int16(-1)));
 +        }
 +        else
 +        {
@@ -209,11 +209,11 @@ index 7da06679f..de1b17bf0 100644
 +                || !xRules.is() || *oLevel >= xRules->getCount())
 +                throw lang::IllegalArgumentException(u"Paragraph numbering rules are unavailable"_ustr,
 +                                                      nullptr, 0);
-+            uno::Sequence<beans::PropertyValue> aRule;
++            cpo::uno::Sequence<beans::PropertyValue> aRule;
 +            if (!(xRules->getByIndex(*oLevel) >>= aRule))
 +                throw lang::IllegalArgumentException(u"Paragraph numbering level is invalid"_ustr,
 +                                                      nullptr, 0);
-+            std::map<OUString, uno::Any> aRuleValues;
++            std::map<OUString, cpo::uno::Any> aRuleValues;
 +            for (const auto& rProperty : aRule)
 +                aRuleValues[rProperty.Name] = rProperty.Value;
 +            if (*oListType == "bullet")
@@ -243,12 +243,11 @@ index 7da06679f..de1b17bf0 100644
 +                aProperty.Value = rAny;
 +                aUpdated.push_back(std::move(aProperty));
 +            }
-+            xRules->replaceByIndex(*oLevel, uno::Any(comphelper::containerToSequence(aUpdated)));
-+            aValues.emplace_back(u"NumberingRules"_ustr, uno::Any(xRules));
-+            aValues.emplace_back(u"NumberingLevel"_ustr, uno::Any(*oLevel));
++            xRules->replaceByIndex(*oLevel, cpo::uno::Any(comphelper::containerToSequence(aUpdated)));
++            aValues.emplace_back(u"NumberingRules"_ustr, cpo::uno::Any(xRules));
++            aValues.emplace_back(u"NumberingLevel"_ustr, cpo::uno::Any(*oLevel));
 +        }
 +    }
      if (aValues.empty())
          throw lang::IllegalArgumentException(u"No paragraph properties supplied"_ustr,
                                                nullptr, 0);
-

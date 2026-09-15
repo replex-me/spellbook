@@ -213,7 +213,7 @@ index 9de193a51..bb36eff98 100644
 +    {
 +        sd::MainSequenceRebuildGuard aGuard(pSequence);
 +        sd::CustomAnimationEffectPtr pCreated
-+            = pSequence->append(pPreset, uno::Any(xTarget), fDuration);
++            = pSequence->append(pPreset, cpo::uno::Any(xTarget), fDuration);
 +        if (!pCreated)
 +            throw lang::IllegalArgumentException(u"Animation effect creation failed"_ustr,
 +                                                  nullptr, 0);

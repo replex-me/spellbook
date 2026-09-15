@@ -360,7 +360,7 @@ index 13ba08be4..7e2c7509e 100644
 +    uno::Reference<text::XText> xText(pObject->getUnoShape(), uno::UNO_QUERY_THROW);
 +    uno::Reference<container::XEnumerationAccess> xAccess(xText, uno::UNO_QUERY_THROW);
 +    uno::Reference<container::XEnumeration> xParagraphs = xAccess->createEnumeration();
-+    uno::Any aParagraph;
++    cpo::uno::Any aParagraph;
 +    for (sal_Int32 nIndex = 0; nIndex <= *oParagraph; ++nIndex)
 +    {
 +        if (!xParagraphs->hasMoreElements())
@@ -369,7 +369,7 @@ index 13ba08be4..7e2c7509e 100644
 +        aParagraph = xParagraphs->nextElement();
 +    }
 +    uno::Reference<beans::XPropertySet> xProperties(aParagraph, uno::UNO_QUERY_THROW);
-+    std::vector<std::pair<OUString, uno::Any>> aValues;
++    std::vector<std::pair<OUString, cpo::uno::Any>> aValues;
 +    if (const auto oAlignment = rValue.get_optional<std::string>("LastLineAlignment"))
 +    {
 +        static const std::map<std::string, style::ParagraphAdjust> aAlignmentValues = {
@@ -382,7 +382,7 @@ index 13ba08be4..7e2c7509e 100644
 +        if (it == aAlignmentValues.end())
 +            throw lang::IllegalArgumentException(u"Paragraph alignment is invalid"_ustr,
 +                                                  nullptr, 0);
-+        aValues.emplace_back(u"ParaLastLineAdjust"_ustr, uno::Any(it->second));
++        aValues.emplace_back(u"ParaLastLineAdjust"_ustr, cpo::uno::Any(it->second));
 +    }
 +    for (const auto& [pName, pProperty, nMinimum] : {
 +             std::tuple("LeftMargin", u"ParaLeftMargin", sal_Int32(-100000)),
@@ -397,7 +397,7 @@ index 13ba08be4..7e2c7509e 100644
 +            if (*oValue < nMinimum || *oValue > 100000)
 +                throw lang::IllegalArgumentException(u"Paragraph spacing is out of range"_ustr,
 +                                                      nullptr, 0);
-+            aValues.emplace_back(OUString(pProperty), uno::Any(*oValue));
++            aValues.emplace_back(OUString(pProperty), cpo::uno::Any(*oValue));
 +        }
 +    }
 +    if (const auto oDirection = rValue.get_optional<std::string>("Direction"))
@@ -411,7 +411,7 @@ index 13ba08be4..7e2c7509e 100644
 +        if (it == aDirectionValues.end())
 +            throw lang::IllegalArgumentException(u"Paragraph direction is invalid"_ustr,
 +                                                  nullptr, 0);
-+        aValues.emplace_back(u"WritingMode"_ustr, uno::Any(it->second));
++        aValues.emplace_back(u"WritingMode"_ustr, cpo::uno::Any(it->second));
 +    }
 +    if (aValues.empty())
 +        throw lang::IllegalArgumentException(u"No paragraph properties supplied"_ustr,

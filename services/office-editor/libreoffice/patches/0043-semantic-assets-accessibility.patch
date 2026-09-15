@@ -551,7 +551,7 @@ index de1b17bf0..9ef83d469 100644
 +        if (!xServiceInfo.is() || !xProperties.is()
 +            || !xServiceInfo->supportsService(u"com.sun.star.formula.FormulaProperties"_ustr))
 +            return;
-+        xProperties->setPropertyValue(u"Formula"_ustr, uno::Any(rSource));
++        xProperties->setPropertyValue(u"Formula"_ustr, cpo::uno::Any(rSource));
 +        pOleObject->SetChanged();
 +        pOleObject->BroadcastObjectChange();
 +    }
@@ -702,7 +702,7 @@ index de1b17bf0..9ef83d469 100644
 +                                              nullptr, 0);
 +    std::optional<avmedia::MediaItem> oOldMedia;
 +    if (bChangesMedia)
-+        oOldMedia = pMediaObject->getMediaProperties();
++        oOldMedia.emplace(pMediaObject->getMediaProperties());
 +
      // UNO property setters do not consistently create native Undo actions.
      // Attribute undo covers merged drawing/text items; geometry undo covers
@@ -978,7 +978,7 @@ index de1b17bf0..9ef83d469 100644
 +    if (rCtx.mbUndo)
 +        rCtx.addUndo(std::make_unique<SetEquationSourceUndoAction>(
 +            *rCtx.mpDoc, *pObject, aCurrentSource, aSource));
-+    xProperties->setPropertyValue(u"Formula"_ustr, uno::Any(aSource));
++    xProperties->setPropertyValue(u"Formula"_ustr, cpo::uno::Any(aSource));
 +    pOleObject->SetChanged();
 +    pOleObject->BroadcastObjectChange();
 +    rCtx.touch(pPage);
