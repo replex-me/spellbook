@@ -73,10 +73,14 @@ Run the candidate through the real product bridge without changing the tracked
 promotion manifest:
 
 ```sh
+pnpm browser-office:prepare
 node services/browser-office/verify-product-bridge.mjs \
   --candidate-runtime /absolute/output \
   --endurance-cycles 100 \
   --output artifacts/browser-office/candidate-v7
+
+pnpm browser-office:verify:candidate-powerpoint -- \
+  --browser-evidence artifacts/browser-office/candidate-v7
 ```
 
 This verifier accepts only the four raw artifacts whose byte lengths and
@@ -89,6 +93,12 @@ document session alive while rotating through all 17 admitted element
 operations. Every cycle performs edit, observation, Undo, restored-state
 observation, Redo, observation, final Undo and save acknowledgement; periodic
 exact-byte checks prove that the final Undo restored the original package.
+The PowerPoint follow-up refuses a partial browser report, re-hashes the saved
+PPTX, runs the Open XML SDK validator, opens both source and candidate in native
+Microsoft PowerPoint, checks their slide counts, extracts the saved text from
+PowerPoint's PDF and requires a visible but bounded pixel delta. It does not
+treat a ZIP-level validation as proof that PowerPoint can consume the
+candidate.
 
 General document fixes must be represented in both LibreOffice source lines or
 explicitly proven unnecessary on one line. Collabora-only transport commands

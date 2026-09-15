@@ -17,7 +17,9 @@ export async function admitCandidateRuntime({
   manifest = upstreamManifest,
 }) {
   const directory = path.resolve(runtimeDirectory);
-  const receipt = JSON.parse(await readFile(path.resolve(receiptPath), "utf8"));
+  const receiptBytes = await readFile(path.resolve(receiptPath));
+  const receipt = JSON.parse(receiptBytes.toString("utf8"));
+  const receiptSha256 = createHash("sha256").update(receiptBytes).digest("hex");
   assertReceiptIdentity(receipt, manifest);
 
   const receiptArtifacts = new Map(
@@ -65,6 +67,7 @@ export async function admitCandidateRuntime({
   return {
     runtimeDirectory: directory,
     receipt,
+    receiptSha256,
     runtimeIdentity,
     upstream: {
       ...manifest,

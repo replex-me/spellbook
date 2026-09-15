@@ -25,6 +25,7 @@ test("candidate runtime is admitted only from receipt-bound raw artifacts", asyn
 
     const admitted = await admitCandidateRuntime({ runtimeDirectory: root });
     assert.equal(admitted.runtimeIdentity.buildReady, true);
+    assert.match(admitted.receiptSha256, /^[0-9a-f]{64}$/u);
     assert.equal(
       admitted.runtimeIdentity.buildCommit,
       admitted.runtimeIdentity.candidateCommit,

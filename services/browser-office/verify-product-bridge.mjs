@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +13,7 @@ import { applyOoxmlCommand } from "./ooxml-worker-source.mjs";
 
 const serviceRoot = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(serviceRoot, "../..");
+const rendererCallTimeoutMs = 10_000;
 const fixture = new Uint8Array(
   await readFile(
     path.join(
@@ -77,7 +79,7 @@ try {
     operation: "observe",
     captureSlideIndexes: [],
   });
-  const patchedBrowserRuntime = await page.evaluate(() => {
+  const patchedBrowserRuntime = await evaluateRenderer(page, () => {
     const runtime = globalThis.spellbookBrowserRuntimeCandidate;
     return (
       runtime?.buildReady === true &&
@@ -557,12 +559,28 @@ try {
 
   const result = {
     status: "browser-product-bridge-verified",
-    crossOriginIsolated: await page.evaluate(() => crossOriginIsolated),
+    crossOriginIsolated: await evaluateRenderer(
+      page,
+      () => crossOriginIsolated,
+      undefined,
+      "read cross-origin isolation",
+    ),
     slideCount: opened.slideCount,
     editedElementId: target.elementId,
+    replacement,
     undoRestoredRevision: restored.revision,
     recovered: recoveredOpen.recovered,
     patchedBrowserRuntime,
+    candidateRuntime: candidateRuntime
+      ? {
+          receiptSha256: candidateRuntime.receiptSha256,
+          spellbookSourceRevision:
+            candidateRuntime.receipt.spellbookSourceRevision,
+          libreOffice: candidateRuntime.receipt.libreOffice,
+          toolchain: candidateRuntime.receipt.toolchain,
+          artifacts: candidateRuntime.receipt.artifacts,
+        }
+      : null,
     verifiedElementOperations: [
       "replace_text",
       "move",
@@ -583,6 +601,8 @@ try {
     ],
     savedRevision,
     savedBytes: savedBytes.length,
+    fixtureSha256: sha256(fixture),
+    savedSha256: sha256(savedBytes),
     changedParts,
     endurance,
     slideStructure,
@@ -655,7 +675,7 @@ async function verifyProductSlideStructure(browser, origin) {
       elementIds: [],
       slideIndexes: [],
     };
-    const nativeSlideStructureReady = await page.evaluate(() => {
+    const nativeSlideStructureReady = await evaluateRenderer(page, () => {
       const runtime = globalThis.spellbookBrowserRuntimeCandidate;
       return (
         runtime?.buildReady === true &&
@@ -778,7 +798,7 @@ async function verifyProductSlideStructure(browser, origin) {
     });
     assert.equal(redone.revision, deleted.revision);
 
-    await page.evaluate(() =>
+    await evaluateRenderer(page, () =>
       globalThis.__spellbookProductHost.port.postMessage({
         type: "command",
         messageId: "Action_Save",
@@ -787,16 +807,21 @@ async function verifyProductSlideStructure(browser, origin) {
     );
     const save = await waitForEvent(page, { type: "save" });
     const savedBytes = Uint8Array.from(
-      await page.evaluate((requestId) => {
-        const event = globalThis.__spellbookProductHost.events.find(
-          (candidate) =>
-            candidate.type === "save" && candidate.requestId === requestId,
-        );
-        return Array.from(new Uint8Array(event.bytes));
-      }, save.requestId),
+      await evaluateRenderer(
+        page,
+        (requestId) => {
+          const event = globalThis.__spellbookProductHost.events.find(
+            (candidate) =>
+              candidate.type === "save" && candidate.requestId === requestId,
+          );
+          return Array.from(new Uint8Array(event.bytes));
+        },
+        save.requestId,
+      ),
     );
     assert.deepEqual(savedBytes, expected);
-    await page.evaluate(
+    await evaluateRenderer(
+      page,
       ({ requestId }) =>
         globalThis.__spellbookProductHost.port.postMessage({
           type: "save-result",
@@ -1185,29 +1210,35 @@ function elementForOperation(observation, operation) {
 
 async function requestProductSave(page, { duplicate = false } = {}) {
   const previousCount = await hostEventCount(page, "save");
-  await page.evaluate((sendTwice) => {
-    const saveCommand = {
-      type: "command",
-      messageId: "Action_Save",
-      values: { Notify: true },
-    };
-    globalThis.__spellbookProductHost.port.postMessage(saveCommand);
-    if (sendTwice)
+  await evaluateRenderer(
+    page,
+    (sendTwice) => {
+      const saveCommand = {
+        type: "command",
+        messageId: "Action_Save",
+        values: { Notify: true },
+      };
       globalThis.__spellbookProductHost.port.postMessage(saveCommand);
-  }, duplicate);
+      if (sendTwice)
+        globalThis.__spellbookProductHost.port.postMessage(saveCommand);
+    },
+    duplicate,
+  );
   const save = await waitForNewHostEvent(page, "save", previousCount);
   return { ...save, previousCount };
 }
 
 async function acknowledgeProductSave(page, requestId, revision) {
   const responseCount = await hostEventCount(page, "save-response");
-  const unmodifiedCount = await page.evaluate(
+  const unmodifiedCount = await evaluateRenderer(
+    page,
     () =>
       globalThis.__spellbookProductHost.events.filter(
         (event) => event.type === "modified" && event.modified === false,
       ).length,
   );
-  await page.evaluate(
+  await evaluateRenderer(
+    page,
     ({ id, savedRevision }) =>
       globalThis.__spellbookProductHost.port.postMessage({
         type: "save-result",
@@ -1234,7 +1265,8 @@ async function acknowledgeProductSave(page, requestId, revision) {
 }
 
 async function consumeSavedBytes(page, requestId, includeBytes = true) {
-  const saved = await page.evaluate(
+  const saved = await evaluateRenderer(
+    page,
     ({ id, returnBytes }) => {
       const event = globalThis.__spellbookProductHost.events.find(
         (candidate) => candidate.type === "save" && candidate.requestId === id,
@@ -1259,7 +1291,8 @@ async function consumeSavedBytes(page, requestId, includeBytes = true) {
 }
 
 async function hostEventCount(page, type) {
-  return page.evaluate(
+  return evaluateRenderer(
+    page,
     (eventType) =>
       globalThis.__spellbookProductHost.events.filter(
         (event) => event.type === eventType,
@@ -1277,7 +1310,8 @@ async function waitForNewHostEvent(page, type, previousCount) {
     { eventType: type, count: previousCount },
     { timeout: 30_000 },
   );
-  return page.evaluate(
+  return evaluateRenderer(
+    page,
     ({ eventType, count }) =>
       globalThis.__spellbookProductHost.events.filter(
         (event) => event.type === eventType,
@@ -1292,24 +1326,28 @@ async function connectProductHost(page, origin) {
     null,
     { timeout: 60_000 },
   );
-  await page.evaluate((hostOrigin) => {
-    const events = [];
-    const channel = new MessageChannel();
-    channel.port1.onmessage = (event) => events.push(event.data);
-    channel.port1.start();
-    globalThis.__spellbookProductHost = {
-      events,
-      port: channel.port1,
-    };
-    window.postMessage(
-      {
-        type: "spellbook.browser-office-connect",
-        protocolVersion: 1,
-      },
-      hostOrigin,
-      [channel.port2],
-    );
-  }, origin);
+  await evaluateRenderer(
+    page,
+    (hostOrigin) => {
+      const events = [];
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (event) => events.push(event.data);
+      channel.port1.start();
+      globalThis.__spellbookProductHost = {
+        events,
+        port: channel.port1,
+      };
+      window.postMessage(
+        {
+          type: "spellbook.browser-office-connect",
+          protocolVersion: 1,
+        },
+        hostOrigin,
+        [channel.port2],
+      );
+    },
+    origin,
+  );
   await waitForEvent(page, { type: "ready" });
 }
 
@@ -1319,7 +1357,8 @@ async function openProductFixture(
   requestId,
   fileName = "product-bridge.pptx",
 ) {
-  await page.evaluate(
+  await evaluateRenderer(
+    page,
     ({ source, id, name }) => {
       const value = Uint8Array.from(source);
       globalThis.__spellbookProductHost.port.postMessage(
@@ -1350,30 +1389,42 @@ async function waitForEvent(page, expected) {
       { timeout: 30_000 },
     );
   } catch (error) {
-    const events = await page.evaluate(() =>
-      (globalThis.__spellbookProductHost?.events ?? []).map((event) => ({
-        type: event.type,
-        id: event.id,
-        error: event.error,
-        messageId: event.messageId,
-        command: event.command,
-        requestId: event.requestId,
-        modified: event.modified,
-        valueRevision: event.value?.revision,
-        bytes:
-          event.bytes instanceof ArrayBuffer
-            ? `<${event.bytes.byteLength} bytes>`
-            : undefined,
-      })),
-    );
-    const diagnostics = await page.evaluate(() =>
-      globalThis.spellbookBrowserOffice?.diagnostics?.(),
-    );
+    const events = await evaluateRenderer(
+      page,
+      () =>
+        (globalThis.__spellbookProductHost?.events ?? []).map((event) => ({
+          type: event.type,
+          id: event.id,
+          error: event.error,
+          messageId: event.messageId,
+          command: event.command,
+          requestId: event.requestId,
+          modified: event.modified,
+          valueRevision: event.value?.revision,
+          bytes:
+            event.bytes instanceof ArrayBuffer
+              ? `<${event.bytes.byteLength} bytes>`
+              : undefined,
+        })),
+      undefined,
+      "read timed-out browser events",
+    ).catch((diagnosticError) => [
+      `<renderer-unresponsive:${diagnosticError.message}>`,
+    ]);
+    const diagnostics = await evaluateRenderer(
+      page,
+      () => globalThis.spellbookBrowserOffice?.diagnostics?.(),
+      undefined,
+      "read timed-out browser diagnostics",
+    ).catch((diagnosticError) => ({
+      unavailable: diagnosticError.message,
+    }));
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}; expected=${JSON.stringify(expected)}; events=${JSON.stringify(events)}; diagnostics=${JSON.stringify(diagnostics)}`,
     );
   }
-  return page.evaluate(
+  return evaluateRenderer(
+    page,
     (match) =>
       globalThis.__spellbookProductHost.events.find((event) =>
         Object.entries(match).every(([key, value]) => event[key] === value),
@@ -1383,7 +1434,8 @@ async function waitForEvent(page, expected) {
 }
 
 async function nativeTask(page, id, request) {
-  await page.evaluate(
+  await evaluateRenderer(
+    page,
     ({ taskId, nativeRequest }) =>
       globalThis.__spellbookProductHost.port.postMessage({
         id: taskId,
@@ -1398,7 +1450,8 @@ async function nativeTask(page, id, request) {
 
 async function sendHostCommand(page, messageId, values) {
   const requestId = `host-command-${messageId}-${Date.now()}-${Math.random()}`;
-  await page.evaluate(
+  await evaluateRenderer(
+    page,
     ({ command, payload, requestId: id }) =>
       globalThis.__spellbookProductHost.port.postMessage({
         type: "command",
@@ -1413,6 +1466,29 @@ async function sendHostCommand(page, messageId, values) {
     messageId,
     requestId,
   });
+}
+
+async function evaluateRenderer(
+  page,
+  pageFunction,
+  argument,
+  label = "browser renderer evaluation",
+) {
+  let timeout;
+  try {
+    return await Promise.race([
+      page.evaluate(pageFunction, argument),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(new Error(`${label} exceeded ${rendererCallTimeoutMs}ms`)),
+          rendererCallTimeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function optionalFlagValue(name, argv = process.argv) {
@@ -1455,4 +1531,8 @@ function changedLogicalParts(before, after) {
 function equalBytes(left, right) {
   if (!left || !right || left.length !== right.length) return false;
   return left.every((value, index) => value === right[index]);
+}
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
 }
