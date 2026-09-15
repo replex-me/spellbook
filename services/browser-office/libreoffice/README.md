@@ -81,6 +81,12 @@ node services/browser-office/verify-product-bridge.mjs \
 
 pnpm browser-office:verify:candidate-powerpoint -- \
   --browser-evidence artifacts/browser-office/candidate-v7
+
+pnpm browser-office:promote:candidate -- \
+  --candidate-runtime /absolute/output \
+  --browser-report artifacts/browser-office/candidate-v7/result.json \
+  --powerpoint-report /absolute/candidate-powerpoint-run/result.json \
+  --output artifacts/browser-office/candidate-v7/promotion-receipt.json
 ```
 
 This verifier accepts only the four raw artifacts whose byte lengths and
@@ -99,6 +105,11 @@ Microsoft PowerPoint, checks their slide counts, extracts the saved text from
 PowerPoint's PDF and requires a visible but bounded pixel delta. It does not
 treat a ZIP-level validation as proof that PowerPoint can consume the
 candidate.
+The final command writes `verified_not_published` evidence only when the raw
+runtime, browser report and PowerPoint report all identify the same build
+receipt and saved PPTX. Publishing the bytes and changing the tracked
+`buildReady` flag are separate release actions, so a partially verified build
+cannot become the default through this script.
 
 General document fixes must be represented in both LibreOffice source lines or
 explicitly proven unnecessary on one line. Collabora-only transport commands
