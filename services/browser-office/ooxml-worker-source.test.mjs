@@ -308,6 +308,155 @@ test("browser OOXML worker applies observed geometry deltas to one slide part", 
   );
 });
 
+test("browser OOXML worker writes local shape appearance without touching theme parts", async () => {
+  const source = new Uint8Array(await readFile(fixtureUrl));
+  const original = unzipSync(source);
+  const commands = [
+    {
+      op: "rotate",
+      elementId: "0/1",
+      expectedRotation: 0,
+      rotation: 1500,
+    },
+    {
+      op: "fill_color",
+      elementId: "0/1",
+      expectedColor: 0x2563eb,
+      color: 0x112233,
+    },
+    {
+      op: "line_color",
+      elementId: "0/1",
+      expectedColor: 0x1e3a8a,
+      color: 0x445566,
+    },
+    {
+      op: "line_width",
+      elementId: "0/1",
+      expectedWidth: 26,
+      width: 100,
+    },
+    {
+      op: "fill_opacity",
+      elementId: "0/1",
+      expectedOpacity: 100,
+      opacity: 75,
+      expectedColor: 0x112233,
+    },
+    {
+      op: "line_opacity",
+      elementId: "0/1",
+      expectedOpacity: 100,
+      opacity: 60,
+      expectedColor: 0x445566,
+    },
+  ];
+  let candidate = source;
+  for (const command of commands) {
+    const result = applyOoxmlCommand(candidate, command);
+    assert.deepEqual(result.report.changedParts, ["ppt/slides/slide1.xml"]);
+    candidate = result.bytes;
+  }
+  const entries = unzipSync(candidate);
+  assert.deepEqual(changedLogicalParts(original, entries), [
+    "ppt/slides/slide1.xml",
+  ]);
+  const appearance = secondShapeAppearance(entries);
+  assert.equal(appearance.transform.getAttribute("rot"), "900000");
+  assert.equal(appearance.fillColor.getAttribute("val"), "112233");
+  assert.equal(appearance.fillAlpha.getAttribute("val"), "75000");
+  assert.equal(appearance.line.getAttribute("w"), "36000");
+  assert.equal(appearance.lineColor.getAttribute("val"), "445566");
+  assert.equal(appearance.lineAlpha.getAttribute("val"), "60000");
+  assert.equal(
+    hash(entries["ppt/theme/theme1.xml"]),
+    hash(original["ppt/theme/theme1.xml"]),
+  );
+});
+
+test("browser OOXML worker writes local text appearance without touching theme parts", async () => {
+  const source = new Uint8Array(await readFile(fixtureUrl));
+  const original = unzipSync(source);
+  const commands = [
+    {
+      op: "font_size",
+      elementId: "0/0",
+      expectedSize: 2400,
+      size: 2800,
+    },
+    {
+      op: "bold",
+      elementId: "0/0",
+      expectedBold: false,
+      bold: true,
+    },
+    {
+      op: "italic",
+      elementId: "0/0",
+      expectedItalic: false,
+      italic: true,
+    },
+    {
+      op: "underline",
+      elementId: "0/0",
+      expectedUnderline: false,
+      underline: true,
+    },
+    {
+      op: "strikethrough",
+      elementId: "0/0",
+      expectedStrikethrough: false,
+      strikethrough: true,
+    },
+    {
+      op: "font_family",
+      elementId: "0/0",
+      expectedFamily: "Liberation Sans",
+      family: "Noto Sans",
+    },
+    {
+      op: "font_color",
+      elementId: "0/0",
+      expectedColor: 0x11181f,
+      color: 0x334455,
+    },
+    {
+      op: "paragraph_alignment",
+      elementId: "0/0",
+      expectedAlignment: "left",
+      alignment: "center",
+    },
+  ];
+  let candidate = source;
+  for (const command of commands) {
+    const result = applyOoxmlCommand(candidate, command);
+    assert.deepEqual(result.report.changedParts, ["ppt/slides/slide1.xml"]);
+    candidate = result.bytes;
+  }
+  const entries = unzipSync(candidate);
+  assert.deepEqual(changedLogicalParts(original, entries), [
+    "ppt/slides/slide1.xml",
+  ]);
+  const appearance = firstTextAppearance(entries);
+  assert.equal(appearance.runProperties.getAttribute("sz"), "2800");
+  assert.equal(appearance.runProperties.getAttribute("b"), "1");
+  assert.equal(appearance.runProperties.getAttribute("i"), "1");
+  assert.equal(appearance.runProperties.getAttribute("u"), "sng");
+  assert.equal(appearance.runProperties.getAttribute("strike"), "sngStrike");
+  assert.deepEqual(
+    [appearance.latin, appearance.eastAsian, appearance.complex].map(
+      (element) => element.getAttribute("typeface"),
+    ),
+    ["Noto Sans", "Noto Sans", "Noto Sans"],
+  );
+  assert.equal(appearance.color.getAttribute("val"), "334455");
+  assert.equal(appearance.paragraphProperties.getAttribute("algn"), "ctr");
+  assert.equal(
+    hash(entries["ppt/theme/theme1.xml"]),
+    hash(original["ppt/theme/theme1.xml"]),
+  );
+});
+
 test("browser metadata edits remain available when topology has sections", async () => {
   const source = new Uint8Array(await readFile(fixtureUrl));
   const entries = unzipSync(source);
@@ -500,6 +649,76 @@ function firstShapeTransform(entries) {
   return {
     offset: transform.getElementsByTagNameNS(drawingNamespace, "off")[0],
     extent: transform.getElementsByTagNameNS(drawingNamespace, "ext")[0],
+  };
+}
+
+function secondShapeAppearance(entries) {
+  const drawingNamespace =
+    "http://schemas.openxmlformats.org/drawingml/2006/main";
+  const presentationNamespace =
+    "http://schemas.openxmlformats.org/presentationml/2006/main";
+  const slide = new DOMParser().parseFromString(
+    strFromU8(entries["ppt/slides/slide1.xml"]),
+    "application/xml",
+  );
+  const shape = slide.getElementsByTagNameNS(presentationNamespace, "sp")[1];
+  const properties = shape.getElementsByTagNameNS(
+    presentationNamespace,
+    "spPr",
+  )[0];
+  const transform = properties.getElementsByTagNameNS(
+    drawingNamespace,
+    "xfrm",
+  )[0];
+  const fills = properties.getElementsByTagNameNS(
+    drawingNamespace,
+    "solidFill",
+  );
+  const line = properties.getElementsByTagNameNS(drawingNamespace, "ln")[0];
+  const fillColor = fills[0].getElementsByTagNameNS(
+    drawingNamespace,
+    "srgbClr",
+  )[0];
+  const lineColor = line.getElementsByTagNameNS(drawingNamespace, "srgbClr")[0];
+  return {
+    transform,
+    fillColor,
+    fillAlpha: fillColor.getElementsByTagNameNS(drawingNamespace, "alpha")[0],
+    line,
+    lineColor,
+    lineAlpha: lineColor.getElementsByTagNameNS(drawingNamespace, "alpha")[0],
+  };
+}
+
+function firstTextAppearance(entries) {
+  const drawingNamespace =
+    "http://schemas.openxmlformats.org/drawingml/2006/main";
+  const presentationNamespace =
+    "http://schemas.openxmlformats.org/presentationml/2006/main";
+  const slide = new DOMParser().parseFromString(
+    strFromU8(entries["ppt/slides/slide1.xml"]),
+    "application/xml",
+  );
+  const shape = slide.getElementsByTagNameNS(presentationNamespace, "sp")[0];
+  const paragraph = shape.getElementsByTagNameNS(drawingNamespace, "p")[0];
+  const runProperties = paragraph.getElementsByTagNameNS(
+    drawingNamespace,
+    "rPr",
+  )[0];
+  const color = runProperties.getElementsByTagNameNS(
+    drawingNamespace,
+    "srgbClr",
+  )[0];
+  return {
+    runProperties,
+    latin: runProperties.getElementsByTagNameNS(drawingNamespace, "latin")[0],
+    eastAsian: runProperties.getElementsByTagNameNS(drawingNamespace, "ea")[0],
+    complex: runProperties.getElementsByTagNameNS(drawingNamespace, "cs")[0],
+    color,
+    paragraphProperties: paragraph.getElementsByTagNameNS(
+      drawingNamespace,
+      "pPr",
+    )[0],
   };
 }
 

@@ -30,7 +30,30 @@ const topologyOperations = new Set([
   "move_slide",
 ]);
 const slideMetadataOperations = new Set(["rename_slide", "set_slide_hidden"]);
-const elementOperations = new Set(["replace_text", "move", "resize"]);
+const geometryOperations = new Set(["move", "resize", "rotate"]);
+const shapeAppearanceOperations = new Set([
+  "fill_color",
+  "line_color",
+  "line_width",
+  "fill_opacity",
+  "line_opacity",
+]);
+const textAppearanceOperations = new Set([
+  "font_size",
+  "bold",
+  "italic",
+  "underline",
+  "strikethrough",
+  "font_family",
+  "font_color",
+  "paragraph_alignment",
+]);
+const elementOperations = new Set([
+  "replace_text",
+  ...geometryOperations,
+  ...shapeAppearanceOperations,
+  ...textAppearanceOperations,
+]);
 const browserOperations = new Set([
   ...topologyOperations,
   ...slideMetadataOperations,
@@ -190,7 +213,7 @@ function updateElement(context, command) {
     context.slideIds.length - 1,
     "element slide index",
   );
-  if (command.op !== "replace_text" && path.length !== 1)
+  if (geometryOperations.has(command.op) && path.length !== 1)
     throw new Error(
       "Browser package geometry currently requires a top-level shape.",
     );
@@ -210,7 +233,11 @@ function updateElement(context, command) {
   const mutation =
     command.op === "replace_text"
       ? replaceElementText(shape, command)
-      : updateElementGeometry(shape, path, command);
+      : geometryOperations.has(command.op)
+        ? updateElementGeometry(shape, path, command)
+        : shapeAppearanceOperations.has(command.op)
+          ? updateShapeAppearance(shape, command)
+          : updateTextAppearance(shape, command);
   if (mutation.changed) context.entries[target.path] = serializeXml(slide);
   return {
     operation: command.op,
@@ -243,9 +270,8 @@ function replaceElementText(shape, command) {
 function updateElementGeometry(shape, path, command) {
   if (path.length !== 1) throw new Error("Invalid top-level shape path.");
   const transform = requiredShapeTransform(shape);
-  const offset = requiredDirectElement(transform, drawingNamespace, "off");
-  const extent = requiredDirectElement(transform, drawingNamespace, "ext");
   if (command.op === "move") {
+    const offset = requiredDirectElement(transform, drawingNamespace, "off");
     const expectedX = safeInteger(command.expectedX, "expectedX");
     const expectedY = safeInteger(command.expectedY, "expectedY");
     const x = safeInteger(command.x, "x");
@@ -275,6 +301,7 @@ function updateElementGeometry(shape, path, command) {
     };
   }
   if (command.op === "resize") {
+    const extent = requiredDirectElement(transform, drawingNamespace, "ext");
     const expectedWidth = positiveInteger(
       command.expectedWidth,
       "expectedWidth",
@@ -302,28 +329,462 @@ function updateElementGeometry(shape, path, command) {
       changed: expectedWidth !== width || expectedHeight !== height,
     };
   }
+  if (command.op === "rotate") {
+    const expectedRotation = safeInteger(
+      command.expectedRotation,
+      "expectedRotation",
+    );
+    const rotation = safeInteger(command.rotation, "rotation");
+    const current = transform.hasAttribute("rot")
+      ? coordinateAttribute(transform, "rot")
+      : 0;
+    const next = current + (rotation - expectedRotation) * 600;
+    if (!Number.isSafeInteger(next))
+      throw new Error("Browser package rotation exceeds the OOXML range.");
+    if (rotation !== expectedRotation)
+      transform.setAttribute("rot", String(next));
+    return {
+      previous: expectedRotation,
+      value: rotation,
+      changed: rotation !== expectedRotation,
+    };
+  }
   throw new Error(`Unsupported browser element operation: ${command.op}`);
+}
+
+function updateShapeAppearance(shape, command) {
+  const properties = requiredShapeProperties(shape);
+  if (command.op === "fill_color" || command.op === "line_color") {
+    const expectedColor = observedColorInteger(
+      command.expectedColor,
+      "expectedColor",
+    );
+    const color = colorInteger(command.color, "color");
+    if (expectedColor !== color) {
+      const container =
+        command.op === "fill_color" ? properties : ensureShapeLine(properties);
+      setSolidColor(container, color, {
+        laterNames:
+          command.op === "fill_color"
+            ? ["ln", "effectLst", "effectDag", "scene3d", "sp3d", "extLst"]
+            : [
+                "prstDash",
+                "custDash",
+                "round",
+                "bevel",
+                "miter",
+                "headEnd",
+                "tailEnd",
+                "extLst",
+              ],
+      });
+    }
+    return {
+      previous: expectedColor,
+      value: color,
+      changed: expectedColor !== color,
+    };
+  }
+  if (command.op === "line_width") {
+    const expectedWidth = nonnegativeInteger(
+      command.expectedWidth,
+      "expectedWidth",
+    );
+    const width = nonnegativeInteger(command.width, "width");
+    if (expectedWidth !== width)
+      ensureShapeLine(properties).setAttribute(
+        "w",
+        String(width * emuPerHundredthMillimeter),
+      );
+    return {
+      previous: expectedWidth,
+      value: width,
+      changed: expectedWidth !== width,
+    };
+  }
+  if (command.op === "fill_opacity" || command.op === "line_opacity") {
+    const expectedOpacity = percentageInteger(
+      command.expectedOpacity,
+      "expectedOpacity",
+    );
+    const opacity = percentageInteger(command.opacity, "opacity");
+    if (expectedOpacity !== opacity) {
+      const fallbackColor = colorInteger(
+        command.expectedColor,
+        "expectedColor",
+      );
+      const container =
+        command.op === "fill_opacity"
+          ? properties
+          : ensureShapeLine(properties);
+      setSolidOpacity(container, opacity, fallbackColor, {
+        laterNames:
+          command.op === "fill_opacity"
+            ? ["ln", "effectLst", "effectDag", "scene3d", "sp3d", "extLst"]
+            : [
+                "prstDash",
+                "custDash",
+                "round",
+                "bevel",
+                "miter",
+                "headEnd",
+                "tailEnd",
+                "extLst",
+              ],
+      });
+    }
+    return {
+      previous: expectedOpacity,
+      value: opacity,
+      changed: expectedOpacity !== opacity,
+    };
+  }
+  throw new Error(`Unsupported browser shape operation: ${command.op}`);
+}
+
+function updateTextAppearance(shape, command) {
+  if (command.op === "paragraph_alignment") {
+    const expectedAlignment = paragraphAlignment(
+      command.expectedAlignment,
+      "expectedAlignment",
+    );
+    const alignment = paragraphAlignment(command.alignment, "alignment");
+    if (expectedAlignment !== alignment)
+      for (const paragraph of editableParagraphs(shape))
+        ensureParagraphProperties(paragraph).setAttribute(
+          "algn",
+          {
+            left: "l",
+            center: "ctr",
+            right: "r",
+            justify: "just",
+          }[alignment],
+        );
+    return {
+      previous: expectedAlignment,
+      value: alignment,
+      changed: expectedAlignment !== alignment,
+    };
+  }
+
+  const properties = editableRunProperties(shape);
+  if (command.op === "font_size") {
+    const expectedSize = positiveInteger(command.expectedSize, "expectedSize");
+    const size = positiveInteger(command.size, "size");
+    if (size < 100 || size > 40_000)
+      throw new RangeError("size must be between 100 and 40000.");
+    if (expectedSize !== size)
+      for (const property of properties)
+        property.setAttribute("sz", String(size));
+    return {
+      previous: expectedSize,
+      value: size,
+      changed: expectedSize !== size,
+    };
+  }
+  if (command.op === "bold" || command.op === "italic") {
+    const field = command.op === "bold" ? "bold" : "italic";
+    const attribute = command.op === "bold" ? "b" : "i";
+    if (
+      typeof command[`expected${field[0].toUpperCase()}${field.slice(1)}`] !==
+        "boolean" ||
+      typeof command[field] !== "boolean"
+    )
+      throw new TypeError(`${field} values must be boolean.`);
+    const previous =
+      command[`expected${field[0].toUpperCase()}${field.slice(1)}`];
+    const value = command[field];
+    if (previous !== value)
+      for (const property of properties)
+        property.setAttribute(attribute, value ? "1" : "0");
+    return { previous, value, changed: previous !== value };
+  }
+  if (command.op === "underline" || command.op === "strikethrough") {
+    const field = command.op === "underline" ? "underline" : "strikethrough";
+    const expectedField =
+      command.op === "underline"
+        ? "expectedUnderline"
+        : "expectedStrikethrough";
+    if (
+      typeof command[expectedField] !== "boolean" ||
+      typeof command[field] !== "boolean"
+    )
+      throw new TypeError(`${field} values must be boolean.`);
+    const previous = command[expectedField];
+    const value = command[field];
+    if (previous !== value)
+      for (const property of properties)
+        property.setAttribute(
+          command.op === "underline" ? "u" : "strike",
+          command.op === "underline"
+            ? value
+              ? "sng"
+              : "none"
+            : value
+              ? "sngStrike"
+              : "noStrike",
+        );
+    return { previous, value, changed: previous !== value };
+  }
+  if (command.op === "font_family") {
+    const previous = fontFamily(command.expectedFamily, "expectedFamily");
+    const value = fontFamily(command.family, "family");
+    if (previous !== value)
+      for (const property of properties)
+        for (const name of ["latin", "ea", "cs"])
+          ensureDirectDrawingElement(property, name).setAttribute(
+            "typeface",
+            value,
+          );
+    return { previous, value, changed: previous !== value };
+  }
+  if (command.op === "font_color") {
+    const previous = observedColorInteger(
+      command.expectedColor,
+      "expectedColor",
+    );
+    const value = colorInteger(command.color, "color");
+    if (previous !== value)
+      for (const property of properties)
+        setSolidColor(property, value, {
+          laterNames: [
+            "highlight",
+            "uLnTx",
+            "uLn",
+            "uFillTx",
+            "uFill",
+            "latin",
+            "ea",
+            "cs",
+            "sym",
+            "hlinkClick",
+            "hlinkMouseOver",
+            "rtl",
+            "extLst",
+          ],
+        });
+    return { previous, value, changed: previous !== value };
+  }
+  throw new Error(`Unsupported browser text operation: ${command.op}`);
+}
+
+function editableParagraphs(shape) {
+  const paragraphs = [...shape.getElementsByTagNameNS(drawingNamespace, "p")];
+  if (!paragraphs.length)
+    throw new Error("The browser package target has no editable paragraphs.");
+  return paragraphs;
+}
+
+function editableRunProperties(shape) {
+  const properties = [];
+  for (const paragraph of editableParagraphs(shape))
+    for (const name of ["r", "fld"])
+      for (const run of [
+        ...paragraph.getElementsByTagNameNS(drawingNamespace, name),
+      ]) {
+        let property = directElement(run, drawingNamespace, "rPr");
+        if (!property) {
+          property = run.ownerDocument.createElementNS(
+            drawingNamespace,
+            "a:rPr",
+          );
+          run.insertBefore(property, run.firstChild);
+        }
+        properties.push(property);
+      }
+  if (!properties.length)
+    throw new Error("The browser package target has no editable text runs.");
+  return properties;
+}
+
+function ensureParagraphProperties(paragraph) {
+  let properties = directElement(paragraph, drawingNamespace, "pPr");
+  if (properties) return properties;
+  properties = paragraph.ownerDocument.createElementNS(
+    drawingNamespace,
+    "a:pPr",
+  );
+  paragraph.insertBefore(properties, paragraph.firstChild);
+  return properties;
+}
+
+function ensureDirectDrawingElement(parent, name) {
+  let element = directElement(parent, drawingNamespace, name);
+  if (element) return element;
+  element = parent.ownerDocument.createElementNS(drawingNamespace, `a:${name}`);
+  const order = [
+    "ln",
+    "noFill",
+    "solidFill",
+    "gradFill",
+    "blipFill",
+    "pattFill",
+    "grpFill",
+    "effectLst",
+    "effectDag",
+    "highlight",
+    "uLnTx",
+    "uLn",
+    "uFillTx",
+    "uFill",
+    "latin",
+    "ea",
+    "cs",
+    "sym",
+    "hlinkClick",
+    "hlinkMouseOver",
+    "rtl",
+    "extLst",
+  ];
+  const position = order.indexOf(name);
+  const anchor = [...parent.childNodes].find(
+    (node) =>
+      node.nodeType === 1 &&
+      node.namespaceURI === drawingNamespace &&
+      order.indexOf(node.localName) > position,
+  );
+  if (anchor) parent.insertBefore(element, anchor);
+  else parent.appendChild(element);
+  return element;
+}
+
+function requiredShapeProperties(shape) {
+  if (shape.localName === "graphicFrame")
+    throw new Error("The browser package target has no shape appearance.");
+  const propertiesName = shape.localName === "grpSp" ? "grpSpPr" : "spPr";
+  return requiredDirectElement(shape, presentationNamespace, propertiesName);
+}
+
+function ensureShapeLine(properties) {
+  let line = directElement(properties, drawingNamespace, "ln");
+  if (line) return line;
+  line = properties.ownerDocument.createElementNS(drawingNamespace, "a:ln");
+  insertBeforeDrawingChildren(properties, line, [
+    "effectLst",
+    "effectDag",
+    "scene3d",
+    "sp3d",
+    "extLst",
+  ]);
+  return line;
+}
+
+function setSolidColor(container, color, { laterNames }) {
+  const existingFill = directDrawingFill(container);
+  const previousAlpha = existingFill
+    ? directColorTransform(existingFill, "alpha")?.getAttribute("val")
+    : null;
+  const solidFill = container.ownerDocument.createElementNS(
+    drawingNamespace,
+    "a:solidFill",
+  );
+  const colorElement = container.ownerDocument.createElementNS(
+    drawingNamespace,
+    "a:srgbClr",
+  );
+  colorElement.setAttribute(
+    "val",
+    color.toString(16).padStart(6, "0").toUpperCase(),
+  );
+  if (previousAlpha !== null) {
+    const alpha = container.ownerDocument.createElementNS(
+      drawingNamespace,
+      "a:alpha",
+    );
+    alpha.setAttribute("val", previousAlpha);
+    colorElement.appendChild(alpha);
+  }
+  solidFill.appendChild(colorElement);
+  if (existingFill) container.replaceChild(solidFill, existingFill);
+  else insertBeforeDrawingChildren(container, solidFill, laterNames);
+  return solidFill;
+}
+
+function setSolidOpacity(container, opacity, fallbackColor, { laterNames }) {
+  let solidFill = directElement(container, drawingNamespace, "solidFill");
+  const otherFill = directDrawingFill(container);
+  if (!solidFill && otherFill)
+    throw new Error(
+      "Browser package opacity currently requires a solid or inherited fill.",
+    );
+  if (!solidFill)
+    solidFill = setSolidColor(container, fallbackColor, { laterNames });
+  let color = [...solidFill.childNodes].find(
+    (node) => node.nodeType === 1 && node.namespaceURI === drawingNamespace,
+  );
+  if (!color) {
+    color = container.ownerDocument.createElementNS(
+      drawingNamespace,
+      "a:srgbClr",
+    );
+    color.setAttribute(
+      "val",
+      fallbackColor.toString(16).padStart(6, "0").toUpperCase(),
+    );
+    solidFill.appendChild(color);
+  }
+  const current = directElement(color, drawingNamespace, "alpha");
+  const alpha =
+    current ??
+    container.ownerDocument.createElementNS(drawingNamespace, "a:alpha");
+  alpha.setAttribute("val", String(opacity * 1000));
+  if (!current) color.appendChild(alpha);
+}
+
+function directDrawingFill(container) {
+  const names = new Set([
+    "noFill",
+    "solidFill",
+    "gradFill",
+    "blipFill",
+    "pattFill",
+    "grpFill",
+  ]);
+  return [...container.childNodes].find(
+    (node) =>
+      node.nodeType === 1 &&
+      node.namespaceURI === drawingNamespace &&
+      names.has(node.localName),
+  );
+}
+
+function directColorTransform(fill, name) {
+  const color = [...fill.childNodes].find(
+    (node) => node.nodeType === 1 && node.namespaceURI === drawingNamespace,
+  );
+  return color ? directElement(color, drawingNamespace, name) : null;
+}
+
+function insertBeforeDrawingChildren(parent, child, laterNames) {
+  const later = new Set(laterNames);
+  const anchor = [...parent.childNodes].find(
+    (node) =>
+      node.nodeType === 1 &&
+      node.namespaceURI === drawingNamespace &&
+      later.has(node.localName),
+  );
+  if (anchor) parent.insertBefore(child, anchor);
+  else parent.appendChild(child);
 }
 
 function requiredShapeTransform(shape) {
   if (shape.localName === "graphicFrame")
     return requiredDirectElement(shape, presentationNamespace, "xfrm");
-  const propertiesName = shape.localName === "grpSp" ? "grpSpPr" : "spPr";
-  const properties = requiredDirectElement(
-    shape,
-    presentationNamespace,
-    propertiesName,
-  );
+  const properties = requiredShapeProperties(shape);
   return requiredDirectElement(properties, drawingNamespace, "xfrm");
 }
 
-function requiredDirectElement(parent, namespace, name) {
-  const element = [...parent.childNodes].find(
+function directElement(parent, namespace, name) {
+  return [...parent.childNodes].find(
     (node) =>
       node.nodeType === 1 &&
       node.namespaceURI === namespace &&
       node.localName === name,
   );
+}
+
+function requiredDirectElement(parent, namespace, name) {
+  const element = directElement(parent, namespace, name);
   if (!element) throw new Error(`Required OOXML element is missing: ${name}`);
   return element;
 }
@@ -345,6 +806,49 @@ function positiveInteger(value, name) {
   const integer = safeInteger(value, name);
   if (integer <= 0) throw new RangeError(`${name} must be greater than zero.`);
   return integer;
+}
+
+function nonnegativeInteger(value, name) {
+  const integer = safeInteger(value, name);
+  if (integer < 0) throw new RangeError(`${name} must not be negative.`);
+  return integer;
+}
+
+function colorInteger(value, name) {
+  const integer = nonnegativeInteger(value, name);
+  if (integer > 0xffffff)
+    throw new RangeError(`${name} must be an RGB color integer.`);
+  return integer;
+}
+
+function observedColorInteger(value, name) {
+  if (value === -1) return value;
+  return colorInteger(value, name);
+}
+
+function percentageInteger(value, name) {
+  const integer = nonnegativeInteger(value, name);
+  if (integer > 100) throw new RangeError(`${name} must be between 0 and 100.`);
+  return integer;
+}
+
+function paragraphAlignment(value, name) {
+  if (!["left", "center", "right", "justify"].includes(value))
+    throw new TypeError(`${name} must be left, center, right, or justify.`);
+  return value;
+}
+
+function fontFamily(value, name) {
+  if (typeof value !== "string")
+    throw new TypeError(`${name} must be a string.`);
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.length > 100 ||
+    /[\u0000-\u001f\u007f]/u.test(trimmed)
+  )
+    throw new RangeError(`${name} is not a valid font family.`);
+  return trimmed;
 }
 
 function directShapes(container) {

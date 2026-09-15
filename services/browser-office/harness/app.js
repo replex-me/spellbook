@@ -45,6 +45,47 @@ const conformanceLabels = [
   "after-rename",
   "after-hide",
 ];
+const productElementOperations = new Set([
+  "replace_text",
+  "move",
+  "resize",
+  "rotate",
+  "fill_color",
+  "line_color",
+  "line_width",
+  "fill_opacity",
+  "line_opacity",
+  "font_size",
+  "bold",
+  "italic",
+  "underline",
+  "strikethrough",
+  "font_family",
+  "font_color",
+  "paragraph_alignment",
+]);
+const nativeExactUndoOperations = new Set([
+  "replace_text",
+  "move",
+  "resize",
+  "fill_color",
+]);
+const patchedRuntimeOnlyProductOperations = new Set([
+  "font_size",
+  "bold",
+  "italic",
+  "underline",
+  "strikethrough",
+  "font_family",
+  "font_color",
+  "paragraph_alignment",
+]);
+const paragraphAlignmentByUnoValue = new Map([
+  [0, "left"],
+  [1, "right"],
+  [2, "justify"],
+  [3, "center"],
+]);
 let currentBytes;
 let currentSlideCount = 0;
 let baseBytes;
@@ -56,6 +97,22 @@ const productUndoHistory = [];
 const productRedoHistory = [];
 let reconciledModelRevision = "";
 let unreconciledModelRevision = "";
+
+function clearNativeProductHistoryAvailability() {
+  for (const entry of [...productUndoHistory, ...productRedoHistory]) {
+    entry.nativeUndoAvailable = false;
+    entry.nativeRedoAvailable = false;
+  }
+}
+
+function patchedBrowserRuntimeAdmitted() {
+  const runtime = globalThis.spellbookBrowserRuntimeCandidate;
+  return (
+    runtime?.buildReady === true &&
+    runtime.buildCommit === runtime.candidateCommit &&
+    runtime.patchLevel === "browser-undo-v5"
+  );
+}
 
 function setState(nextState, message) {
   body.dataset.state = nextState;
@@ -98,6 +155,7 @@ async function writeAndOpen(bytes, name = "document.pptx") {
   filename = name;
   activePath = `/tmp/spellbook/${name.replace(/[^a-zA-Z0-9._-]/gu, "-")}`;
   if (engineDocumentOpen) {
+    if (productMode) clearNativeProductHistoryAvailability();
     await request("close");
     engineDocumentOpen = false;
   }
@@ -304,6 +362,158 @@ function expectedElementForId(slides, elementId) {
   throw new Error("Browser package target is absent from expectedSlides.");
 }
 
+function firstModelDifference(left, right, path = "slides") {
+  if (Object.is(left, right)) return null;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object")
+    return path;
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    const difference = firstModelDifference(
+      left[key],
+      right[key],
+      `${path}.${key}`,
+    );
+    if (difference) return difference;
+  }
+  return null;
+}
+
+function requiredObservedNumber(value, name) {
+  const number = Number(value);
+  if (!Number.isFinite(number))
+    throw new Error(`Browser observation has no usable ${name}.`);
+  return number;
+}
+
+function requiredWholeTextFormatting(element) {
+  const formatting = element?.wholeTextFormatting;
+  if (!formatting || typeof formatting !== "object")
+    throw new Error("Browser observation has no uniform text formatting.");
+  return formatting;
+}
+
+function hundredthsOfPoint(value, name) {
+  return Math.round(requiredObservedNumber(value, name) * 100);
+}
+
+function normalizedFontSize(value, name) {
+  return Math.round(requiredObservedNumber(value, name) * 20) * 5;
+}
+
+function observedItalic(value) {
+  const normalized = String(value ?? "").toUpperCase();
+  if (normalized.includes("NONE")) return false;
+  if (normalized.includes("ITALIC") || normalized.includes("OBLIQUE"))
+    return true;
+  throw new Error("Browser observation has no usable italic state.");
+}
+
+function observedTextDecoration(value) {
+  const number = Number(value ?? 0);
+  if (!Number.isFinite(number))
+    throw new Error("Browser observation has no usable text decoration.");
+  return number !== 0;
+}
+
+function observedParagraphAlignment(value) {
+  const number = Number(value);
+  const alignment = paragraphAlignmentByUnoValue.get(number);
+  if (!alignment)
+    throw new Error(
+      "Browser observation has no supported paragraph alignment.",
+    );
+  return alignment;
+}
+
+function textFormattingValues(element, property) {
+  const formatting = element?.wholeTextFormatting;
+  if (!formatting || typeof formatting !== "object") return [];
+  return [
+    formatting[property],
+    formatting[`${property}Asian`],
+    formatting[`${property}Complex`],
+  ];
+}
+
+function everyTextFormattingValue(element, property, predicate) {
+  const values = textFormattingValues(element, property);
+  return (
+    values.length === 3 &&
+    values.every(
+      (value) => value !== null && value !== undefined && predicate(value),
+    )
+  );
+}
+
+function productMutationMatches(command, target) {
+  if (!target) return false;
+  try {
+    switch (command.op) {
+      case "replace_text":
+        return target.text === command.text;
+      case "move":
+        return target.x === command.x && target.y === command.y;
+      case "resize":
+        return (
+          target.width === command.width && target.height === command.height
+        );
+      case "rotate":
+        return target.rotation === command.rotation;
+      case "fill_color":
+        return target.fill === command.color;
+      case "line_color":
+        return target.lineColor === command.color;
+      case "line_width":
+        return target.lineWidth === command.width;
+      case "fill_opacity":
+        return target.fillOpacity === command.opacity;
+      case "line_opacity":
+        return target.lineOpacity === command.opacity;
+      case "font_size":
+        return everyTextFormattingValue(
+          target,
+          "fontSize",
+          (value) => hundredthsOfPoint(value, "font size") === command.size,
+        );
+      case "bold":
+        return everyTextFormattingValue(
+          target,
+          "fontWeight",
+          (value) => Number(value) === (command.bold ? 150 : 100),
+        );
+      case "italic":
+        return everyTextFormattingValue(
+          target,
+          "fontStyle",
+          (value) => observedItalic(value) === command.italic,
+        );
+      case "underline":
+        return observedTextDecoration(target.underline) === command.underline;
+      case "strikethrough":
+        return (
+          observedTextDecoration(target.strikethrough) === command.strikethrough
+        );
+      case "font_family":
+        return everyTextFormattingValue(
+          target,
+          "fontFamily",
+          (value) => value === command.family,
+        );
+      case "font_color":
+        return target.color === command.color;
+      case "paragraph_alignment":
+        return (
+          observedParagraphAlignment(target.paragraphAlignment) ===
+          command.alignment
+        );
+      default:
+        return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
 async function prepareProductPackageMutation(nativeRequest) {
   if (nativeRequest?.operation !== "edit" || nativeRequest.dryRun === true)
     return null;
@@ -317,54 +527,171 @@ async function prepareProductPackageMutation(nativeRequest) {
   const command = nativeRequest.command;
   if (!command || typeof command !== "object" || Array.isArray(command))
     throw new Error("Browser edit command is invalid.");
-  if (!["replace_text", "move", "resize"].includes(command.op))
+  if (!productElementOperations.has(command.op))
     throw new Error(`browser_ooxml_reconciliation_required:${command.op}`);
+  if (
+    patchedRuntimeOnlyProductOperations.has(command.op) &&
+    !patchedBrowserRuntimeAdmitted()
+  )
+    throw new Error("browser_native_text_undo_patch_required");
   if (typeof command.elementId !== "string")
     throw new Error("Browser element command is invalid.");
+  const expectedSlides = parseExpectedSlides(nativeRequest.expectedSlides);
   const expectedElement = expectedElementForId(
-    parseExpectedSlides(nativeRequest.expectedSlides),
+    expectedSlides,
     command.elementId,
   );
-  let packageCommand;
-  if (command.op === "replace_text") {
-    if (
-      typeof expectedElement.text !== "string" ||
-      typeof command.text !== "string"
-    )
-      throw new Error("Browser replace_text command is invalid.");
-    packageCommand = {
-      op: command.op,
-      elementId: command.elementId,
-      expectedText: expectedElement.text,
-      text: command.text,
-    };
-  } else if (command.op === "move") {
-    packageCommand = {
-      op: command.op,
-      elementId: command.elementId,
-      expectedX: expectedElement.x,
-      expectedY: expectedElement.y,
-      x: Math.round(command.x),
-      y: Math.round(command.y),
-    };
-  } else {
-    packageCommand = {
-      op: command.op,
-      elementId: command.elementId,
-      expectedWidth: expectedElement.width,
-      expectedHeight: expectedElement.height,
-      width: Math.round(command.width),
-      height: Math.round(command.height),
-    };
-  }
+  const packageCommand = productPackageCommand(command, expectedElement);
   const beforeBytes = currentBytes.slice();
   const mutation = await applyMutation(beforeBytes, packageCommand);
   return {
     beforeBytes,
     beforeRevision: reconciledModelRevision,
+    beforeSlides: expectedSlides,
+    nativeCommand: structuredClone(command),
+    permission: structuredClone(nativeRequest.permission),
     command: packageCommand,
     mutation,
   };
+}
+
+function productPackageCommand(command, expectedElement) {
+  const base = { op: command.op, elementId: command.elementId };
+  switch (command.op) {
+    case "replace_text":
+      if (
+        typeof expectedElement.text !== "string" ||
+        typeof command.text !== "string"
+      )
+        throw new Error("Browser replace_text command is invalid.");
+      return {
+        ...base,
+        expectedText: expectedElement.text,
+        text: command.text,
+      };
+    case "move":
+      return {
+        ...base,
+        expectedX: expectedElement.x,
+        expectedY: expectedElement.y,
+        x: Math.round(command.x),
+        y: Math.round(command.y),
+      };
+    case "resize":
+      return {
+        ...base,
+        expectedWidth: expectedElement.width,
+        expectedHeight: expectedElement.height,
+        width: Math.round(command.width),
+        height: Math.round(command.height),
+      };
+    case "rotate":
+      return {
+        ...base,
+        expectedRotation: expectedElement.rotation,
+        rotation: Math.round(command.degrees * 100),
+      };
+    case "fill_color":
+      return {
+        ...base,
+        expectedColor: expectedElement.fill,
+        color: Math.round(command.color),
+      };
+    case "line_color":
+      return {
+        ...base,
+        expectedColor: expectedElement.lineColor,
+        color: Math.round(command.color),
+      };
+    case "line_width":
+      return {
+        ...base,
+        expectedWidth: expectedElement.lineWidth,
+        width: Math.round(command.size * 100),
+      };
+    case "fill_opacity":
+      return {
+        ...base,
+        expectedOpacity: expectedElement.fillOpacity,
+        opacity: Math.round(command.opacity),
+        expectedColor: expectedElement.fill,
+      };
+    case "line_opacity":
+      return {
+        ...base,
+        expectedOpacity: expectedElement.lineOpacity,
+        opacity: Math.round(command.opacity),
+        expectedColor: expectedElement.lineColor,
+      };
+    case "font_size": {
+      const formatting = requiredWholeTextFormatting(expectedElement);
+      return {
+        ...base,
+        expectedSize: hundredthsOfPoint(formatting.fontSize, "font size"),
+        size: normalizedFontSize(command.size, "font size"),
+      };
+    }
+    case "bold": {
+      const formatting = requiredWholeTextFormatting(expectedElement);
+      return {
+        ...base,
+        expectedBold:
+          requiredObservedNumber(formatting.fontWeight, "font weight") >= 150,
+        bold: command.bold,
+      };
+    }
+    case "italic": {
+      const formatting = requiredWholeTextFormatting(expectedElement);
+      return {
+        ...base,
+        expectedItalic: observedItalic(formatting.fontStyle),
+        italic: command.italic,
+      };
+    }
+    case "underline":
+      return {
+        ...base,
+        expectedUnderline: observedTextDecoration(expectedElement.underline),
+        underline: command.underline,
+      };
+    case "strikethrough":
+      return {
+        ...base,
+        expectedStrikethrough: observedTextDecoration(
+          expectedElement.strikethrough,
+        ),
+        strikethrough: command.strikethrough,
+      };
+    case "font_family": {
+      const formatting = requiredWholeTextFormatting(expectedElement);
+      if (
+        typeof formatting.fontFamily !== "string" ||
+        typeof command.family !== "string"
+      )
+        throw new Error("Browser observation has no usable font family.");
+      return {
+        ...base,
+        expectedFamily: formatting.fontFamily,
+        family: String(command.family).trim(),
+      };
+    }
+    case "font_color":
+      return {
+        ...base,
+        expectedColor: expectedElement.color,
+        color: Math.round(command.color),
+      };
+    case "paragraph_alignment":
+      return {
+        ...base,
+        expectedAlignment: observedParagraphAlignment(
+          expectedElement.paragraphAlignment,
+        ),
+        alignment: command.alignment,
+      };
+    default:
+      throw new Error(`browser_ooxml_reconciliation_required:${command.op}`);
+  }
 }
 
 async function commitProductPackageMutation(prepared, nativeValue) {
@@ -378,14 +705,17 @@ async function commitProductPackageMutation(prepared, nativeValue) {
   const target = nativeValue.slides
     ?.flatMap((slide) => slide.elements ?? [])
     .find((element) => element.elementId === prepared.command.elementId);
-  const agreed =
-    prepared.command.op === "replace_text"
-      ? target?.text === prepared.command.text
-      : prepared.command.op === "move"
-        ? target?.x === prepared.command.x && target?.y === prepared.command.y
-        : target?.width === prepared.command.width &&
-          target?.height === prepared.command.height;
-  if (!agreed) throw new Error("Browser native and package edits disagree.");
+  if (!productMutationMatches(prepared.command, target)) {
+    await request("dispatch", { unoCommand: "Undo" });
+    const restored = await observeNativeDocument();
+    if (restored.revision !== prepared.beforeRevision) {
+      unreconciledModelRevision = restored.revision;
+      throw new Error("browser_native_package_disagreement_rollback_failed");
+    }
+    reconciledModelRevision = restored.revision;
+    unreconciledModelRevision = "";
+    throw new Error("Browser native and package edits disagree.");
+  }
   if (!prepared.mutation.report.changedParts.length) {
     reconciledModelRevision = nativeValue.revision;
     unreconciledModelRevision = "";
@@ -397,6 +727,8 @@ async function commitProductPackageMutation(prepared, nativeValue) {
     reconciliation: {
       beforeRevision: prepared.beforeRevision,
       afterRevision: nativeValue.revision,
+      nativeCommand: prepared.nativeCommand,
+      permission: prepared.permission,
     },
   };
   currentBytes = afterBytes;
@@ -405,7 +737,14 @@ async function commitProductPackageMutation(prepared, nativeValue) {
     afterBytes,
     beforeRevision: prepared.beforeRevision,
     afterRevision: nativeValue.revision,
+    beforeSlides: prepared.beforeSlides,
+    nativeCommand: prepared.nativeCommand,
+    permission: prepared.permission,
     command: journalCommand,
+    nativeUndoAvailable:
+      nativeExactUndoOperations.has(prepared.command.op) ||
+      patchedBrowserRuntimeAdmitted(),
+    nativeRedoAvailable: false,
   });
   commands.push(journalCommand);
   productRedoHistory.length = 0;
@@ -455,7 +794,11 @@ async function replayRecoveredCommands(base, recoveredCommands) {
       afterBytes: candidate,
       beforeRevision: reconciliation.beforeRevision,
       afterRevision: reconciliation.afterRevision,
+      nativeCommand: reconciliation.nativeCommand ?? null,
+      permission: reconciliation.permission ?? null,
       command,
+      nativeUndoAvailable: false,
+      nativeRedoAvailable: false,
     });
     commands.push(command);
   }
@@ -465,13 +808,67 @@ async function replayRecoveredCommands(base, recoveredCommands) {
 async function undoProductMutation() {
   const previous = productUndoHistory.at(-1);
   if (!previous || !commands.length) return false;
-  await writeAndOpen(previous.beforeBytes, filename);
+  const current = await observeNativeDocument();
+  if (current.revision !== reconciledModelRevision) {
+    unreconciledModelRevision = current.revision;
+    return false;
+  }
+  const useNativeUndo = previous.nativeUndoAvailable === true;
+  if (useNativeUndo) {
+    await request("dispatch", { unoCommand: "Undo" });
+    const restored = await observeNativeDocument();
+    if (restored.revision !== previous.beforeRevision) {
+      const difference = firstModelDifference(
+        previous.beforeSlides,
+        restored.slides,
+      );
+      await request("dispatch", { unoCommand: "Redo" });
+      const recovered = await observeNativeDocument();
+      unreconciledModelRevision =
+        recovered.revision === previous.afterRevision ? "" : recovered.revision;
+      throw new Error(
+        `browser_native_undo_revision_mismatch:${difference ?? "unknown"}`,
+      );
+    }
+    currentBytes = previous.beforeBytes.slice();
+    previous.nativeUndoAvailable = false;
+    previous.nativeRedoAvailable = true;
+  } else {
+    await writeAndOpen(previous.beforeBytes, filename);
+    const restored = await observeNativeDocument();
+    if (restored.revision !== previous.beforeRevision) {
+      unreconciledModelRevision = restored.revision;
+      throw new Error("browser_package_undo_revision_mismatch");
+    }
+  }
   productUndoHistory.pop();
   commands.pop();
   productRedoHistory.push(previous);
   reconciledModelRevision = previous.beforeRevision;
   unreconciledModelRevision = "";
-  await persistCheckpoint();
+  try {
+    await persistCheckpoint();
+  } catch (error) {
+    productRedoHistory.pop();
+    productUndoHistory.push(previous);
+    commands.push(previous.command);
+    if (useNativeUndo) {
+      await request("dispatch", { unoCommand: "Redo" });
+      const recovered = await observeNativeDocument();
+      if (recovered.revision !== previous.afterRevision)
+        throw new Error("browser_undo_checkpoint_rollback_failed");
+      previous.nativeUndoAvailable = true;
+      previous.nativeRedoAvailable = false;
+      currentBytes = previous.afterBytes.slice();
+    } else {
+      await writeAndOpen(previous.afterBytes, filename);
+      const recovered = await observeNativeDocument();
+      if (recovered.revision !== previous.afterRevision)
+        throw new Error("browser_undo_checkpoint_reopen_failed");
+    }
+    reconciledModelRevision = previous.afterRevision;
+    throw error;
+  }
   reportHostModified(commands.length > 0);
   return true;
 }
@@ -481,13 +878,96 @@ async function redoProductMutation() {
   if (!next) return false;
   if ((await sha256(currentBytes)) !== (await sha256(next.beforeBytes)))
     throw new Error("Browser redo base no longer matches the package history.");
-  await writeAndOpen(next.afterBytes, filename);
+  const current = await observeNativeDocument();
+  if (current.revision !== reconciledModelRevision) {
+    unreconciledModelRevision = current.revision;
+    return false;
+  }
+  const useNativeRedo = next.nativeRedoAvailable === true;
+  const canReplayNative =
+    !useNativeRedo &&
+    next.nativeCommand &&
+    typeof next.nativeCommand === "object" &&
+    next.permission &&
+    typeof next.permission === "object";
+  if (useNativeRedo) {
+    await request("dispatch", { unoCommand: "Redo" });
+    const restored = await observeNativeDocument();
+    if (restored.revision !== next.afterRevision) {
+      await request("dispatch", { unoCommand: "Undo" });
+      const recovered = await observeNativeDocument();
+      unreconciledModelRevision =
+        recovered.revision === next.beforeRevision ? "" : recovered.revision;
+      throw new Error("browser_native_redo_revision_mismatch");
+    }
+    currentBytes = next.afterBytes.slice();
+    next.nativeUndoAvailable = true;
+    next.nativeRedoAvailable = false;
+  } else if (canReplayNative) {
+    const replayed = (
+      await request("native", {
+        nativeRequest: {
+          operation: "edit",
+          expectedRevision: current.revision,
+          expectedSlides: JSON.stringify(current.slides),
+          command: next.nativeCommand,
+          permission: next.permission,
+          suppressCapture: true,
+        },
+      })
+    ).value;
+    const target = replayed?.slides
+      ?.flatMap((slide) => slide.elements ?? [])
+      .find((element) => element.elementId === next.command.elementId);
+    if (
+      replayed?.revision !== next.afterRevision ||
+      !productMutationMatches(next.command, target)
+    ) {
+      await request("dispatch", { unoCommand: "Undo" });
+      const recovered = await observeNativeDocument();
+      unreconciledModelRevision =
+        recovered.revision === next.beforeRevision ? "" : recovered.revision;
+      throw new Error("browser_native_replay_revision_mismatch");
+    }
+    currentBytes = next.afterBytes.slice();
+    next.nativeUndoAvailable = true;
+    next.nativeRedoAvailable = false;
+  } else {
+    await writeAndOpen(next.afterBytes, filename);
+    const restored = await observeNativeDocument();
+    if (restored.revision !== next.afterRevision) {
+      unreconciledModelRevision = restored.revision;
+      throw new Error("browser_package_redo_revision_mismatch");
+    }
+  }
   productRedoHistory.pop();
   productUndoHistory.push(next);
   commands.push(next.command);
   reconciledModelRevision = next.afterRevision;
   unreconciledModelRevision = "";
-  await persistCheckpoint();
+  try {
+    await persistCheckpoint();
+  } catch (error) {
+    commands.pop();
+    productUndoHistory.pop();
+    productRedoHistory.push(next);
+    if (useNativeRedo || canReplayNative) {
+      await request("dispatch", { unoCommand: "Undo" });
+      const recovered = await observeNativeDocument();
+      if (recovered.revision !== next.beforeRevision)
+        throw new Error("browser_redo_checkpoint_rollback_failed");
+      next.nativeUndoAvailable = false;
+      next.nativeRedoAvailable = true;
+      currentBytes = next.beforeBytes.slice();
+    } else {
+      await writeAndOpen(next.beforeBytes, filename);
+      const recovered = await observeNativeDocument();
+      if (recovered.revision !== next.beforeRevision)
+        throw new Error("browser_redo_checkpoint_reopen_failed");
+    }
+    reconciledModelRevision = next.beforeRevision;
+    throw error;
+  }
   reportHostModified(true);
   return true;
 }
