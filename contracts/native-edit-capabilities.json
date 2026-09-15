@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "2.8.0",
+  "version": "2.11.0",
   "coordinateUnit": "1/100mm",
   "nativeUndoRequired": true,
   "verifiedWith": {
@@ -15,7 +15,7 @@
     }
   },
   "aiExposure": {
-    "operationCount": 66,
+    "operationCount": 72,
     "policy": "Expose every bounded operation except format-excluded mutations. Before execution, authorize against the current document permission and the live editor engine patch level. Availability records release-evidence maturity; it does not silently remove an implemented operation from the model schema."
   },
   "transaction": {
@@ -24,7 +24,12 @@
     "atomicByDefault": true,
     "targetResolution": "Targets are captured from one observed revision and rebound to the same live UNO objects before every command.",
     "maxStructureChangingCommandsOnStockEngine": 1,
-    "identityReplacingOperations": ["set_chart_data", "set_chart_type"],
+    "identityReplacingOperations": [
+      "set_chart_data",
+      "set_chart_type",
+      "set_chart_format",
+      "replace_animation_effect"
+    ],
     "ordering": "Element and creation batches use the editor command domain and commit as one native Undo action. On the stock engine a structure-changing slide command must be the only command in its transaction; multi-command slide-structure batches require the verified engine patch because stock page moves can rename existing objects. An identity-replacing operation must be the only command in its transaction so no later command can target the replaced native object."
   },
   "mutationModel": {
@@ -259,6 +264,14 @@
         "identityEffect": "reorder",
         "availability": "runtime_verified",
         "minEnginePatch": 0
+      },
+      "set_sections": {
+        "family": "slide_structure",
+        "target": "document",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 20
       },
       "set_speaker_notes": {
         "family": "speaker_notes",
@@ -524,6 +537,14 @@
         "availability": "runtime_verified",
         "minEnginePatch": 0
       },
+      "set_chart_format": {
+        "family": "chart_model",
+        "target": "element",
+        "execution": "model_replace",
+        "identityEffect": "replace",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 0
+      },
       "set_slide_layout": {
         "family": "slide_properties",
         "target": "slide",
@@ -748,6 +769,38 @@
         "availability": "runtime_verified",
         "minEnginePatch": 8
       },
+      "add_animation_effect": {
+        "family": "animation",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "create",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 21
+      },
+      "remove_animation_effect": {
+        "family": "animation",
+        "target": "animation_effect",
+        "execution": "native_transform",
+        "identityEffect": "delete",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 21
+      },
+      "replace_animation_effect": {
+        "family": "animation",
+        "target": "animation_effect",
+        "execution": "native_transform",
+        "identityEffect": "replace",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 21
+      },
+      "move_animation_effect": {
+        "family": "animation",
+        "target": "animation_effect",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 21
+      },
       "crop_image": {
         "family": "media_geometry",
         "target": "element",
@@ -772,6 +825,7 @@
       "duplicate_slide",
       "delete_slide",
       "move_slide",
+      "set_sections",
       "set_speaker_notes",
       "set_slide_layout",
       "set_background",
@@ -809,6 +863,7 @@
       "delete_element",
       "set_chart_data",
       "set_chart_type",
+      "set_chart_format",
       "set_table_cell",
       "set_alt_text",
       "set_shape_name",
@@ -830,6 +885,10 @@
       "set_table_column_width",
       "set_table_cell_format",
       "set_animation_timing",
+      "add_animation_effect",
+      "remove_animation_effect",
+      "replace_animation_effect",
+      "move_animation_effect",
       "crop_image",
       "set_paragraph_format"
     ]
@@ -837,7 +896,13 @@
   "candidateOperations": [
     "set_slide_metadata",
     "set_line_style",
-    "set_paragraph_format"
+    "set_paragraph_format",
+    "set_sections",
+    "set_chart_format",
+    "add_animation_effect",
+    "remove_animation_effect",
+    "replace_animation_effect",
+    "move_animation_effect"
   ],
   "formatExcludedOperations": [
     {
@@ -869,6 +934,7 @@
           "duplicate_slide",
           "delete_slide",
           "move_slide",
+          "set_sections",
           "set_speaker_notes",
           "add_text_box",
           "add_shape",
@@ -902,6 +968,7 @@
           "delete_element",
           "set_chart_data",
           "set_chart_type",
+          "set_chart_format",
           "set_slide_layout",
           "set_background",
           "set_table_cell",
@@ -929,6 +996,10 @@
           "set_slide_transition",
           "set_slide_metadata",
           "set_animation_timing",
+          "add_animation_effect",
+          "remove_animation_effect",
+          "replace_animation_effect",
+          "move_animation_effect",
           "crop_image",
           "set_paragraph_format"
         ]
@@ -939,6 +1010,31 @@
         "items": { "type": "string" }
       },
       "slideIndex": { "type": ["number", "null"] },
+      "sections": {
+        "type": ["array", "null"],
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^\\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\}$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "startSlideIndex": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": ["id", "name", "startSlideIndex"]
+        },
+        "description": "Complete ordered section definition. Non-empty lists must start at slide 0 and use strictly increasing startSlideIndex values. Preserve observed ids when retaining sections; generate a new braced UUID for a new section."
+      },
       "masterIndex": {
         "type": ["number", "null"],
         "description": "Exact slide-layout index from the current native observation. Required by set_slide_layout."
@@ -1026,6 +1122,19 @@
         "type": ["string", "null"],
         "maxLength": 64,
         "description": "Exact animation effect id from the current native observation."
+      },
+      "animationIndex": {
+        "type": ["integer", "null"],
+        "minimum": 0,
+        "maximum": 199,
+        "description": "Requested global effect position from the current slide animation observation."
+      },
+      "presetId": {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^ooo-(entrance|emphasis|exit|motionpath)-[A-Za-z0-9._-]+$",
+        "description": "LibreOffice/OpenDocument animation preset id preserved by PPTX round-trip."
       },
       "duration": {
         "type": ["number", "null"],
@@ -1186,6 +1295,43 @@
         "type": ["string", "null"],
         "enum": ["column", "line", "area", "pie", "scatter", "radar", null],
         "description": "Bounded internal-data chart family for set_chart_type."
+      },
+      "chartFormat": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "title": { "type": ["string", "null"], "maxLength": 1000 },
+          "legendVisible": { "type": ["boolean", "null"] },
+          "legendPosition": {
+            "type": ["string", "null"],
+            "enum": ["left", "right", "top", "bottom", null]
+          },
+          "categoryAxisVisible": { "type": ["boolean", "null"] },
+          "valueAxisVisible": { "type": ["boolean", "null"] },
+          "showValues": { "type": ["boolean", "null"] },
+          "showCategoryNames": { "type": ["boolean", "null"] },
+          "showSeriesNames": { "type": ["boolean", "null"] },
+          "seriesColors": {
+            "type": ["array", "null"],
+            "maxItems": 50,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777215
+            }
+          }
+        },
+        "required": [
+          "title",
+          "legendVisible",
+          "legendPosition",
+          "categoryAxisVisible",
+          "valueAxisVisible",
+          "showValues",
+          "showCategoryNames",
+          "showSeriesNames",
+          "seriesColors"
+        ]
       },
       "row": { "type": ["number", "null"] },
       "column": { "type": ["number", "null"] },
@@ -1367,6 +1513,7 @@
       "elementId",
       "elementIds",
       "slideIndex",
+      "sections",
       "masterIndex",
       "targetSlideIndex",
       "interaction",
@@ -1377,6 +1524,8 @@
       "transitionDuration",
       "slideMetadata",
       "animationId",
+      "animationIndex",
+      "presetId",
       "duration",
       "delay",
       "start",
@@ -1434,6 +1583,7 @@
       "rowDescriptions",
       "columnDescriptions",
       "chartType",
+      "chartFormat",
       "row",
       "column",
       "index",
@@ -1612,6 +1762,26 @@
       "op": "set_animation_timing",
       "minimumVerifiedPatch": 8,
       "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "add_animation_effect",
+      "minimumVerifiedPatch": 21,
+      "reason": "Animation lifecycle edits require the typed preset registry, animation-tree snapshot Undo and exact PPTX save/reopen validation provided by the declared patch."
+    },
+    {
+      "op": "remove_animation_effect",
+      "minimumVerifiedPatch": 21,
+      "reason": "Animation lifecycle edits require the typed preset registry, animation-tree snapshot Undo and exact PPTX save/reopen validation provided by the declared patch."
+    },
+    {
+      "op": "replace_animation_effect",
+      "minimumVerifiedPatch": 21,
+      "reason": "Animation lifecycle edits require the typed preset registry, animation-tree snapshot Undo and exact PPTX save/reopen validation provided by the declared patch."
+    },
+    {
+      "op": "move_animation_effect",
+      "minimumVerifiedPatch": 21,
+      "reason": "Animation lifecycle edits require the typed preset registry, animation-tree snapshot Undo and exact PPTX save/reopen validation provided by the declared patch."
     },
     {
       "op": "set_object_interaction",

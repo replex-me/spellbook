@@ -817,6 +817,41 @@ function spellbookDocumentOperation(request) {
       };
     });
   };
+  const sectionDetails = () => {
+    const raw = safeProperty(model, "SlideSections");
+    if (!raw) return [];
+    const slideIndexByName = new Map(
+      Array.from({ length: pages.getCount() }, (_, slideIndex) => [
+        safeCall(pages.getByIndex(slideIndex), "getName", ""),
+        slideIndex,
+      ]),
+    );
+    return Array.from(raw).map((entry, sectionIndex) => {
+      const values = Array.from(safeMember(entry, "Value") ?? []);
+      const properties = Object.fromEntries(
+        values.map((value) => [
+          safeMember(value, "Name"),
+          safeMember(value, "Value"),
+        ]),
+      );
+      const slideNames = Array.from(properties.SlideNameList ?? []);
+      const startSlideIndex = slideNames.length
+        ? slideIndexByName.get(slideNames[0])
+        : undefined;
+      if (
+        typeof properties.Id !== "string" ||
+        typeof properties.Name !== "string" ||
+        !Number.isInteger(startSlideIndex)
+      )
+        throw new Error(`invalid_native_section_${sectionIndex}`);
+      return {
+        id: properties.Id,
+        name: properties.Name,
+        startSlideIndex,
+        slideCount: slideNames.length,
+      };
+    });
+  };
   const animationDetails = (page, shapeReferences, slideIndex) => {
     const root = safeCall(page, "getAnimationNode");
     if (!root) return { nodeCount: 0, roots: [] };
@@ -914,6 +949,7 @@ function spellbookDocumentOperation(request) {
             animationId: node.animationId,
             elementId: target.elementId,
             paragraphIndex: target.paragraphIndex,
+            sequenceIndex: effects.length,
             effectIndex,
             preset: node.preset,
             start:
@@ -1031,10 +1067,31 @@ function spellbookDocumentOperation(request) {
         row.slice(0, maximumColumns).map((value) => normalizeUnoValue(value)),
       );
     const coordinateSystems = safeCall(diagram, "getCoordinateSystems", []);
+    const titleText = (titled) => {
+      const title = safeCall(titled, "getTitleObject");
+      if (!title) return null;
+      return safeCall(title, "getText", [])
+        .map((portion) => safeCall(portion, "getString", ""))
+        .join("");
+    };
+    const labelDetails = (series) => {
+      const label = safeProperty(series, "Label");
+      return label
+        ? {
+            showValues: Boolean(safeMember(label, "ShowNumber")),
+            showCategoryNames: Boolean(
+              safeMember(label, "ShowCategoryName"),
+            ),
+            showSeriesNames: Boolean(safeMember(label, "ShowSeriesName")),
+          }
+        : null;
+    };
     const chartTypes = coordinateSystems.flatMap((coordinateSystem) =>
       safeCall(coordinateSystem, "getChartTypes", []).map((chartType) => ({
         type: safeCall(chartType, "getChartType"),
         series: safeCall(chartType, "getDataSeries", []).map((series) => ({
+          color: safeProperty(series, "Color"),
+          label: labelDetails(series),
           // Chart import, clipboard paste and PPTX reopen can return the same
           // role-addressed sequences in different array orders. Their Role
           // and source range carry the semantics, so canonicalize by those
@@ -1061,6 +1118,24 @@ function spellbookDocumentOperation(request) {
         })),
       })),
     );
+    const legend = safeCall(diagram, "getLegend");
+    const firstCoordinateSystem = coordinateSystems[0] ?? null;
+    const categoryAxis = (() => {
+      if (!firstCoordinateSystem) return null;
+      try {
+        return firstCoordinateSystem.getAxisByDimension(0, 0);
+      } catch (_) {
+        return null;
+      }
+    })();
+    const valueAxis = (() => {
+      if (!firstCoordinateSystem) return null;
+      try {
+        return firstCoordinateSystem.getAxisByDimension(1, 0);
+      } catch (_) {
+        return null;
+      }
+    })();
     const xValueColumns = new Set(
       chartTypes.flatMap((chartType) =>
         chartType.series.flatMap((series) =>
@@ -1081,6 +1156,27 @@ function spellbookDocumentOperation(request) {
       internalData: Boolean(
         safeCall(chartModel, "hasInternalDataProvider", false),
       ),
+      format: {
+        title: titleText(chartModel),
+        legendVisible: Boolean(legend),
+        legendPosition: legend
+          ? {
+              LINE_START: "left",
+              LINE_END: "right",
+              PAGE_START: "top",
+              PAGE_END: "bottom",
+            }[enumToken(safeProperty(legend, "AnchorPosition"))] ?? null
+          : null,
+        categoryAxisVisible: categoryAxis
+          ? Boolean(safeProperty(categoryAxis, "Show"))
+          : false,
+        valueAxisVisible: valueAxis
+          ? Boolean(safeProperty(valueAxis, "Show"))
+          : false,
+        series: chartTypes.flatMap((chartType) =>
+          chartType.series.map(({ color, label }) => ({ color, label })),
+        ),
+      },
       chartTypes,
       rowCount: fullData.length,
       columnCount: fullData.reduce(
@@ -1518,6 +1614,7 @@ function spellbookDocumentOperation(request) {
     // implementation count in a live concurrency revision makes a save look
     // like an unrelated user edit and prevents a real Undo from restoring its
     // prior revision.
+    const sections = sectionDetails();
     const revisionMasters = masters.map(
       ({ shapeCount: _shapeCount, ...master }) => master,
     );
@@ -1528,8 +1625,9 @@ function spellbookDocumentOperation(request) {
         supportedOperations: [...runtimeOperations],
       },
       styleCatalog,
-      revision: revisionOf({ slides, masters: revisionMasters }),
+      revision: revisionOf({ slides, masters: revisionMasters, sections }),
       masters,
+      sections,
       slides,
       activeSlide,
       selectedElementIds,
@@ -1744,6 +1842,80 @@ function spellbookDocumentOperation(request) {
     const permission = request.permission;
     if (!permission || permission.mode === "read_only")
       throw new Error("read_only");
+    if (command.op === "set_sections") {
+      if (permission.mode !== "document")
+        throw new Error("outside_edit_permission");
+      if (!Array.isArray(command.sections) || command.sections.length > 100)
+        throw new Error("invalid_sections");
+      const ids = new Set();
+      const names = new Set();
+      const sections = command.sections.map((section, index) => {
+        const id = String(section?.id ?? "").toUpperCase();
+        const name = section?.name;
+        const startSlideIndex = section?.startSlideIndex;
+        if (
+          !/^\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}$/u.test(
+            id,
+          ) ||
+          typeof name !== "string" ||
+          !name ||
+          [...name].length > 255 ||
+          /[\u0000-\u001f\u007f]/u.test(name) ||
+          !Number.isInteger(startSlideIndex) ||
+          startSlideIndex < 0 ||
+          startSlideIndex >= before.slides.length ||
+          ids.has(id) ||
+          names.has(name) ||
+          (index === 0 && startSlideIndex !== 0) ||
+          (index > 0 &&
+            startSlideIndex <= command.sections[index - 1].startSlideIndex)
+        )
+          throw new Error("invalid_sections");
+        ids.add(id);
+        names.add(name);
+        return { Id: id, Name: name, StartIndex: startSlideIndex };
+      });
+      const persistedSections = (value) =>
+        value.map(({ id, name, startSlideIndex }) => ({
+          id: id.toUpperCase(),
+          name,
+          startSlideIndex,
+        }));
+      if (
+        stableJson(persistedSections(before.sections)) ===
+        stableJson(
+          sections.map(({ Id, Name, StartIndex }) => ({
+            id: Id,
+            name: Name,
+            startSlideIndex: StartIndex,
+          })),
+        )
+      )
+        return result(before, before.activeSlide);
+      if (request.dryRun) return result(before, before.activeSlide);
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      transformSlides([{ SetSections: sections }]);
+      const after = read(before.activeSlide);
+      const expected = sections.map(({ Id, Name, StartIndex }) => ({
+        id: Id,
+        name: Name,
+        startSlideIndex: StartIndex,
+      }));
+      const applied =
+        stableJson(persistedSections(after.sections)) === stableJson(expected);
+      if (
+        !applied ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length - undoCount !== 1)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        );
+      }
+      return result(after, after.activeSlide);
+    }
     const slideOperation = [
       "slide_structure",
       "slide_properties",
@@ -2756,6 +2928,167 @@ function spellbookDocumentOperation(request) {
         documentStateJson(withoutAnimations(after.slides)) !==
           documentStateJson(withoutAnimations(before.slides)) ||
         stableJson(otherEffects(after)) !== stableJson(otherEffects(before));
+      if (
+        !applied ||
+        unrelatedChanged ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length <= undoCount)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          unrelatedChanged
+            ? "unexpected_edit_scope"
+            : !applied
+              ? "native_command_not_applied"
+              : "native_undo_not_recorded",
+        );
+      }
+      return result(after, slideIndex);
+    }
+
+    if (
+      [
+        "add_animation_effect",
+        "remove_animation_effect",
+        "replace_animation_effect",
+        "move_animation_effect",
+      ].includes(command.op)
+    ) {
+      if (!runtimeSupports(command.op) && !hasEnginePatch(21))
+        throw new Error("native_engine_animation_lifecycle_patch_required");
+      if (element.parentElementId !== null || !/^\d+\/\d+$/.test(command.elementId))
+        throw new Error("invalid_animation_effect");
+      const effects = before.slides[slideIndex]?.animations?.effects;
+      if (!Array.isArray(effects) || effects.length > 199)
+        throw new Error("invalid_animation_effect");
+      const existing =
+        command.op === "add_animation_effect"
+          ? null
+          : effects.find(
+              (candidate) =>
+                candidate.animationId === command.animationId &&
+                candidate.elementId === command.elementId,
+            );
+      if (
+        command.op !== "add_animation_effect" &&
+        (!existing ||
+          !Number.isInteger(existing.sequenceIndex) ||
+          typeof existing.preset?.id !== "string" ||
+          !existing.preset.id)
+      )
+        throw new Error("observed_animation_effect_not_found");
+      const validPreset =
+        typeof command.presetId === "string" &&
+        /^ooo-(entrance|emphasis|exit|motionpath)-[A-Za-z0-9._-]+$/.test(
+          command.presetId,
+        ) &&
+        command.presetId.length <= 128;
+      const validTiming =
+        typeof command.duration === "number" &&
+        Number.isFinite(command.duration) &&
+        command.duration >= 0.001 &&
+        command.duration <= 60 &&
+        typeof command.delay === "number" &&
+        Number.isFinite(command.delay) &&
+        command.delay >= 0 &&
+        command.delay <= 60 &&
+        ["on-click", "with-previous", "after-previous"].includes(
+          command.start,
+        );
+      const isAdd = command.op === "add_animation_effect";
+      const isReplace = command.op === "replace_animation_effect";
+      const isMove = command.op === "move_animation_effect";
+      if (
+        ((isAdd || isReplace) && !validPreset) ||
+        (isAdd && !validTiming) ||
+        ((isAdd || isMove) &&
+          (!Number.isInteger(command.animationIndex) ||
+            command.animationIndex < 0 ||
+            command.animationIndex > effects.length - (isMove ? 1 : 0)))
+      )
+        throw new Error("invalid_animation_effect");
+      if (
+        (isReplace && existing.preset.id === command.presetId) ||
+        (isMove && existing.sequenceIndex === command.animationIndex)
+      )
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, slideIndex);
+
+      const payload = isAdd
+        ? {
+            PresetId: command.presetId,
+            Duration: command.duration,
+            Delay: command.delay,
+            Start: command.start,
+            InsertIndex: command.animationIndex,
+          }
+        : {
+            SequenceIndex: existing.sequenceIndex,
+            ExpectedPresetId: existing.preset.id,
+            ...(isReplace ? { PresetId: command.presetId } : {}),
+            ...(isMove ? { TargetIndex: command.animationIndex } : {}),
+          };
+      const transformName = {
+        add_animation_effect: "AddAnimationEffect",
+        remove_animation_effect: "RemoveAnimationEffect",
+        replace_animation_effect: "ReplaceAnimationEffect",
+        move_animation_effect: "MoveAnimationEffect",
+      }[command.op];
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        { [`${transformName}.${element.zIndex}`]: payload },
+      ]);
+      const after = read();
+      const afterEffects = after.slides[slideIndex]?.animations?.effects ?? [];
+      const semantic = ({ animationId, sequenceIndex, effectIndex, ...effect }) =>
+        effect;
+      const beforeSemantic = effects.map(semantic);
+      const afterSemantic = afterEffects.map(semantic);
+      let applied = false;
+      if (isAdd) {
+        const added = afterEffects[command.animationIndex];
+        const unaffectedAfter = afterSemantic.slice();
+        unaffectedAfter.splice(command.animationIndex, 1);
+        applied =
+          afterEffects.length === effects.length + 1 &&
+          added?.elementId === command.elementId &&
+          added?.preset?.id === command.presetId &&
+          added?.duration === command.duration &&
+          added?.delay === command.delay &&
+          added?.start === command.start &&
+          stableJson(unaffectedAfter) === stableJson(beforeSemantic);
+      } else if (command.op === "remove_animation_effect") {
+        const expected = beforeSemantic.slice();
+        expected.splice(existing.sequenceIndex, 1);
+        applied = stableJson(afterSemantic) === stableJson(expected);
+      } else if (isReplace) {
+        const replaced = afterEffects[existing.sequenceIndex];
+        const beforeOther = beforeSemantic.slice();
+        const afterOther = afterSemantic.slice();
+        beforeOther.splice(existing.sequenceIndex, 1);
+        afterOther.splice(existing.sequenceIndex, 1);
+        applied =
+          replaced?.elementId === existing.elementId &&
+          replaced?.preset?.id === command.presetId &&
+          replaced?.duration === existing.duration &&
+          replaced?.delay === existing.delay &&
+          replaced?.start === existing.start &&
+          stableJson(afterOther) === stableJson(beforeOther);
+      } else {
+        const expected = beforeSemantic.slice();
+        const [moved] = expected.splice(existing.sequenceIndex, 1);
+        expected.splice(command.animationIndex, 0, moved);
+        applied = stableJson(afterSemantic) === stableJson(expected);
+      }
+      const withoutAnimations = (slides) =>
+        slides.map((slide) => ({ ...slide, animations: null }));
+      const unrelatedChanged =
+        documentStateJson(after.masters) !==
+          documentStateJson(before.masters) ||
+        documentStateJson(withoutAnimations(after.slides)) !==
+          documentStateJson(withoutAnimations(before.slides));
       if (
         !applied ||
         unrelatedChanged ||
@@ -3870,6 +4203,323 @@ function spellbookDocumentOperation(request) {
         );
       }
       return result(after, slideIndex);
+    }
+
+    if (command.op === "set_chart_format") {
+      const format = command.chartFormat;
+      const allowedFields = new Set([
+        "title",
+        "legendVisible",
+        "legendPosition",
+        "categoryAxisVisible",
+        "valueAxisVisible",
+        "showValues",
+        "showCategoryNames",
+        "showSeriesNames",
+        "seriesColors",
+      ]);
+      const present = (name) =>
+        format[name] !== null && format[name] !== undefined;
+      const booleanField = (name) =>
+        !present(name) || typeof format[name] === "boolean";
+      const chartSeries = element.chart?.chartTypes.flatMap(
+        (chartType) => chartType.series,
+      );
+      if (
+        element.parentElementId !== null ||
+        !element.chart ||
+        element.chart.truncated ||
+        !format ||
+        typeof format !== "object" ||
+        Array.isArray(format) ||
+        Object.keys(format).some((name) => !allowedFields.has(name)) ||
+        !Object.keys(format).some(present) ||
+        (present("title") &&
+          (typeof format.title !== "string" || format.title.length > 1000)) ||
+        !booleanField("legendVisible") ||
+        !booleanField("categoryAxisVisible") ||
+        !booleanField("valueAxisVisible") ||
+        !booleanField("showValues") ||
+        !booleanField("showCategoryNames") ||
+        !booleanField("showSeriesNames") ||
+        (present("legendPosition") &&
+          !["left", "right", "top", "bottom"].includes(
+            format.legendPosition,
+          )) ||
+        (present("seriesColors") &&
+          (!Array.isArray(format.seriesColors) ||
+            format.seriesColors.length !== chartSeries.length ||
+            format.seriesColors.some(
+              (color) =>
+                !Number.isInteger(color) || color < 0 || color > 16777215,
+            )))
+      )
+        throw new Error("invalid_chart_format");
+
+      const resultingLegendVisible = present("legendVisible")
+        ? format.legendVisible
+        : element.chart.format.legendVisible;
+      if (present("legendPosition") && !resultingLegendVisible)
+        throw new Error("invalid_chart_format");
+
+      const requestedFormat = {
+        ...element.chart.format,
+        ...(present("title") ? { title: format.title || null } : {}),
+        ...(present("legendVisible")
+          ? { legendVisible: format.legendVisible }
+          : {}),
+        ...(present("legendPosition")
+          ? { legendPosition: format.legendPosition }
+          : {}),
+        ...(present("categoryAxisVisible")
+          ? { categoryAxisVisible: format.categoryAxisVisible }
+          : {}),
+        ...(present("valueAxisVisible")
+          ? { valueAxisVisible: format.valueAxisVisible }
+          : {}),
+        series: element.chart.format.series.map((series, index) => ({
+          color: present("seriesColors")
+            ? format.seriesColors[index]
+            : series.color,
+          label: {
+            ...(series.label ?? {
+              showValues: false,
+              showCategoryNames: false,
+              showSeriesNames: false,
+            }),
+            ...(present("showValues")
+              ? { showValues: format.showValues }
+              : {}),
+            ...(present("showCategoryNames")
+              ? { showCategoryNames: format.showCategoryNames }
+              : {}),
+            ...(present("showSeriesNames")
+              ? { showSeriesNames: format.showSeriesNames }
+              : {}),
+          },
+        })),
+      };
+      if (requestedFormat.legendVisible && !requestedFormat.legendPosition)
+        requestedFormat.legendPosition = "right";
+      if (!requestedFormat.legendVisible) requestedFormat.legendPosition = null;
+      if (stableJson(requestedFormat) === stableJson(element.chart.format))
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, before.activeSlide);
+
+      const page = pages.getByIndex(slideIndex);
+      const sourceShape = resolveShape(command.elementId);
+      const sourceName = sourceShape.getName();
+      const chartForShape = (shape) => {
+        const chartModel = safeProperty(shape, "Model");
+        return safeCall(chartModel, "getSupportedServiceNames", []).includes(
+          "com.sun.star.chart2.ChartDocument",
+        )
+          ? chartModel
+          : null;
+      };
+      const createChartService = (chartModel, serviceName) =>
+        chartModel.createInstance(`com.sun.star.chart2.${serviceName}`);
+      const setTitle = (chartModel, titled, text) => {
+        if (text === "") {
+          titled.setTitleObject(null);
+          return;
+        }
+        let title = safeCall(titled, "getTitleObject");
+        if (!title) title = createChartService(chartModel, "Title");
+        const string = createChartService(chartModel, "FormattedString");
+        string.setString(text);
+        title.setText([string]);
+        titled.setTitleObject(title);
+      };
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      const ownsUndoContext = !request.transactionActive;
+      let undoContextOpen = false;
+      try {
+        if (ownsUndoContext) {
+          undo.enterUndoContext("Format chart");
+          undoContextOpen = true;
+        }
+        activateSlide(slideIndex);
+        controller.select(sourceShape);
+        dispatch(".uno:Copy");
+        dispatch(".uno:Paste");
+        let workingShape = null;
+        let workingChart = null;
+        for (let index = 0; index < page.getCount(); index++) {
+          const candidate = page.getByIndex(index);
+          const candidateChart = chartForShape(candidate);
+          if (candidateChart && !uno.sameUnoObject(candidate, sourceShape)) {
+            workingShape = candidate;
+            workingChart = candidateChart;
+            break;
+          }
+        }
+        if (!workingShape || !workingChart)
+          throw new Error("chart_copy_not_found");
+        const diagram = workingChart.getFirstDiagram();
+        if (present("title")) setTitle(workingChart, workingChart, format.title);
+        if (present("legendVisible")) {
+          if (!format.legendVisible) diagram.setLegend(null);
+          else if (!diagram.getLegend())
+            diagram.setLegend(createChartService(workingChart, "Legend"));
+        }
+        const legend = diagram.getLegend();
+        if (legend && present("legendPosition")) {
+          const css = uno.idl.com.sun.star;
+          const positions = {
+            left: css.chart2.LegendPosition.LINE_START,
+            right: css.chart2.LegendPosition.LINE_END,
+            top: css.chart2.LegendPosition.PAGE_START,
+            bottom: css.chart2.LegendPosition.PAGE_END,
+          };
+          legend.setPropertyValue(
+            "AnchorPosition",
+            new uno.Any(
+              uno.type.enum(css.chart2.LegendPosition),
+              positions[format.legendPosition],
+            ),
+          );
+        }
+        const coordinateSystem = diagram.getCoordinateSystems()[0];
+        if (!coordinateSystem)
+          throw new Error("chart_coordinate_system_unavailable");
+        if (present("categoryAxisVisible"))
+          coordinateSystem
+            .getAxisByDimension(0, 0)
+            .setPropertyValue(
+              "Show",
+              new uno.Any(uno.type.boolean, format.categoryAxisVisible),
+            );
+        if (present("valueAxisVisible"))
+          coordinateSystem
+            .getAxisByDimension(1, 0)
+            .setPropertyValue(
+              "Show",
+              new uno.Any(uno.type.boolean, format.valueAxisVisible),
+            );
+        const workingSeries = coordinateSystem
+          .getChartTypes()
+          .flatMap((chartType) => chartType.getDataSeries());
+        if (workingSeries.length !== chartSeries.length)
+          throw new Error("chart_series_count_changed");
+        for (let index = 0; index < workingSeries.length; index++) {
+          const series = workingSeries[index];
+          if (present("seriesColors"))
+            series.setPropertyValue(
+              "Color",
+              new uno.Any(uno.type.long, format.seriesColors[index]),
+            );
+          if (
+            present("showValues") ||
+            present("showCategoryNames") ||
+            present("showSeriesNames")
+          ) {
+            const previous = safeProperty(series, "Label");
+            const label = new uno.idl.com.sun.star.chart2.DataPointLabel({
+              ShowNumber: present("showValues")
+                ? format.showValues
+                : Boolean(safeMember(previous, "ShowNumber")),
+              ShowNumberInPercent: Boolean(
+                safeMember(previous, "ShowNumberInPercent"),
+              ),
+              ShowCategoryName: present("showCategoryNames")
+                ? format.showCategoryNames
+                : Boolean(safeMember(previous, "ShowCategoryName")),
+              ShowLegendSymbol: Boolean(
+                safeMember(previous, "ShowLegendSymbol"),
+              ),
+              ShowCustomLabel: Boolean(
+                safeMember(previous, "ShowCustomLabel"),
+              ),
+              ShowSeriesName: present("showSeriesNames")
+                ? format.showSeriesNames
+                : Boolean(safeMember(previous, "ShowSeriesName")),
+            });
+            series.setPropertyValue(
+              "Label",
+              new uno.Any(
+                uno.type.struct(uno.idl.com.sun.star.chart2.DataPointLabel),
+                label,
+              ),
+            );
+          }
+        }
+
+        workingShape.setName(sourceName);
+        controller.select(workingShape);
+        dispatch(".uno:Copy");
+        dispatch(".uno:Delete");
+        controller.select(sourceShape);
+        dispatch(".uno:Delete");
+        dispatch(".uno:Paste");
+        workingShape = null;
+        for (let index = 0; index < page.getCount(); index++) {
+          const candidate = page.getByIndex(index);
+          if (
+            chartForShape(candidate) &&
+            safeCall(candidate, "getName", "") === sourceName
+          ) {
+            workingShape = candidate;
+            break;
+          }
+        }
+        if (!workingShape) throw new Error("chart_final_paste_not_found");
+        controller.select(workingShape);
+        dispatch(".uno:TransformDialog", [
+          prop("TransformPosX", uno.type.long, element.x),
+          prop("TransformPosY", uno.type.long, element.y),
+          prop("TransformWidth", uno.type.long, element.width),
+          prop("TransformHeight", uno.type.long, element.height),
+        ]);
+        let workingIndex = -1;
+        for (let index = 0; index < page.getCount(); index++)
+          if (uno.sameUnoObject(page.getByIndex(index), workingShape)) {
+            workingIndex = index;
+            break;
+          }
+        while (workingIndex > element.zIndex) {
+          dispatch(".uno:ObjectBackOne");
+          workingIndex--;
+        }
+        while (workingIndex < element.zIndex) {
+          dispatch(".uno:ObjectForwardOne");
+          workingIndex++;
+        }
+        if (ownsUndoContext) {
+          undo.leaveUndoContext();
+          undoContextOpen = false;
+        }
+        const after = read();
+        const target = after.slides[slideIndex].elements.find(
+          (candidate) => candidate.elementId === command.elementId,
+        );
+        const applied =
+          target &&
+          stableJson(target.chart?.format) === stableJson(requestedFormat) &&
+          target.x === element.x &&
+          target.y === element.y &&
+          target.width === element.width &&
+          target.height === element.height;
+        if (
+          !applied ||
+          (!request.transactionActive &&
+            undo.getAllUndoActionTitles().length - undoCount !== 1)
+        )
+          throw new Error(
+            !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+          );
+        return result(after, slideIndex);
+      } catch (error) {
+        if (undoContextOpen) {
+          try {
+            undo.leaveUndoContext();
+          } catch (_) {}
+        }
+        if (!request.transactionActive)
+          while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw error;
+      }
     }
 
     if (command.op === "set_chart_type") {

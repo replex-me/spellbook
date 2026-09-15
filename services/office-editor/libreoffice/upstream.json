@@ -9,11 +9,11 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v19",
+  "patchLevel": "undo-v21",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "f3154c05ef9a42872c4d9847160e4338a222a4e0580f81e9c42c59050e51aaab",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v19-r6-candidate",
+  "patchSeriesSha256": "d9c4bcec680125d4cb4b6023ecbfd91fbb7cb5fc71a51cc64815f2f17605ad17",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v21-r8-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -52,7 +52,9 @@
     "patches/0035-preserve-nonlayout-undo-and-content-placeholder.patch",
     "patches/0036-object-interaction-undo-roundtrip.patch",
     "patches/0037-pptx-placeholder-local-properties.patch",
-    "patches/0038-slide-metadata-line-paragraph-undo.patch"
+    "patches/0038-slide-metadata-line-paragraph-undo.patch",
+    "patches/0039-slide-sections-undo-roundtrip.patch",
+    "patches/0040-animation-lifecycle-undo-roundtrip.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
@@ -66,6 +68,7 @@
     "CppunitTest_sd_uiimpress:testDocumentStructureObjectPropertiesUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureObjectInteractionUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureMetadataLineAndParagraphUndoRedo",
+    "CppunitTest_sd_uiimpress:testDocumentStructureSectionsUndoRedoRoundtrip",
     "CppunitTest_sd_uiimpress:testRenameSlideUndoRestoresUnnamedState",
     "CppunitTest_sd_uiimpress:testTransformSlideVisibilityUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureTextRangePreservesFormatting",
@@ -83,6 +86,7 @@
     "CppunitTest_sd_uiimpress:testDocumentStructureGraphicCropUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureSlideTransitionUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureAnimationTimingUndoRedo",
+    "CppunitTest_sd_uiimpress:testDocumentStructureAnimationLifecycleUndoRoundtrip",
     "CppunitTest_sd_misc_tests:testApiTableCellTextUndo",
     "CppunitTest_sd_misc_tests:testApiTableInsertInheritsDimensions",
     "CppunitTest_sd_misc_tests:testApiTableCellPropertyUndo"

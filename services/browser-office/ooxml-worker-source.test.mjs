@@ -6,7 +6,10 @@ import test from "node:test";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { DOMParser } from "@xmldom/xmldom";
 
-import { applyOoxmlCommand } from "./ooxml-worker-source.mjs";
+import {
+  applyOoxmlCommand,
+  inspectOoxmlDocument,
+} from "./ooxml-worker-source.mjs";
 
 test("browser OOXML commands produce deterministic package bytes", async () => {
   const source = new Uint8Array(await readFile(fixtureUrl));
@@ -457,31 +460,93 @@ test("browser OOXML worker writes local text appearance without touching theme p
   );
 });
 
-test("browser metadata edits remain available when topology has sections", async () => {
+test("browser sections preserve identity across topology and change only presentation metadata", async () => {
   const source = new Uint8Array(await readFile(fixtureUrl));
-  const entries = unzipSync(source);
-  entries["ppt/presentation.xml"] = strToU8(
-    strFromU8(entries["ppt/presentation.xml"]).replace(
-      "</p:presentation>",
-      '<p:sectionLst><p:section name="Section" id="{00000000-0000-0000-0000-000000000001}"><p:sldIdLst/></p:section></p:sectionLst></p:presentation>',
+  const duplicated = applyOoxmlCommand(source, {
+    op: "duplicate_slide",
+    slideIndex: 0,
+    insertIndex: 1,
+  });
+  const beforeSections = unzipSync(duplicated.bytes);
+  const sectioned = applyOoxmlCommand(duplicated.bytes, {
+    op: "set_sections",
+    sections: [
+      {
+        id: "{11111111-1111-4111-8111-111111111111}",
+        name: "Opening",
+        startSlideIndex: 0,
+      },
+      {
+        id: "{22222222-2222-4222-8222-222222222222}",
+        name: "Details",
+        startSlideIndex: 1,
+      },
+    ],
+  });
+  assert.deepEqual(sectioned.report.changedParts, ["ppt/presentation.xml"]);
+  assert.deepEqual(
+    changedLogicalParts(beforeSections, unzipSync(sectioned.bytes)),
+    ["ppt/presentation.xml"],
+  );
+  assert.deepEqual(inspectOoxmlDocument(sectioned.bytes).sections, [
+    {
+      id: "{11111111-1111-4111-8111-111111111111}",
+      name: "Opening",
+      startSlideIndex: 0,
+      slideCount: 1,
+    },
+    {
+      id: "{22222222-2222-4222-8222-222222222222}",
+      name: "Details",
+      startSlideIndex: 1,
+      slideCount: 1,
+    },
+  ]);
+  const inserted = applyOoxmlCommand(sectioned.bytes, {
+    op: "duplicate_slide",
+    slideIndex: 0,
+    insertIndex: 1,
+  });
+  assert.deepEqual(
+    inspectOoxmlDocument(inserted.bytes).sections.map(
+      ({ startSlideIndex, slideCount }) => ({ startSlideIndex, slideCount }),
     ),
+    [
+      { startSlideIndex: 0, slideCount: 2 },
+      { startSlideIndex: 2, slideCount: 1 },
+    ],
   );
-  const sectioned = zipSync(entries, { level: 6 });
-  assert.doesNotThrow(() =>
-    applyOoxmlCommand(sectioned, {
-      op: "rename_slide",
-      slideIndex: 0,
-      name: "Section-safe name",
-    }),
+  const deleted = applyOoxmlCommand(inserted.bytes, {
+    op: "delete_slide",
+    slideIndex: 1,
+  });
+  assert.deepEqual(
+    inspectOoxmlDocument(deleted.bytes).sections.map(
+      ({ startSlideIndex, slideCount }) => ({ startSlideIndex, slideCount }),
+    ),
+    [
+      { startSlideIndex: 0, slideCount: 1 },
+      { startSlideIndex: 1, slideCount: 1 },
+    ],
   );
+  const cleared = applyOoxmlCommand(deleted.bytes, {
+    op: "set_sections",
+    sections: [],
+  });
+  assert.deepEqual(inspectOoxmlDocument(cleared.bytes).sections, []);
   assert.throws(
     () =>
-      applyOoxmlCommand(sectioned, {
-        op: "move_slide",
-        slideIndex: 0,
-        insertIndex: 0,
+      applyOoxmlCommand(duplicated.bytes, {
+        op: "set_sections",
+        sections: [
+          {
+            id: "{11111111-1111-4111-8111-111111111111}",
+            name: "Bad boundary",
+            startSlideIndex: 1,
+          },
+        ],
       }),
-    /sections or custom shows/iu,
+    /start at slide 0/iu,
   );
 });
 

@@ -5,6 +5,8 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 const presentationNamespace =
   "http://schemas.openxmlformats.org/presentationml/2006/main";
+const powerpoint2010Namespace =
+  "http://schemas.microsoft.com/office/powerpoint/2010/main";
 const drawingNamespace =
   "http://schemas.openxmlformats.org/drawingml/2006/main";
 const relationshipAttributeNamespace =
@@ -29,6 +31,7 @@ const topologyOperations = new Set([
   "delete_slide",
   "move_slide",
 ]);
+const documentStructureOperations = new Set(["set_sections"]);
 const slideMetadataOperations = new Set(["rename_slide", "set_slide_hidden"]);
 const geometryOperations = new Set(["move", "resize", "rotate"]);
 const shapeAppearanceOperations = new Set([
@@ -56,6 +59,7 @@ const elementOperations = new Set([
 ]);
 const browserOperations = new Set([
   ...topologyOperations,
+  ...documentStructureOperations,
   ...slideMetadataOperations,
   ...elementOperations,
 ]);
@@ -81,7 +85,9 @@ export function applyOoxmlCommand(input, command) {
     requireSimpleTopology: topologyOperations.has(command.op),
   });
   const report =
-    command.op === "add_slide" || command.op === "duplicate_slide"
+    command.op === "set_sections"
+      ? updateSections(context, command)
+      : command.op === "add_slide" || command.op === "duplicate_slide"
       ? createSlide(context, command)
       : command.op === "delete_slide"
         ? deleteSlide(context, command)
@@ -96,6 +102,17 @@ export function applyOoxmlCommand(input, command) {
       mtime: deterministicZipModifiedAt,
     }),
     report,
+  };
+}
+
+export function inspectOoxmlDocument(input) {
+  if (!(input instanceof Uint8Array))
+    throw new TypeError("PPTX input must be a Uint8Array.");
+  if (input.byteLength > maximumInputBytes)
+    throw new Error("PPTX exceeds the browser inspection limit.");
+  const context = openPackage(input, { requireSimpleTopology: false });
+  return {
+    sections: readSections(context),
   };
 }
 
@@ -120,13 +137,11 @@ function openPackage(input, { requireSimpleTopology }) {
     );
   if (
     requireSimpleTopology &&
-    (presentation.getElementsByTagNameNS(presentationNamespace, "sectionLst")
-      .length > 0 ||
-      presentation.getElementsByTagNameNS(presentationNamespace, "custShowLst")
-        .length > 0)
+    presentation.getElementsByTagNameNS(presentationNamespace, "custShowLst")
+      .length > 0
   )
     throw new Error(
-      "Slides in sections or custom shows require an explicit structure migration.",
+      "Slides in custom shows require an explicit structure migration.",
     );
 
   const slideIdList = requiredElement(
@@ -148,6 +163,252 @@ function openPackage(input, { requireSimpleTopology }) {
     contentTypes,
     slideIdList,
     slideIds,
+  };
+}
+
+function currentSlideIds(context) {
+  return [...context.slideIdList.childNodes].filter(
+    (node) =>
+      node.nodeType === 1 &&
+      node.namespaceURI === presentationNamespace &&
+      node.localName === "sldId",
+  );
+}
+
+function sectionExtension(context) {
+  const extensions = [
+    ...context.presentation.getElementsByTagNameNS(
+      presentationNamespace,
+      "ext",
+    ),
+  ];
+  return (
+    extensions.find(
+      (extension) =>
+        extension.getAttribute("uri").toUpperCase() ===
+        "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}",
+    ) ?? null
+  );
+}
+
+function sectionList(context) {
+  const extension = sectionExtension(context);
+  if (!extension) return null;
+  return (
+    [...extension.childNodes].find(
+      (node) =>
+        node.nodeType === 1 &&
+        node.namespaceURI === powerpoint2010Namespace &&
+        node.localName === "sectionLst",
+    ) ?? null
+  );
+}
+
+function readSections(context) {
+  const list = sectionList(context);
+  if (!list) return [];
+  const slideIds = currentSlideIds(context);
+  const slideIndexById = new Map(
+    slideIds.map((element, index) => [element.getAttribute("id"), index]),
+  );
+  const sections = [...list.childNodes].filter(
+    (node) =>
+      node.nodeType === 1 &&
+      node.namespaceURI === powerpoint2010Namespace &&
+      node.localName === "section",
+  );
+  const seenSlideIds = new Set();
+  let previousEnd = -1;
+  return sections.map((section, sectionIndex) => {
+    const id = section.getAttribute("id");
+    const name = section.getAttribute("name");
+    if (!validSectionId(id) || !validSectionName(name))
+      throw new Error(`PPTX section ${sectionIndex} has invalid identity.`);
+    const slideList = directElement(
+      section,
+      powerpoint2010Namespace,
+      "sldIdLst",
+    );
+    if (!slideList)
+      throw new Error(`PPTX section ${sectionIndex} has no slide list.`);
+    const numericIds = [...slideList.childNodes]
+      .filter(
+        (node) =>
+          node.nodeType === 1 &&
+          node.namespaceURI === powerpoint2010Namespace &&
+          node.localName === "sldId",
+      )
+      .map((node) => node.getAttribute("id"));
+    if (!numericIds.length)
+      throw new Error(`PPTX section ${sectionIndex} has no slides.`);
+    const slideIndexes = numericIds.map((numericId) => {
+      const slideIndex = slideIndexById.get(numericId);
+      if (slideIndex === undefined || seenSlideIds.has(numericId))
+        throw new Error(`PPTX section ${sectionIndex} has an invalid slide id.`);
+      seenSlideIds.add(numericId);
+      return slideIndex;
+    });
+    if (
+      slideIndexes.some(
+        (slideIndex, index) =>
+          index > 0 && slideIndex !== slideIndexes[index - 1] + 1,
+      ) ||
+      slideIndexes[0] <= previousEnd
+    )
+      throw new Error("PPTX sections must cover consecutive slide ranges.");
+    previousEnd = slideIndexes.at(-1);
+    return {
+      id,
+      name,
+      startSlideIndex: slideIndexes[0],
+      slideCount: slideIndexes.length,
+    };
+  });
+}
+
+function validSectionId(value) {
+  return /^\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}$/iu.test(
+    value,
+  );
+}
+
+function validSectionName(value) {
+  return (
+    typeof value === "string" &&
+    [...value].length > 0 &&
+    [...value].length <= 255 &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
+  );
+}
+
+function normalizedSections(value, slideCount) {
+  if (!Array.isArray(value) || value.length > 100)
+    throw new TypeError("sections must be an array with at most 100 entries.");
+  const ids = new Set();
+  const names = new Set();
+  const sections = value.map((section, index) => {
+    if (!section || typeof section !== "object" || Array.isArray(section))
+      throw new TypeError(`section ${index} must be an object.`);
+    if (
+      Object.keys(section).some(
+        (key) => !["id", "name", "startSlideIndex"].includes(key),
+      ) ||
+      !validSectionId(section.id) ||
+      !validSectionName(section.name) ||
+      !Number.isSafeInteger(section.startSlideIndex) ||
+      section.startSlideIndex < 0 ||
+      section.startSlideIndex >= slideCount ||
+      ids.has(section.id.toUpperCase()) ||
+      names.has(section.name)
+    )
+      throw new Error(`section ${index} is invalid.`);
+    ids.add(section.id.toUpperCase());
+    names.add(section.name);
+    return {
+      id: section.id.toUpperCase(),
+      name: section.name,
+      startSlideIndex: section.startSlideIndex,
+    };
+  });
+  if (
+    sections.length &&
+    (sections[0].startSlideIndex !== 0 ||
+      sections.some(
+        (section, index) =>
+          index > 0 &&
+          section.startSlideIndex <= sections[index - 1].startSlideIndex,
+      ))
+  )
+    throw new Error(
+      "Non-empty sections must start at slide 0 and use increasing slide indexes.",
+    );
+  return sections;
+}
+
+function writeSections(context, sections) {
+  const existingExtension = sectionExtension(context);
+  if (existingExtension)
+    existingExtension.parentNode.removeChild(existingExtension);
+  if (!sections.length) {
+    const extensionLists = [
+      ...context.presentation.getElementsByTagNameNS(
+        presentationNamespace,
+        "extLst",
+      ),
+    ];
+    for (const list of extensionLists)
+      if (
+        ![...list.childNodes].some((node) => node.nodeType === 1)
+      )
+        list.parentNode.removeChild(list);
+    return;
+  }
+  const root = context.presentation.documentElement;
+  let extensionList = directElement(root, presentationNamespace, "extLst");
+  if (!extensionList) {
+    extensionList = context.presentation.createElementNS(
+      presentationNamespace,
+      "p:extLst",
+    );
+    root.appendChild(extensionList);
+  }
+  const extension = context.presentation.createElementNS(
+    presentationNamespace,
+    "p:ext",
+  );
+  extension.setAttribute("uri", "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}");
+  const list = context.presentation.createElementNS(
+    powerpoint2010Namespace,
+    "p14:sectionLst",
+  );
+  list.setAttribute("xmlns:p14", powerpoint2010Namespace);
+  const slideIds = currentSlideIds(context);
+  sections.forEach((section, index) => {
+    const entry = context.presentation.createElementNS(
+      powerpoint2010Namespace,
+      "p14:section",
+    );
+    entry.setAttribute("name", section.name);
+    entry.setAttribute("id", section.id);
+    const slides = context.presentation.createElementNS(
+      powerpoint2010Namespace,
+      "p14:sldIdLst",
+    );
+    const end = sections[index + 1]?.startSlideIndex ?? slideIds.length;
+    for (const slideId of slideIds.slice(section.startSlideIndex, end)) {
+      const reference = context.presentation.createElementNS(
+        powerpoint2010Namespace,
+        "p14:sldId",
+      );
+      reference.setAttribute("id", slideId.getAttribute("id"));
+      slides.appendChild(reference);
+    }
+    entry.appendChild(slides);
+    list.appendChild(entry);
+  });
+  extension.appendChild(list);
+  extensionList.appendChild(extension);
+}
+
+function updateSections(context, command) {
+  const previous = readSections(context);
+  const value = normalizedSections(command.sections, context.slideIds.length);
+  if (JSON.stringify(previous.map(({ slideCount: _count, ...section }) => section)) === JSON.stringify(value))
+    return {
+      operation: command.op,
+      slideCount: context.slideIds.length,
+      previous,
+      value: previous,
+      changedParts: [],
+    };
+  writeSections(context, value);
+  context.entries[presentationPath] = serializeXml(context.presentation);
+  return {
+    operation: command.op,
+    slideCount: context.slideIds.length,
+    previous,
+    value: readSections(context),
+    changedParts: [presentationPath],
   };
 }
 
@@ -990,6 +1251,7 @@ function createSlide(context, command) {
     slideIdList,
     slideIds,
   } = context;
+  const sectionsBefore = readSections(context);
   if (slideIds.length >= 200)
     throw new Error("The browser document slide limit is 200.");
   const sourceProperty =
@@ -1093,6 +1355,18 @@ function createSlide(context, command) {
   );
   if (insertIndex === slideIds.length) slideIdList.appendChild(newSlideId);
   else slideIdList.insertBefore(newSlideId, slideIds[insertIndex]);
+  if (sectionsBefore.length)
+    writeSections(
+      context,
+      sectionsBefore.map(({ slideCount: _slideCount, ...section }) => ({
+        ...section,
+        startSlideIndex:
+          section.startSlideIndex > insertIndex ||
+          (section.startSlideIndex === insertIndex && insertIndex !== 0)
+            ? section.startSlideIndex + 1
+            : section.startSlideIndex,
+      })),
+    );
   entries[presentationPath] = serializeXml(presentation);
   entries[presentationRelationshipsPath] = serializeXml(relationships);
   entries[contentTypesPath] = serializeXml(contentTypes);
@@ -1109,6 +1383,7 @@ function createSlide(context, command) {
 }
 
 function moveSlide(context, command) {
+  const sectionsBefore = readSections(context);
   const sourceIndex = integerInRange(
     command.slideIndex,
     0,
@@ -1127,6 +1402,11 @@ function moveSlide(context, command) {
   for (const element of context.slideIds)
     context.slideIdList.removeChild(element);
   for (const element of reordered) context.slideIdList.appendChild(element);
+  if (sectionsBefore.length)
+    writeSections(
+      context,
+      sectionsBefore.map(({ slideCount: _slideCount, ...section }) => section),
+    );
   context.entries[presentationPath] = serializeXml(context.presentation);
   return {
     operation: command.op,
@@ -1146,6 +1426,7 @@ function deleteSlide(context, command) {
     context.slideIds.length - 1,
     "slideIndex",
   );
+  const sectionsBefore = readSections(context);
   const source = slideInfo(context, sourceIndex);
   for (let index = 0; index < context.slideIds.length; index += 1) {
     if (index === sourceIndex) continue;
@@ -1169,6 +1450,25 @@ function deleteSlide(context, command) {
   const before = reachableParts(context.entries);
   source.slideId.parentNode.removeChild(source.slideId);
   source.relationship.parentNode.removeChild(source.relationship);
+  if (sectionsBefore.length) {
+    const sectionsAfter = sectionsBefore
+      .filter((section, index) => {
+        const end =
+          sectionsBefore[index + 1]?.startSlideIndex ?? context.slideIds.length;
+        return !(
+          section.startSlideIndex === sourceIndex &&
+          end === sourceIndex + 1
+        );
+      })
+      .map(({ slideCount: _slideCount, ...section }) => ({
+        ...section,
+        startSlideIndex:
+          section.startSlideIndex > sourceIndex
+            ? section.startSlideIndex - 1
+            : section.startSlideIndex,
+      }));
+    writeSections(context, sectionsAfter);
+  }
   const after = reachableParts(context.entries, context.relationships);
   const removedParts = [...before].filter((part) => !after.has(part));
   const changedParts = new Set([
@@ -1511,13 +1811,20 @@ function relativePart(source, target) {
 
 if (typeof self !== "undefined")
   self.onmessage = (event) => {
-    const { requestId, bytes, command } = event.data;
+    const { requestId, bytes, command, operation } = event.data;
     try {
-      const result = applyOoxmlCommand(new Uint8Array(bytes), command);
-      self.postMessage(
-        { requestId, bytes: result.bytes.buffer, report: result.report },
-        [result.bytes.buffer],
-      );
+      if (operation === "inspect") {
+        self.postMessage({
+          requestId,
+          report: inspectOoxmlDocument(new Uint8Array(bytes)),
+        });
+      } else {
+        const result = applyOoxmlCommand(new Uint8Array(bytes), command);
+        self.postMessage(
+          { requestId, bytes: result.bytes.buffer, report: result.report },
+          [result.bytes.buffer],
+        );
+      }
     } catch (error) {
       self.postMessage({
         requestId,

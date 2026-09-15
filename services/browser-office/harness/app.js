@@ -73,6 +73,7 @@ const productSlideOperations = new Set([
   "rename_slide",
   "set_slide_hidden",
 ]);
+const packageOnlyProductOperations = new Set(["set_sections"]);
 const nativeExactUndoOperations = new Set([
   "replace_text",
   "move",
@@ -323,6 +324,24 @@ function applyMutation(bytes, command) {
       [transferable.buffer],
     );
   });
+}
+
+function inspectPackage(bytes) {
+  const requestId = `ooxml-inspect-${++requestSequence}`;
+  const transferable = bytes.slice();
+  return new Promise((resolve, reject) => {
+    mutationPending.set(requestId, { resolve, reject });
+    ooxmlWorker.postMessage(
+      { requestId, bytes: transferable.buffer, operation: "inspect" },
+      [transferable.buffer],
+    );
+  });
+}
+
+async function withPackageDocumentMetadata(value) {
+  if (!currentBytes || !value || typeof value !== "object") return value;
+  const metadata = await inspectPackage(currentBytes);
+  return { ...value, sections: metadata.report.sections };
 }
 
 async function serializeNativeDocument() {
@@ -656,6 +675,25 @@ async function prepareProductPackageMutation(nativeRequest) {
   )
     throw new Error("Browser edit command is invalid.");
   const command = nativeCommands[0];
+  if (
+    nativeCommands.length === 1 &&
+    packageOnlyProductOperations.has(command.op)
+  ) {
+    if (nativeRequest.permission?.mode !== "document")
+      throw new Error("outside_edit_permission");
+    const beforeBytes = currentBytes.slice();
+    const packageCommand = productPackageCommand(command, null);
+    const mutation = await applyMutation(beforeBytes, packageCommand);
+    return {
+      persistence: "package_reload",
+      beforeBytes,
+      beforeRevision: reconciledModelRevision,
+      beforeSlides: expectedSlides,
+      command: packageCommand,
+      mutation,
+      sourceOperations: [command.op],
+    };
+  }
   const localized =
     nativeCommands.length === 1 &&
     (productElementOperations.has(command.op) ||
@@ -717,6 +755,11 @@ async function prepareProductPackageMutation(nativeRequest) {
 function productPackageCommand(command, expectedElement) {
   const base = { op: command.op, elementId: command.elementId };
   switch (command.op) {
+    case "set_sections":
+      return {
+        op: command.op,
+        sections: structuredClone(command.sections),
+      };
     case "insert_slide":
       return {
         op: "add_slide",
@@ -882,6 +925,59 @@ function productPackageCommand(command, expectedElement) {
       };
     default:
       throw new Error(`browser_ooxml_reconciliation_required:${command.op}`);
+  }
+}
+
+async function commitProductPackageReload(prepared) {
+  if (!prepared.mutation.report.changedParts.length)
+    return withPackageDocumentMetadata(await observeNativeDocument());
+  const afterBytes = new Uint8Array(prepared.mutation.bytes);
+  const undoHistoryLength = productUndoHistory.length;
+  const commandLength = commands.length;
+  try {
+    await writeAndOpen(afterBytes, filename);
+    const after = await observeNativeDocument();
+    const journalCommand = {
+      ...prepared.command,
+      persistence: "package_reload",
+      sourceOperations: prepared.sourceOperations,
+      reconciliation: {
+        beforeRevision: prepared.beforeRevision,
+        afterRevision: after.revision,
+      },
+    };
+    productUndoHistory.push({
+      beforeBytes: prepared.beforeBytes,
+      afterBytes,
+      beforeRevision: prepared.beforeRevision,
+      afterRevision: after.revision,
+      beforeSlides: prepared.beforeSlides,
+      nativeCommand: null,
+      nativeRequest: null,
+      command: journalCommand,
+      persistence: "package_reload",
+      nativeUndoAvailable: false,
+      nativeRedoAvailable: false,
+    });
+    commands.push(journalCommand);
+    productRedoHistory.length = 0;
+    reconciledModelRevision = after.revision;
+    unreconciledModelRevision = "";
+    currentSlideCount = Array.isArray(after.slides)
+      ? after.slides.length
+      : currentSlideCount;
+    await persistCheckpoint();
+    observed.lastMutation = prepared.mutation.report;
+    evidence.value = JSON.stringify(observed);
+    return withPackageDocumentMetadata(after);
+  } catch (error) {
+    productUndoHistory.length = undoHistoryLength;
+    commands.length = commandLength;
+    await writeAndOpen(prepared.beforeBytes, filename);
+    const restored = await observeNativeDocument();
+    reconciledModelRevision = restored.revision;
+    unreconciledModelRevision = "";
+    throw error;
   }
 }
 
@@ -1617,17 +1713,23 @@ async function handleProductHostMessage(message) {
   if (typeof message.id === "string" && message.request) {
     try {
       const prepared = await prepareProductPackageMutation(message.request);
-      const result = await request("native", {
-        nativeRequest: message.request,
-      });
-      await commitProductPackageMutation(prepared, result.value);
+      let value;
+      if (prepared?.persistence === "package_reload") {
+        value = await commitProductPackageReload(prepared);
+      } else {
+        const result = await request("native", {
+          nativeRequest: message.request,
+        });
+        await commitProductPackageMutation(prepared, result.value);
+        value = await withPackageDocumentMetadata(result.value);
+      }
       const status = await request("status");
       reportHostModified(
         Boolean(status.modified) ||
           commands.length > 0 ||
           Boolean(unreconciledModelRevision),
       );
-      postHost({ id: message.id, value: result.value });
+      postHost({ id: message.id, value });
     } catch (error) {
       postHost({
         id: message.id,
