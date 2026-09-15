@@ -57,6 +57,12 @@ Undo/Redo, failure rollback, save/reopen, OOXML change-budget, visual corpus and
 PowerPoint checks must all point to the same source commit, patch hash and image
 digest before `runtimeImage` and `runtimePatchLevel` are promoted.
 
+The public source manifest records the engine's content digest, not the private
+registry repository that happened to build or host it. A deployment-specific
+release receipt binds that digest to its complete immutable image reference.
+This keeps source provenance public and portable while registry locations and
+credentials remain owned by each deployment.
+
 On a regular Linux host, a failed integrated build preserves its printed
 temporary build root. Diagnose the exact failure and use that tree for focused
 incremental target rebuilds; do not relaunch the clean integrated build for
