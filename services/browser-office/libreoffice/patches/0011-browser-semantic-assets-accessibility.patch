@@ -1,5 +1,5 @@
-From 54c24cf299a3b2f6e3c86500c33c4227f0fb55fe Mon Sep 17 00:00:00 2001
-From: philo-kim <fineday9@gmail.com>
+From 265fe78f618caa0614832cd678244f0d6ffc9fac Mon Sep 17 00:00:00 2001
+From: Spellbook Contributors <spellbook@users.noreply.github.com>
 Date: Wed, 16 Sep 2026 04:34:28 +0900
 Subject: [PATCH] native-edit: preserve semantic asset operations in browser
 

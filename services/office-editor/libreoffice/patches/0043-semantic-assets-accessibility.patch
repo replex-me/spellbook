@@ -1,5 +1,5 @@
-From ee6df5b3232fe7952c5958afa04c23d9aac3b7e2 Mon Sep 17 00:00:00 2001
-From: philo-kim <fineday9@gmail.com>
+From dd3aa2338327f3d80c2691bdacb1d3608e4bdc0d Mon Sep 17 00:00:00 2001
+From: Spellbook Contributors <spellbook@users.noreply.github.com>
 Date: Wed, 16 Sep 2026 04:34:23 +0900
 Subject: [PATCH] native-edit: preserve semantic asset and accessibility edits
 

@@ -6,14 +6,14 @@
     "repository": "https://git.libreoffice.org/core",
     "ref": "distro/allotropia/zeta-24-2",
     "buildCommit": "efaf0670b4d055f838a2849becb10f08aa06a257",
-    "candidateCommit": "54c24cf299a3b2f6e3c86500c33c4227f0fb55fe"
+    "candidateCommit": "265fe78f618caa0614832cd678244f0d6ffc9fac"
   },
   "sourceCandidate": {
     "patchLevel": "browser-undo-v11",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "09303fd80014b52b3f33b43a325ac701c9e29fd7209f1a12193bd496b9d5614b",
+    "patchSeriesSha256": "c72f05482c5807edad8a731f450ccd42733530f65b5be72facf5edc94d2204f9",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
