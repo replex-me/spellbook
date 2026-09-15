@@ -9,13 +9,14 @@
     "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v2",
+    "patchLevel": "browser-undo-v3",
     "patchSeriesReady": true,
     "buildReady": false,
-    "patchSeriesSha256": "f48c84625aff4350e17a4862e2200b59e289203cc7aa1d02069e4a7ed5fc2818",
+    "patchSeriesSha256": "e3c855cc53e8d840a9f572ff7019ced5b960119c2fdd8d78e5d97dbad056b9f4",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
-      "libreoffice/patches/0002-generic-pptx-edit-invariants.patch"
+      "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
+      "libreoffice/patches/0003-roundtrip-interaction-invariants.patch"
     ],
     "invariants": [
       "table-cell-native-undo",
@@ -30,7 +31,14 @@
       "pptx-slide-name-roundtrip",
       "pptx-text-shadow-roundtrip",
       "native-object-creation-undo",
-      "text-layout-cache-invalidation"
+      "text-layout-cache-invalidation",
+      "table-cell-property-uno-undo",
+      "pptx-object-lock-roundtrip",
+      "object-interaction-uno-undo",
+      "pptx-object-interaction-roundtrip",
+      "content-placeholder-editability",
+      "placeholder-local-property-precedence",
+      "non-layout-undo-master-safety"
     ],
     "requiredCppunitTargets": [
       "CppunitTest_sd_uiimpress",

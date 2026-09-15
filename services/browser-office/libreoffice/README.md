@@ -12,13 +12,15 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
-The cumulative `browser-undo-v2` source series currently ports generic
-document behavior: table structure, formatting and Undo; page and object
-identity; master-safe layout support; sparse-master insertion; object-creation
-Undo; text-layout invalidation; slide-name persistence; and text-shadow
-persistence. Collabora transport handlers are deliberately absent. Object
-locks, interactions and placeholder inheritance still require browser-source
-ports before the series is admitted to a single integrated WASM build.
+The cumulative `browser-undo-v3` source series ports generic document behavior:
+table structure, formatting and Undo; page and object identity; master-safe
+layout support; sparse-master insertion; object-creation Undo; text-layout
+invalidation; slide names and text shadows; object locks; object interactions;
+and editable placeholder inheritance. Browser-source CppUnit regressions are
+part of the series but have not run yet. The remaining build-admission work is
+the browser-native command adapter plus a clean native test run; only then is a
+single integrated WASM build justified. Collabora transport handlers remain
+deliberately absent.
 
 Verify every source edit before starting the expensive build:
 
