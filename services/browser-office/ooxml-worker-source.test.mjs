@@ -253,6 +253,61 @@ test("browser OOXML worker replaces text without rewriting unrelated package par
   );
 });
 
+test("browser OOXML worker applies observed geometry deltas to one slide part", async () => {
+  const source = new Uint8Array(await readFile(fixtureUrl));
+  const original = unzipSync(source);
+  const moved = applyOoxmlCommand(source, {
+    op: "move",
+    elementId: "0/0",
+    expectedX: 5321,
+    expectedY: 2540,
+    x: 5421,
+    y: 2640,
+  });
+  assert.deepEqual(moved.report.changedParts, ["ppt/slides/slide1.xml"]);
+  assert.deepEqual(changedLogicalParts(original, unzipSync(moved.bytes)), [
+    "ppt/slides/slide1.xml",
+  ]);
+  const movedTransform = firstShapeTransform(unzipSync(moved.bytes));
+  assert.equal(movedTransform.offset.getAttribute("x"), "950400");
+  assert.equal(movedTransform.offset.getAttribute("y"), "950400");
+
+  const resized = applyOoxmlCommand(moved.bytes, {
+    op: "resize",
+    elementId: "0/0",
+    expectedWidth: 8406,
+    expectedHeight: 1265,
+    width: 8506,
+    height: 1365,
+  });
+  assert.deepEqual(resized.report.changedParts, ["ppt/slides/slide1.xml"]);
+  const resizedTransform = firstShapeTransform(unzipSync(resized.bytes));
+  assert.equal(resizedTransform.extent.getAttribute("cx"), "5065200");
+  assert.equal(resizedTransform.extent.getAttribute("cy"), "858960");
+
+  const unchanged = applyOoxmlCommand(resized.bytes, {
+    op: "move",
+    elementId: "0/0",
+    expectedX: 5421,
+    expectedY: 2640,
+    x: 5421,
+    y: 2640,
+  });
+  assert.deepEqual(unchanged.report.changedParts, []);
+  assert.throws(
+    () =>
+      applyOoxmlCommand(source, {
+        op: "move",
+        elementId: "0/0/0",
+        expectedX: 0,
+        expectedY: 0,
+        x: 1,
+        y: 1,
+      }),
+    /top-level shape/iu,
+  );
+});
+
 test("browser metadata edits remain available when topology has sections", async () => {
   const source = new Uint8Array(await readFile(fixtureUrl));
   const entries = unzipSync(source);
@@ -429,6 +484,23 @@ function slidePaths(entries) {
       "https://package.invalid/ppt/presentation.xml",
     ).pathname.replace(/^\//u, "");
   });
+}
+
+function firstShapeTransform(entries) {
+  const drawingNamespace =
+    "http://schemas.openxmlformats.org/drawingml/2006/main";
+  const presentationNamespace =
+    "http://schemas.openxmlformats.org/presentationml/2006/main";
+  const slide = new DOMParser().parseFromString(
+    strFromU8(entries["ppt/slides/slide1.xml"]),
+    "application/xml",
+  );
+  const shape = slide.getElementsByTagNameNS(presentationNamespace, "sp")[0];
+  const transform = shape.getElementsByTagNameNS(drawingNamespace, "xfrm")[0];
+  return {
+    offset: transform.getElementsByTagNameNS(drawingNamespace, "off")[0],
+    extent: transform.getElementsByTagNameNS(drawingNamespace, "ext")[0],
+  };
 }
 
 function withOwnedDependencyGraph(source) {

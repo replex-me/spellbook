@@ -293,17 +293,13 @@ function parseExpectedSlides(value) {
   return slides;
 }
 
-function expectedTextForElement(slides, elementId) {
+function expectedElementForId(slides, elementId) {
   for (const slide of slides) {
     if (!Array.isArray(slide?.elements)) continue;
     const element = slide.elements.find(
       (candidate) => candidate?.elementId === elementId,
     );
-    if (element) {
-      if (typeof element.text !== "string")
-        throw new Error("Browser package target has no editable text.");
-      return element.text;
-    }
+    if (element) return element;
   }
   throw new Error("Browser package target is absent from expectedSlides.");
 }
@@ -321,19 +317,46 @@ async function prepareProductPackageMutation(nativeRequest) {
   const command = nativeRequest.command;
   if (!command || typeof command !== "object" || Array.isArray(command))
     throw new Error("Browser edit command is invalid.");
-  if (command.op !== "replace_text")
+  if (!["replace_text", "move", "resize"].includes(command.op))
     throw new Error(`browser_ooxml_reconciliation_required:${command.op}`);
-  if (typeof command.elementId !== "string" || typeof command.text !== "string")
-    throw new Error("Browser replace_text command is invalid.");
-  const packageCommand = {
-    op: "replace_text",
-    elementId: command.elementId,
-    expectedText: expectedTextForElement(
-      parseExpectedSlides(nativeRequest.expectedSlides),
-      command.elementId,
-    ),
-    text: command.text,
-  };
+  if (typeof command.elementId !== "string")
+    throw new Error("Browser element command is invalid.");
+  const expectedElement = expectedElementForId(
+    parseExpectedSlides(nativeRequest.expectedSlides),
+    command.elementId,
+  );
+  let packageCommand;
+  if (command.op === "replace_text") {
+    if (
+      typeof expectedElement.text !== "string" ||
+      typeof command.text !== "string"
+    )
+      throw new Error("Browser replace_text command is invalid.");
+    packageCommand = {
+      op: command.op,
+      elementId: command.elementId,
+      expectedText: expectedElement.text,
+      text: command.text,
+    };
+  } else if (command.op === "move") {
+    packageCommand = {
+      op: command.op,
+      elementId: command.elementId,
+      expectedX: expectedElement.x,
+      expectedY: expectedElement.y,
+      x: Math.round(command.x),
+      y: Math.round(command.y),
+    };
+  } else {
+    packageCommand = {
+      op: command.op,
+      elementId: command.elementId,
+      expectedWidth: expectedElement.width,
+      expectedHeight: expectedElement.height,
+      width: Math.round(command.width),
+      height: Math.round(command.height),
+    };
+  }
   const beforeBytes = currentBytes.slice();
   const mutation = await applyMutation(beforeBytes, packageCommand);
   return {
@@ -355,8 +378,14 @@ async function commitProductPackageMutation(prepared, nativeValue) {
   const target = nativeValue.slides
     ?.flatMap((slide) => slide.elements ?? [])
     .find((element) => element.elementId === prepared.command.elementId);
-  if (target?.text !== prepared.command.text)
-    throw new Error("Browser native and package edits disagree.");
+  const agreed =
+    prepared.command.op === "replace_text"
+      ? target?.text === prepared.command.text
+      : prepared.command.op === "move"
+        ? target?.x === prepared.command.x && target?.y === prepared.command.y
+        : target?.width === prepared.command.width &&
+          target?.height === prepared.command.height;
+  if (!agreed) throw new Error("Browser native and package edits disagree.");
   if (!prepared.mutation.report.changedParts.length) {
     reconciledModelRevision = nativeValue.revision;
     unreconciledModelRevision = "";

@@ -19,6 +19,7 @@ const maximumInputBytes = 64 * 1024 * 1024;
 const maximumExpandedBytes = 512 * 1024 * 1024;
 const maximumEntries = 10_000;
 const deterministicZipModifiedAt = new Date("2000-01-01T00:00:00.000Z");
+const emuPerHundredthMillimeter = 360;
 const presentationPath = "ppt/presentation.xml";
 const presentationRelationshipsPath = "ppt/_rels/presentation.xml.rels";
 const contentTypesPath = "[Content_Types].xml";
@@ -29,7 +30,7 @@ const topologyOperations = new Set([
   "move_slide",
 ]);
 const slideMetadataOperations = new Set(["rename_slide", "set_slide_hidden"]);
-const elementOperations = new Set(["replace_text"]);
+const elementOperations = new Set(["replace_text", "move", "resize"]);
 const browserOperations = new Set([
   ...topologyOperations,
   ...slideMetadataOperations,
@@ -177,18 +178,11 @@ function updateSlideMetadata(context, command) {
 }
 
 function updateElement(context, command) {
-  if (command.op !== "replace_text")
-    throw new Error(`Unsupported browser element operation: ${command.op}`);
   if (
     typeof command.elementId !== "string" ||
     !/^\d+(?:\/\d+)+$/u.test(command.elementId)
   )
     throw new Error("elementId must be a browser Office object path.");
-  if (
-    typeof command.expectedText !== "string" ||
-    typeof command.text !== "string"
-  )
-    throw new TypeError("replace_text requires expectedText and text strings.");
   const path = command.elementId.split("/").map(Number);
   const slideIndex = integerInRange(
     path.shift(),
@@ -196,6 +190,10 @@ function updateElement(context, command) {
     context.slideIds.length - 1,
     "element slide index",
   );
+  if (command.op !== "replace_text" && path.length !== 1)
+    throw new Error(
+      "Browser package geometry currently requires a top-level shape.",
+    );
   const target = slideInfo(context, slideIndex);
   const slide = parseXml(context.entries, target.path);
   const shapeTree = requiredElement(slide, presentationNamespace, "spTree");
@@ -209,30 +207,144 @@ function updateElement(context, command) {
       ];
     container = shape;
   }
-  const previous = readShapeText(shape);
-  if (previous !== command.expectedText)
-    throw new Error("The browser package text changed after observation.");
-  if (previous === command.text)
-    return {
-      operation: command.op,
-      elementId: command.elementId,
-      slideIndex,
-      slideCount: context.slideIds.length,
-      previous,
-      value: command.text,
-      changedParts: [],
-    };
-  replaceShapeText(shape, command.text);
-  context.entries[target.path] = serializeXml(slide);
+  const mutation =
+    command.op === "replace_text"
+      ? replaceElementText(shape, command)
+      : updateElementGeometry(shape, path, command);
+  if (mutation.changed) context.entries[target.path] = serializeXml(slide);
   return {
     operation: command.op,
     elementId: command.elementId,
     slideIndex,
     slideCount: context.slideIds.length,
+    previous: mutation.previous,
+    value: mutation.value,
+    changedParts: mutation.changed ? [target.path] : [],
+  };
+}
+
+function replaceElementText(shape, command) {
+  if (
+    typeof command.expectedText !== "string" ||
+    typeof command.text !== "string"
+  )
+    throw new TypeError("replace_text requires expectedText and text strings.");
+  const previous = readShapeText(shape);
+  if (previous !== command.expectedText)
+    throw new Error("The browser package text changed after observation.");
+  if (previous !== command.text) replaceShapeText(shape, command.text);
+  return {
     previous,
     value: command.text,
-    changedParts: [target.path],
+    changed: previous !== command.text,
   };
+}
+
+function updateElementGeometry(shape, path, command) {
+  if (path.length !== 1) throw new Error("Invalid top-level shape path.");
+  const transform = requiredShapeTransform(shape);
+  const offset = requiredDirectElement(transform, drawingNamespace, "off");
+  const extent = requiredDirectElement(transform, drawingNamespace, "ext");
+  if (command.op === "move") {
+    const expectedX = safeInteger(command.expectedX, "expectedX");
+    const expectedY = safeInteger(command.expectedY, "expectedY");
+    const x = safeInteger(command.x, "x");
+    const y = safeInteger(command.y, "y");
+    const previous = { x: expectedX, y: expectedY };
+    const value = { x, y };
+    if (expectedX !== x)
+      offset.setAttribute(
+        "x",
+        String(
+          coordinateAttribute(offset, "x") +
+            (x - expectedX) * emuPerHundredthMillimeter,
+        ),
+      );
+    if (expectedY !== y)
+      offset.setAttribute(
+        "y",
+        String(
+          coordinateAttribute(offset, "y") +
+            (y - expectedY) * emuPerHundredthMillimeter,
+        ),
+      );
+    return {
+      previous,
+      value,
+      changed: expectedX !== x || expectedY !== y,
+    };
+  }
+  if (command.op === "resize") {
+    const expectedWidth = positiveInteger(
+      command.expectedWidth,
+      "expectedWidth",
+    );
+    const expectedHeight = positiveInteger(
+      command.expectedHeight,
+      "expectedHeight",
+    );
+    const width = positiveInteger(command.width, "width");
+    const height = positiveInteger(command.height, "height");
+    const nextWidth =
+      coordinateAttribute(extent, "cx") +
+      (width - expectedWidth) * emuPerHundredthMillimeter;
+    const nextHeight =
+      coordinateAttribute(extent, "cy") +
+      (height - expectedHeight) * emuPerHundredthMillimeter;
+    if (nextWidth <= 0 || nextHeight <= 0)
+      throw new Error("Browser package resize produced an invalid extent.");
+    if (expectedWidth !== width) extent.setAttribute("cx", String(nextWidth));
+    if (expectedHeight !== height)
+      extent.setAttribute("cy", String(nextHeight));
+    return {
+      previous: { width: expectedWidth, height: expectedHeight },
+      value: { width, height },
+      changed: expectedWidth !== width || expectedHeight !== height,
+    };
+  }
+  throw new Error(`Unsupported browser element operation: ${command.op}`);
+}
+
+function requiredShapeTransform(shape) {
+  if (shape.localName === "graphicFrame")
+    return requiredDirectElement(shape, presentationNamespace, "xfrm");
+  const propertiesName = shape.localName === "grpSp" ? "grpSpPr" : "spPr";
+  const properties = requiredDirectElement(
+    shape,
+    presentationNamespace,
+    propertiesName,
+  );
+  return requiredDirectElement(properties, drawingNamespace, "xfrm");
+}
+
+function requiredDirectElement(parent, namespace, name) {
+  const element = [...parent.childNodes].find(
+    (node) =>
+      node.nodeType === 1 &&
+      node.namespaceURI === namespace &&
+      node.localName === name,
+  );
+  if (!element) throw new Error(`Required OOXML element is missing: ${name}`);
+  return element;
+}
+
+function coordinateAttribute(element, name) {
+  const value = Number(element.getAttribute(name));
+  if (!Number.isSafeInteger(value))
+    throw new Error(`OOXML coordinate is invalid: ${name}`);
+  return value;
+}
+
+function safeInteger(value, name) {
+  if (!Number.isSafeInteger(value))
+    throw new TypeError(`${name} must be a safe integer.`);
+  return value;
+}
+
+function positiveInteger(value, name) {
+  const integer = safeInteger(value, name);
+  if (integer <= 0) throw new RangeError(`${name} must be greater than zero.`);
+  return integer;
 }
 
 function directShapes(container) {

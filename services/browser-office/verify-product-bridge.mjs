@@ -66,16 +66,27 @@ try {
     .flatMap((slide) => slide.elements)
     .find((element) => typeof element.text === "string" && element.text);
   assert.ok(target, "The product bridge fixture needs editable text.");
+  const geometryTarget = before.slides
+    .flatMap((slide) => slide.elements)
+    .find(
+      (element) =>
+        element.elementId !== target.elementId &&
+        Number.isSafeInteger(element.x) &&
+        Number.isSafeInteger(element.y) &&
+        Number.isSafeInteger(element.width) &&
+        Number.isSafeInteger(element.height) &&
+        element.textAutoGrowHeight !== true,
+    );
+  assert.ok(geometryTarget, "The product bridge fixture needs a fixed shape.");
   await assert.rejects(
     nativeTask(page, "unsupported-edit", {
       operation: "edit",
       expectedRevision: before.revision,
       expectedSlides: JSON.stringify(before.slides),
       command: {
-        op: "move",
+        op: "rotate",
         elementId: target.elementId,
-        x: target.x + 100,
-        y: target.y + 100,
+        degrees: 15,
       },
       permission: {
         mode: "selection",
@@ -84,8 +95,58 @@ try {
       },
       suppressCapture: true,
     }),
-    /browser_ooxml_reconciliation_required:move/u,
+    /browser_ooxml_reconciliation_required:rotate/u,
   );
+  const moved = await nativeTask(page, "move-1", {
+    operation: "edit",
+    expectedRevision: before.revision,
+    expectedSlides: JSON.stringify(before.slides),
+    command: {
+      op: "move",
+      elementId: geometryTarget.elementId,
+      x: geometryTarget.x + 100,
+      y: geometryTarget.y + 100,
+    },
+    permission: {
+      mode: "selection",
+      elementIds: [geometryTarget.elementId],
+      slideIndexes: [],
+    },
+    suppressCapture: true,
+  });
+  const movedTarget = moved.slides
+    .flatMap((slide) => slide.elements)
+    .find((element) => element.elementId === geometryTarget.elementId);
+  assert.equal(movedTarget?.x, geometryTarget.x + 100);
+  assert.equal(movedTarget?.y, geometryTarget.y + 100);
+  await sendHostCommand(page, "Send_UNO_Command", {
+    Command: ".uno:Undo",
+  });
+  const resized = await nativeTask(page, "resize-1", {
+    operation: "edit",
+    expectedRevision: before.revision,
+    expectedSlides: JSON.stringify(before.slides),
+    command: {
+      op: "resize",
+      elementId: geometryTarget.elementId,
+      width: geometryTarget.width + 100,
+      height: geometryTarget.height + 100,
+    },
+    permission: {
+      mode: "selection",
+      elementIds: [geometryTarget.elementId],
+      slideIndexes: [],
+    },
+    suppressCapture: true,
+  });
+  const resizedTarget = resized.slides
+    .flatMap((slide) => slide.elements)
+    .find((element) => element.elementId === geometryTarget.elementId);
+  assert.equal(resizedTarget?.width, geometryTarget.width + 100);
+  assert.equal(resizedTarget?.height, geometryTarget.height + 100);
+  await sendHostCommand(page, "Send_UNO_Command", {
+    Command: ".uno:Undo",
+  });
   const replacement = `${target.text} · product bridge`;
   const edited = await nativeTask(page, "edit-1", {
     operation: "edit",
