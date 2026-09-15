@@ -18,6 +18,32 @@ function installSpellbookUnoAdapter() {
   };
 }
 
+// The shared operation program normally reaches Collabora's typed document
+// transform command. Browser LibreOffice exposes the same document model
+// directly through ZetaJS, so browser-only navigation stays on the public UNO
+// boundary and does not pretend the Collabora command exists. More transform
+// families are admitted here only after their browser implementation has the
+// same native Undo and save/reopen evidence.
+const nativeAdapter = {
+  transformSlides({ commands, controller, pages }) {
+    for (const command of commands) {
+      const entries = Object.entries(command ?? {});
+      if (entries.length !== 1 || entries[0][0] !== "JumpToSlide")
+        throw new Error(
+          `Unsupported browser native transform: ${entries[0]?.[0] ?? "invalid"}`,
+        );
+      const slideIndex = entries[0][1];
+      if (
+        !Number.isSafeInteger(slideIndex) ||
+        slideIndex < 0 ||
+        slideIndex >= pages.getCount()
+      )
+        throw new Error("Browser native slide target is out of range.");
+      controller.setCurrentPage(pages.getByIndex(slideIndex));
+    }
+  },
+};
+
 function post(command, details = {}) {
   zetajs.mainPort.postMessage({ command, ...details });
 }
@@ -95,6 +121,7 @@ function start() {
             value: spellbookDocumentOperation({
               ...event.data.nativeRequest,
               mutationContracts: spellbookMutationContracts,
+              nativeAdapter,
             }),
           });
           break;

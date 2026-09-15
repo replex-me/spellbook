@@ -55,13 +55,17 @@ the authoritative PPTX.
 
 The browser worker also adapts ZetaJS to the same fixed
 `spellbookDocumentOperation` program used by the Collabora extension. The
-headless browser gate opens a real PPTX, observes its slide and element model,
-replaces text through the bounded `replace_text` command, and verifies native
-Undo restores the original revision. This proves that browser and server
-engines can share one AI command implementation instead of accumulating two
-feature-specific code paths. It does not claim full browser parity: commands
-whose contract requires a Spellbook engine patch remain unavailable on the
-stock ZetaOffice binary.
+headless browser gate opens a real two-slide PPTX, observes its slide and
+element model, navigates from the active slide to a different target through a
+ZetaJS UNO adapter, replaces text there through the bounded `replace_text`
+command, and verifies native Undo restores the original revision. The adapter
+fails closed for every typed transform that has not yet earned browser Undo and
+save/reopen evidence; it never reports the Collabora-only
+`TransformDocumentStructure` command as a browser capability. This proves that
+browser and server engines can share one AI command implementation instead of
+accumulating two feature-specific code paths. It does not claim full browser
+parity: commands whose contract requires a Spellbook engine patch remain
+unavailable on the stock ZetaOffice binary.
 
 Browser candidates and their replayable command journal are checkpointed in
 OPFS with two alternating slots. Each slot writes the base package and

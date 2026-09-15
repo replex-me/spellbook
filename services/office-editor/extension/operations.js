@@ -119,8 +119,15 @@ function spellbookDocumentOperation(request) {
     uno.idl.com.sun.star.frame.DispatchHelper.create(
       uno.componentContext,
     ).executeDispatch(frame, command, "", 0, args);
-  const transformSlides = (commands) =>
-    dispatch(".uno:TransformDocumentStructure", [
+  const transformSlides = (commands) => {
+    if (typeof request.nativeAdapter?.transformSlides === "function")
+      return request.nativeAdapter.transformSlides({
+        commands,
+        controller,
+        model,
+        pages,
+      });
+    return dispatch(".uno:TransformDocumentStructure", [
       prop(
         "DataJson",
         uno.type.string,
@@ -130,6 +137,7 @@ function spellbookDocumentOperation(request) {
         }),
       ),
     ]);
+  };
   const activateSlide = (slideIndex) =>
     transformSlides([{ JumpToSlide: slideIndex }]);
   const safeProperty = (shape, name) => {

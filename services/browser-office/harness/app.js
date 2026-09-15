@@ -96,6 +96,15 @@ async function writeAndOpen(bytes, name = "document.pptx") {
 }
 
 async function runNativeBridgeProbe() {
+  const probePackage = await applyMutation(currentBytes, {
+    op: "duplicate_slide",
+    slideIndex: 0,
+    insertIndex: 1,
+  });
+  await writeAndOpen(
+    new Uint8Array(probePackage.bytes),
+    "general-native-surface-navigation-probe.pptx",
+  );
   const before = (
     await request("native", {
       nativeRequest: { operation: "observe", captureSlideIndexes: [] },
@@ -105,12 +114,19 @@ async function runNativeBridgeProbe() {
     throw new Error(
       "Browser native observation did not return the PPTX model.",
     );
-  const target = before.slides
-    .flatMap((slide) => slide.elements)
-    .find((element) => typeof element.text === "string" && element.text);
+  const targetSlideIndex = before.slides.findIndex(
+    (slide, slideIndex) =>
+      slideIndex !== before.activeSlide &&
+      slide.elements.some(
+        (element) => typeof element.text === "string" && element.text,
+      ),
+  );
+  const target = before.slides[targetSlideIndex]?.elements.find(
+    (element) => typeof element.text === "string" && element.text,
+  );
   if (!target)
     throw new Error(
-      "Browser native bridge fixture has no editable text target.",
+      "Browser native bridge fixture has no editable text target on a non-active slide.",
     );
   const replacement = `${target.text} · browser AI bridge`;
   const edited = (
@@ -151,6 +167,9 @@ async function runNativeBridgeProbe() {
   observed.nativeBridge = {
     operation: "replace_text",
     slideCount: before.slides.length,
+    sourceActiveSlide: before.activeSlide,
+    targetSlideIndex,
+    editedActiveSlide: edited.activeSlide,
     elementId: target.elementId,
     editedRevision: edited.revision,
     restoredRevision: restored.revision,
