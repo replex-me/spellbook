@@ -63,12 +63,12 @@ try {
     operation: "observe",
     captureSlideIndexes: [],
   });
-  const patchedTextRuntime = await page.evaluate(() => {
+  const patchedBrowserRuntime = await page.evaluate(() => {
     const runtime = globalThis.spellbookBrowserRuntimeCandidate;
     return (
       runtime?.buildReady === true &&
       runtime.buildCommit === runtime.candidateCommit &&
-      runtime.patchLevel === "browser-undo-v5"
+      runtime.patchLevel === "browser-undo-v6"
     );
   });
   const target = before.slides
@@ -156,31 +156,83 @@ try {
   await sendHostCommand(page, "Send_UNO_Command", {
     Command: ".uno:Undo",
   });
-  const fillColor = 0xd97706;
-  const recolored = await nativeTask(page, "fill-color-1", {
-    operation: "edit",
-    expectedRevision: before.revision,
-    expectedSlides: JSON.stringify(before.slides),
-    command: {
+  const appearanceEdits = [
+    {
       op: "fill_color",
-      elementId: geometryTarget.elementId,
-      color: fillColor,
+      command: { color: 0xd97706 },
+      property: "fill",
+      expected: 0xd97706,
     },
-    permission: {
-      mode: "selection",
-      elementIds: [geometryTarget.elementId],
-      slideIndexes: [],
-    },
-    suppressCapture: true,
-  });
-  const recoloredTarget = recolored.slides
-    .flatMap((slide) => slide.elements)
-    .find((element) => element.elementId === geometryTarget.elementId);
-  assert.equal(recoloredTarget?.fill, fillColor);
-  await sendHostCommand(page, "Send_UNO_Command", {
-    Command: ".uno:Undo",
-  });
-  if (patchedTextRuntime) {
+    ...(patchedBrowserRuntime
+      ? [
+          {
+            op: "rotate",
+            command: { degrees: 15 },
+            property: "rotation",
+            expected: 1_500,
+          },
+          {
+            op: "line_color",
+            command: { color: 0x0f766e },
+            property: "lineColor",
+            expected: 0x0f766e,
+          },
+          {
+            op: "line_width",
+            command: { size: 2 },
+            property: "lineWidth",
+            expected: 200,
+          },
+          {
+            op: "fill_opacity",
+            command: { opacity: 63 },
+            property: "fillOpacity",
+            expected: 63,
+          },
+          {
+            op: "line_opacity",
+            command: { opacity: 57 },
+            property: "lineOpacity",
+            expected: 57,
+          },
+        ]
+      : []),
+  ];
+  for (const edit of appearanceEdits) {
+    const changed = await nativeTask(page, `appearance-${edit.op}`, {
+      operation: "edit",
+      expectedRevision: before.revision,
+      expectedSlides: JSON.stringify(before.slides),
+      command: {
+        op: edit.op,
+        elementId: geometryTarget.elementId,
+        ...edit.command,
+      },
+      permission: {
+        mode: "selection",
+        elementIds: [geometryTarget.elementId],
+        slideIndexes: [],
+      },
+      suppressCapture: true,
+    });
+    const changedTarget = changed.slides
+      .flatMap((slide) => slide.elements)
+      .find((element) => element.elementId === geometryTarget.elementId);
+    assert.equal(
+      changedTarget?.[edit.property],
+      edit.expected,
+      `${edit.op} did not reach its requested value.`,
+    );
+    const undo = await sendHostCommand(page, "Send_UNO_Command", {
+      Command: ".uno:Undo",
+    });
+    assert.equal(
+      undo.revision,
+      before.revision,
+      `${edit.op} did not restore the original revision.`,
+    );
+  }
+  if (patchedBrowserRuntime) {
     const fontColor = 0x0f766e;
     const textRecolored = await nativeTask(page, "font-color-1", {
       operation: "edit",
@@ -248,6 +300,31 @@ try {
       }),
       /browser_native_runtime_patch_required/u,
     );
+    for (const command of [
+      { op: "rotate", degrees: 15 },
+      { op: "line_color", color: 0x0f766e },
+      { op: "line_width", size: 2 },
+      { op: "fill_opacity", opacity: 63 },
+      { op: "line_opacity", opacity: 57 },
+    ])
+      await assert.rejects(
+        nativeTask(page, `${command.op}-gated`, {
+          operation: "edit",
+          expectedRevision: before.revision,
+          expectedSlides: JSON.stringify(before.slides),
+          command: {
+            ...command,
+            elementId: geometryTarget.elementId,
+          },
+          permission: {
+            mode: "selection",
+            elementIds: [geometryTarget.elementId],
+            slideIndexes: [],
+          },
+          suppressCapture: true,
+        }),
+        /browser_native_runtime_patch_required/u,
+      );
   }
   const replacement = `${target.text} · product bridge`;
   const edited = await nativeTask(page, "edit-1", {
@@ -408,7 +485,13 @@ try {
     editedElementId: target.elementId,
     undoRestoredRevision: restored.revision,
     recovered: recoveredOpen.recovered,
-    patchedTextRuntime,
+    patchedBrowserRuntime,
+    verifiedElementOperations: [
+      "replace_text",
+      "move",
+      "resize",
+      ...appearanceEdits.map(({ op }) => op),
+    ],
     savedRevision,
     savedBytes: savedBytes.length,
     changedParts,
@@ -487,7 +570,7 @@ async function verifyProductSlideStructure(browser, origin) {
       return (
         runtime?.buildReady === true &&
         runtime.buildCommit === runtime.candidateCommit &&
-        runtime.patchLevel === "browser-undo-v5" &&
+        runtime.patchLevel === "browser-undo-v6" &&
         runtime.nativeSlideStructureReady === true
       );
     });
@@ -772,7 +855,7 @@ async function sendHostCommand(page, messageId, values) {
       }),
     { command: messageId, payload: values, requestId },
   );
-  await waitForEvent(page, {
+  return waitForEvent(page, {
     type: "command-complete",
     messageId,
     requestId,

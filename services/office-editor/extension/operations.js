@@ -4574,6 +4574,17 @@ function spellbookDocumentOperation(request) {
     const usesTypedTextFormatting = typedTextFormattingOperations.has(
       command.op,
     );
+    const browserShapeAppearanceOperations = new Set([
+      "line_color",
+      "line_width",
+      "fill_opacity",
+      "line_opacity",
+      "rotate",
+    ]);
+    const usesBrowserShapeAppearance =
+      browserShapeAppearanceOperations.has(command.op) &&
+      runtimeSupports(command.op) &&
+      typeof request.nativeAdapter?.transformSlides === "function";
     if (
       usesTypedTextFormatting &&
       !patchedTextFormattingEngine &&
@@ -4684,6 +4695,22 @@ function spellbookDocumentOperation(request) {
       transformSlides([
         { JumpToSlide: slideIndex },
         { [`SetTextProperties.${objectPath}`]: properties },
+      ]);
+    } else if (usesBrowserShapeAppearance) {
+      const objectPath = command.elementId.split("/").slice(1).join("/");
+      const properties =
+        command.op === "line_color"
+          ? { LineColor: Math.round(command.color) }
+          : command.op === "line_width"
+            ? { LineWidth: Math.round(command.size * 100) }
+            : command.op === "fill_opacity"
+              ? { FillTransparence: 100 - Math.round(command.opacity) }
+              : command.op === "line_opacity"
+                ? { LineTransparence: 100 - Math.round(command.opacity) }
+                : { RotateAngle: Math.round(command.degrees * 100) };
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        { [`SetObjectProperties.${objectPath}`]: properties },
       ]);
     } else if (command.op === "replace_text")
       dispatch(".uno:ExecuteSearch", [

@@ -8,7 +8,12 @@
     "bold",
     "font_family",
     "font_size",
+    "fill_opacity",
     "italic",
+    "line_color",
+    "line_opacity",
+    "line_width",
+    "rotate",
     "rename_slide",
     "replace_text_range",
     "set_alt_text",
@@ -44,6 +49,11 @@
     ShadowBlur: "long",
     MoveProtect: "boolean",
     SizeProtect: "boolean",
+    LineColor: "long",
+    LineWidth: "long",
+    FillTransparence: "short",
+    LineTransparence: "short",
+    RotateAngle: "long",
   });
 
   function createSpellbookBrowserNativeAdapter({ uno, runtimeIdentity }) {
@@ -52,7 +62,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v5";
+      runtimeIdentity.patchLevel === "browser-undo-v6";
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(

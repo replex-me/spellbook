@@ -224,7 +224,7 @@ function fixture() {
     buildReady: true,
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v5",
+    patchLevel: "browser-undo-v6",
   };
   return {
     adapter: factory({ uno, runtimeIdentity }),
@@ -250,7 +250,12 @@ test("browser adapter advertises only its exact operation families", () => {
     "bold",
     "font_family",
     "font_size",
+    "fill_opacity",
     "italic",
+    "line_color",
+    "line_opacity",
+    "line_width",
+    "rotate",
     "rename_slide",
     "replace_text_range",
     "set_alt_text",
@@ -275,7 +280,7 @@ test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime",
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v5",
+      patchLevel: "browser-undo-v6",
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
@@ -309,7 +314,7 @@ test("browser adapter routes stock slide lifecycle through Impress commands", ()
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v5",
+      patchLevel: "browser-undo-v6",
     },
   });
   assert.equal(stockAdapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
@@ -341,7 +346,7 @@ test("browser adapter deletes a slide only after native structure admission", ()
       buildReady: true,
       buildCommit: "candidate",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v5",
+      patchLevel: "browser-undo-v6",
       nativeSlideStructureReady: true,
     },
   });
@@ -413,6 +418,11 @@ test("browser adapter writes only bounded object, crop and interaction fields", 
       { JumpToSlide: 1 },
       {
         "SetObjectProperties.0": {
+          FillTransparence: 37,
+          LineColor: 0x123456,
+          LineTransparence: 43,
+          LineWidth: 200,
+          RotateAngle: 1_500,
           TextLeftDistance: 420,
           Shadow: true,
           MoveProtect: true,
@@ -431,6 +441,29 @@ test("browser adapter writes only bounded object, crop and interaction fields", 
     ...runtime,
   });
   assert.equal(runtime.secondShape.properties.TextLeftDistance, 420);
+  assert.equal(runtime.secondShape.properties.FillTransparence, 37);
+  assert.equal(runtime.secondShape.properties.LineColor, 0x123456);
+  assert.equal(runtime.secondShape.properties.LineTransparence, 43);
+  assert.equal(runtime.secondShape.properties.LineWidth, 200);
+  assert.equal(runtime.secondShape.properties.RotateAngle, 1_500);
+  assert.deepEqual(
+    runtime.mutations.filter(([, property]) =>
+      [
+        "FillTransparence",
+        "LineColor",
+        "LineTransparence",
+        "LineWidth",
+        "RotateAngle",
+      ].includes(property),
+    ),
+    [
+      ["second-shape", "FillTransparence", "short", 37],
+      ["second-shape", "LineColor", "long", 0x123456],
+      ["second-shape", "LineTransparence", "short", 43],
+      ["second-shape", "LineWidth", "long", 200],
+      ["second-shape", "RotateAngle", "long", 1_500],
+    ],
+  );
   assert.equal(runtime.secondShape.properties.Shadow, true);
   assert.equal(runtime.secondShape.properties.MoveProtect, true);
   assert.deepEqual(

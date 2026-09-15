@@ -87,6 +87,11 @@ const patchedRuntimeOnlyProductOperations = new Set([
   "font_family",
   "font_color",
   "paragraph_alignment",
+  "rotate",
+  "line_color",
+  "line_width",
+  "fill_opacity",
+  "line_opacity",
   "insert_slide",
   "rename_slide",
   "set_slide_hidden",
@@ -121,7 +126,7 @@ function patchedBrowserRuntimeAdmitted() {
   return (
     runtime?.buildReady === true &&
     runtime.buildCommit === runtime.candidateCommit &&
-    runtime.patchLevel === "browser-undo-v5"
+    runtime.patchLevel === "browser-undo-v6"
   );
 }
 
@@ -1274,6 +1279,7 @@ async function handleProductHostMessage(message) {
         type: "command-complete",
         messageId: message.messageId,
         command,
+        revision: unreconciledModelRevision || reconciledModelRevision,
         ...(typeof message.requestId === "string"
           ? { requestId: message.requestId }
           : {}),
