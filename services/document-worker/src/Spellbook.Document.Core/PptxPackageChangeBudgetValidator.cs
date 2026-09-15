@@ -19,6 +19,8 @@ public sealed class PptxPackageChangeBudgetValidator
         "http://schemas.openxmlformats.org/package/2006/metadata/core-properties";
     private static readonly XNamespace DublinCoreTermsNamespace =
         "http://purl.org/dc/terms/";
+    private static readonly XNamespace ExtendedPropertiesNamespace =
+        "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
     private static readonly XNamespace CollaboraExtensionNamespace =
         "urn:com:collaboraoffice:names:experimental:ooxml:xmlns:coext:1.0";
 
@@ -265,6 +267,18 @@ public sealed class PptxPackageChangeBudgetValidator
                     || property.Name == DublinCoreTermsNamespace + "modified")
                     property.Value = "__office_save_metadata__";
             }
+        }
+
+        // Office updates the accumulated editing duration according to how
+        // long an independent session stayed open. It is save telemetry, not
+        // authored presentation content, and therefore cannot make a longer
+        // mutation scenario exceed its OOXML change budget. Keep every other
+        // extended property exact so company, application and document-stat
+        // changes remain visible.
+        if (part == "docProps/app.xml")
+        {
+            foreach (var totalTime in document.Descendants(ExtendedPropertiesNamespace + "TotalTime"))
+                totalTime.Value = "__office_save_duration__";
         }
 
         var canonical = Encoding.UTF8.GetBytes(document.ToString(SaveOptions.DisableFormatting));

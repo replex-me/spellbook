@@ -114,12 +114,14 @@ public sealed class PackageChangeBudgetTests : IDisposable
             "11111111-1111-1111-1111-111111111111",
             "1",
             "2026-01-01T00:00:00Z",
+            "1",
             "<#>");
         AddOfficeSaveMetadata(
             candidate,
             "22222222-2222-2222-2222-222222222222",
             "2",
             "2026-02-02T00:00:00Z",
+            "9",
             "<#>");
 
         var ignored = new PptxPackageChangeBudgetValidator().Validate(
@@ -128,6 +130,23 @@ public sealed class PackageChangeBudgetTests : IDisposable
             new PackageChangeBudgetRequest(ContractVersions.Current, []));
         Assert.True(ignored.Valid, string.Join("\n", ignored.Errors));
         Assert.Empty(ignored.Changes);
+
+        var changedApplication = Path.Combine(directory, "changed-application.pptx");
+        File.Copy(candidate, changedApplication);
+        using (var archive = ZipFile.Open(changedApplication, ZipArchiveMode.Update))
+        {
+            var app = ReadXml(archive, "docProps/app.xml");
+            XNamespace extended =
+                "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
+            app.Descendants(extended + "Application").Single().Value = "Unexpected editor";
+            Replace(archive, "docProps/app.xml", app);
+        }
+        var documentPropertyChange = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            changedApplication,
+            new PackageChangeBudgetRequest(ContractVersions.Current, []));
+        Assert.False(documentPropertyChange.Valid);
+        Assert.Equal("document_properties", Assert.Single(documentPropertyChange.Changes).Category);
 
         using (var archive = ZipFile.Open(candidate, ZipArchiveMode.Update))
         {
@@ -345,6 +364,7 @@ public sealed class PackageChangeBudgetTests : IDisposable
         string fieldId,
         string revision,
         string modified,
+        string totalTime,
         string fieldText)
     {
         using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
@@ -364,6 +384,17 @@ public sealed class PackageChangeBudgetTests : IDisposable
                         terms + "modified",
                         new XAttribute(xsi + "type", "dcterms:W3CDTF"),
                         modified))));
+        XNamespace extended =
+            "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
+        var app = archive.GetEntry("docProps/app.xml") is null
+            ? new XDocument(
+                new XElement(
+                    extended + "Properties",
+                    new XElement(extended + "TotalTime", "0"),
+                    new XElement(extended + "Application", "Spellbook test")))
+            : ReadXml(archive, "docProps/app.xml");
+        app.Descendants(extended + "TotalTime").Single().Value = totalTime;
+        Replace(archive, "docProps/app.xml", app);
         var slide = ReadXml(archive, "ppt/slides/slide1.xml");
         slide.Root?.Add(
             new XElement(
