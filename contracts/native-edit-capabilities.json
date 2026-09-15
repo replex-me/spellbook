@@ -1,11 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "coordinateUnit": "1/100mm",
   "nativeUndoRequired": true,
   "verifiedWith": {
     "date": "2026-09-15",
-    "probe": "scripts/native-mutation-conformance-runner.mjs (undo-v18: 63 operations, native Undo/Redo, save/reopen, change budget, visual and playback evidence)"
+    "probe": "scripts/native-mutation-conformance-runner.mjs (undo-v18: complete browser operation set, native Undo/Redo, save/reopen, change budget, visual, playback and PowerPoint evidence)",
+    "evidence": {
+      "patchLevel": "undo-v18",
+      "operationCount": 63,
+      "scenarioCount": 10,
+      "browserReportSha256": "2ad4bd654247ca4aed0e9cd292c58bd8a73a30bf0f6812f2b53240490d88cc0d",
+      "validationSha256": "123eff3de8182f8d8fda0e417bca24ce461d2cbf71b002f85b5f8d58dbb0cfed"
+    }
   },
   "aiExposure": {
     "operationCount": 63,
@@ -226,7 +233,7 @@
         "target": "slide",
         "execution": "native_transform",
         "identityEffect": "create",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 9
       },
       "duplicate_slide": {
@@ -266,7 +273,7 @@
         "target": "slide",
         "execution": "editor_dispatch",
         "identityEffect": "create",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 14
       },
       "add_shape": {
@@ -274,7 +281,7 @@
         "target": "slide",
         "execution": "editor_dispatch",
         "identityEffect": "create",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 14
       },
       "add_table": {
@@ -338,7 +345,7 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 14
       },
       "bold": {
@@ -346,7 +353,7 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 14
       },
       "italic": {
@@ -354,7 +361,7 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 14
       },
       "underline": {
@@ -378,7 +385,7 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 9
       },
       "font_family": {
@@ -386,7 +393,7 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 14
       },
       "font_color": {
@@ -490,7 +497,7 @@
         "target": "element",
         "execution": "editor_dispatch",
         "identityEffect": "create",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 14
       },
       "delete_element": {
@@ -522,7 +529,7 @@
         "target": "slide",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 14
       },
       "set_background": {
@@ -530,7 +537,7 @@
         "target": "slide",
         "execution": "editor_dispatch",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 2
       },
       "set_table_cell": {
@@ -538,7 +545,7 @@
         "target": "table_cell",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 2
       },
       "rename_slide": {
@@ -546,7 +553,7 @@
         "target": "slide",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 2
       },
       "set_slide_hidden": {
@@ -554,7 +561,7 @@
         "target": "slide",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 2
       },
       "set_alt_text": {
@@ -562,7 +569,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 3
       },
       "set_shape_name": {
@@ -570,7 +577,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 3
       },
       "set_text_box": {
@@ -578,7 +585,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 3
       },
       "set_character_spacing": {
@@ -586,7 +593,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "set_script_position": {
@@ -594,7 +601,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "set_shape_shadow": {
@@ -602,7 +609,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 3
       },
       "set_object_lock": {
@@ -610,7 +617,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 9
       },
       "set_printable": {
@@ -626,7 +633,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 18
       },
       "replace_text_range": {
@@ -634,7 +641,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 4
       },
       "insert_table_rows": {
@@ -642,7 +649,7 @@
         "target": "table_range",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "delete_table_rows": {
@@ -650,7 +657,7 @@
         "target": "table_range",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "insert_table_columns": {
@@ -658,7 +665,7 @@
         "target": "table_range",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "delete_table_columns": {
@@ -666,7 +673,7 @@
         "target": "table_range",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "merge_table_cells": {
@@ -674,7 +681,7 @@
         "target": "table_range",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "split_table_cell": {
@@ -682,7 +689,7 @@
         "target": "table_cell",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "set_table_row_height": {
@@ -690,7 +697,7 @@
         "target": "table_range",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "set_table_column_width": {
@@ -698,7 +705,7 @@
         "target": "table_range",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 5
       },
       "set_table_cell_format": {
@@ -706,7 +713,7 @@
         "target": "table_range",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 6
       },
       "set_slide_transition": {
@@ -714,7 +721,7 @@
         "target": "slide",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 7
       },
       "set_animation_timing": {
@@ -722,7 +729,7 @@
         "target": "animation_effect",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "engine_patch_ready",
+        "availability": "runtime_verified",
         "minEnginePatch": 8
       },
       "crop_image": {
@@ -730,7 +737,7 @@
         "target": "element",
         "execution": "native_transform",
         "identityEffect": "preserve",
-        "availability": "runtime_validation_required",
+        "availability": "runtime_verified",
         "minEnginePatch": 6
       }
     }
@@ -800,151 +807,7 @@
       "crop_image"
     ]
   },
-  "knownUnsafeOperations": [
-    {
-      "op": "add_text_box",
-      "reason": "Stock XShapes.add inserts the text shape without registering a native creation Undo action. The undo-v14 engine patch records creation at the common SdDrawPage boundary and the adapter assigns text only after insertion; integrated browser, save/reopen, visual and PowerPoint verification remains required before promotion."
-    },
-    {
-      "op": "add_shape",
-      "reason": "Stock XShapes.add inserts the shape without registering a native creation Undo action. The undo-v14 engine patch records creation at the common SdDrawPage boundary; integrated browser, save/reopen, visual and PowerPoint verification remains required before promotion."
-    },
-    {
-      "op": "duplicate_element",
-      "reason": "The stock browser path has no identity-safe duplicate operation and clipboard duplication can alter document state. The undo-v14 typed command clones the live Sdr object immediately above its source and registers native creation Undo; integrated browser, save/reopen, visual and PowerPoint verification remains required before promotion."
-    },
-    {
-      "op": "font_size",
-      "reason": "The stock editor applies only the western-script height consistently. The undo-v14 typed command synchronizes western, Asian and complex-script heights with a point-based wire contract and observable browser readback, and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
-    },
-    {
-      "op": "bold",
-      "reason": "The stock editor can leave Asian and complex-script weight values different from the western run. The undo-v14 typed command synchronizes all three script families with observable browser readback and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
-    },
-    {
-      "op": "italic",
-      "reason": "The stock editor can leave Asian and complex-script posture values different from the western run. The undo-v14 typed command synchronizes all three script families with observable browser readback and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
-    },
-    {
-      "op": "font_family",
-      "reason": "The stock editor can change only the western font family, so mixed Korean and Latin text is exported and reopened with different metrics. The undo-v14 typed command synchronizes western, Asian and complex-script families with observable browser readback and must pass cumulative browser, save/reopen, visual and PowerPoint gates before promotion."
-    },
-    {
-      "op": "insert_slide",
-      "reason": "The stock InsertMasterSlide command creates title and content placeholders before assigning the selected master. On imported blank layouts this mutates the master and creates a synthetic layout during PPTX save/reopen. The undo-v9 engine patch makes page creation inherit the selected master layout and must pass the cumulative image, browser, save/reopen, visual and PowerPoint gates before promotion."
-    },
-    {
-      "op": "set_slide_layout",
-      "reason": "A numeric LibreOffice AutoLayout does not uniquely identify an OOXML slide-layout part. The typed adapter must select the exact observed masterIndex, preserve the existing master/layout relationship through Undo and save/reopen, and avoid synthesizing a new layout part before this command can be promoted."
-    },
-    {
-      "op": "set_background",
-      "reason": "LibreOffice applies the page color but does not add a native undo action."
-    },
-    {
-      "op": "set_table_cell",
-      "reason": "UNO XText mutation changes a table cell but does not add a native undo action."
-    },
-    {
-      "op": "rename_slide",
-      "reason": "LibreOffice records an undo action but can restore a localized default name instead of the exact imported slide name."
-    },
-    {
-      "op": "set_slide_hidden",
-      "reason": "The stock editor command targets the slide-sorter selection rather than the requested draw page, so a non-active slide cannot be changed reliably through the current typed adapter."
-    },
-    {
-      "op": "set_alt_text",
-      "reason": "The typed adapter is implemented, but exact metadata Undo and PPTX round-trip require the undo-v3 engine candidate to pass runtime promotion gates."
-    },
-    {
-      "op": "set_shape_name",
-      "reason": "The typed adapter is implemented, but exact object-name Undo and identity-preserving save/reopen require the undo-v3 engine candidate to pass runtime promotion gates."
-    },
-    {
-      "op": "set_text_box",
-      "reason": "The typed adapter is implemented, but margin, growth and wrapping changes require the undo-v3 engine candidate plus visual text-overflow validation."
-    },
-    {
-      "op": "set_character_spacing",
-      "reason": "The typed adapter is implemented, but exact character-spacing Undo, render validation and PowerPoint reopen remain candidate gates."
-    },
-    {
-      "op": "set_script_position",
-      "reason": "The typed adapter is implemented, but superscript and subscript changes require the undo-v3 engine candidate and text-layout validation."
-    },
-    {
-      "op": "set_shape_shadow",
-      "reason": "The typed adapter is implemented, but shadow geometry and appearance require the undo-v3 engine candidate and rendered equivalence validation."
-    },
-    {
-      "op": "text_shadow",
-      "reason": "The editor command applies text shadow in memory, but the stock PPTX filter drops the run effect during save/reopen. The undo-v9 engine patch preserves the DrawingML outer shadow and must pass cumulative browser, visual and PowerPoint gates before promotion."
-    },
-    {
-      "op": "set_object_lock",
-      "reason": "The typed adapter and native Undo path are implemented, but the stock PPTX filter drops independent move and resize protection. The undo-v9 engine patch maps standard DrawingML locks across shapes, groups, pictures, connectors and graphical frames and must pass cumulative browser and PowerPoint gates before promotion."
-    },
-    {
-      "op": "replace_text_range",
-      "reason": "Paragraph/run observation and the formatting-preserving typed adapter are implemented, but the undo-v5 engine candidate still requires compiled unit, browser, native Undo/Redo and PPTX save/reopen verification."
-    },
-    {
-      "op": "insert_table_rows",
-      "reason": "The typed adapter and dimension observation are implemented, but inherited row height and exact native Undo require the undo-v5 engine candidate to pass compiled unit, browser and PPTX save/reopen gates."
-    },
-    {
-      "op": "delete_table_rows",
-      "reason": "The typed adapter is implemented, but exact table geometry, cell topology, native Undo and PPTX save/reopen remain undo-v5 runtime gates."
-    },
-    {
-      "op": "insert_table_columns",
-      "reason": "The typed adapter and dimension observation are implemented, but inherited column width and exact native Undo require the undo-v5 engine candidate to pass compiled unit, browser and PPTX save/reopen gates."
-    },
-    {
-      "op": "delete_table_columns",
-      "reason": "The typed adapter is implemented, but exact table geometry, cell topology, native Undo and PPTX save/reopen remain undo-v5 runtime gates."
-    },
-    {
-      "op": "merge_table_cells",
-      "reason": "Merged-range observation and the typed adapter are implemented, but exact cell content, formatting, native Undo and PPTX save/reopen remain undo-v5 runtime gates."
-    },
-    {
-      "op": "split_table_cell",
-      "reason": "Merged-range observation and the typed adapter are implemented, but split dimensions, cell formatting, native Undo and PPTX save/reopen remain undo-v5 runtime gates."
-    },
-    {
-      "op": "set_table_row_height",
-      "reason": "The typed adapter and exact row-height readback are implemented, but browser Undo and PPTX save/reopen remain undo-v5 runtime gates."
-    },
-    {
-      "op": "set_table_column_width",
-      "reason": "The typed adapter and exact column-width readback are implemented, but browser Undo and PPTX save/reopen remain undo-v5 runtime gates."
-    },
-    {
-      "op": "set_table_cell_format",
-      "reason": "The live editor observes bounded cell fill, font family/color/size/weight/underline/strike/shadow/spacing, paragraph alignment, margin and four-side border color/width properties. All apply and read back on the stock engine, including BorderLine values, but add zero native Undo actions. The candidate engine captures Cell property setters in native Undo; the typed adapter is restricted to these declared properties and requires compiled, browser, save/reopen, visual and PowerPoint verification before promotion."
-    },
-    {
-      "op": "set_slide_transition",
-      "reason": "The live editor observes and applies transition type, subtype, direction, duration and fade color, but stock property setters add zero native Undo actions. The prepared engine command reuses LibreOffice's complete UndoTransition snapshot and the typed adapter exposes only named interoperable presets; compiled, browser, playback, save/reopen and PowerPoint verification remain required."
-    },
-    {
-      "op": "set_animation_timing",
-      "reason": "The live editor exposes stable animation targets, effect order and preset metadata, and direct duration changes apply, but stock setters add zero native Undo actions. The prepared bounded engine command targets one observed effect by element, occurrence and preset identity and reuses LibreOffice's complete UndoAnimation snapshot; compiled, browser playback, save/reopen and PowerPoint verification remain required."
-    },
-    {
-      "op": "set_object_interaction",
-      "reason": "LibreOffice can apply shape click actions and targets, but direct UNO property setters add no native Undo action. The undo-v18 engine command snapshots only interaction state, rejects the legacy case where a second-effect sound shares the same target field, and therefore cannot silently overwrite adjacent animation or sound data; compiled, browser playback, save/reopen and PowerPoint verification remain required."
-    }
-  ],
-  "candidateOperations": [
-    {
-      "op": "crop_image",
-      "state": "runtime_validation_required",
-      "reason": "The live editor now observes original image dimensions and crop fractions, and direct GraphicCrop changes round-trip as OOXML source rectangles on rectangular pictures. Stock UNO records no Undo; the bounded SetGraphicCrop engine patch and browser adapter must pass engine, Undo/Redo, save/reopen, visual and PowerPoint gates before promotion."
-    }
-  ],
+  "candidateOperations": [],
   "formatExcludedOperations": [
     {
       "op": "set_printable",
@@ -955,8 +818,8 @@
   "knownUnsafeTransactions": [
     {
       "kind": "multi_command_slide_structure",
-      "state": "engine_patch_ready",
-      "reason": "Stock SdrModel::MovePage re-runs insertion-time object-name uniquification. A sequence of slide moves can therefore change OOXML object names and cannot round-trip exactly through one Undo; the adapter rejects it until the engine patch is built and verified."
+      "state": "runtime_verified_on_patched_engine",
+      "reason": "The stock engine can rename objects during page moves. The declared patched engine preserves identity and passed multi-command Undo, save/reopen and change-budget conformance; lower patch levels remain rejected."
     },
     {
       "kind": "mixed_slide_structure_and_content",
@@ -1189,17 +1052,11 @@
       },
       "cells": {
         "type": ["array", "null"],
-        "items": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
+        "items": { "type": "array", "items": { "type": "string" } }
       },
       "data": {
         "type": ["array", "null"],
-        "items": {
-          "type": "array",
-          "items": { "type": ["number", "null"] }
-        }
+        "items": { "type": "array", "items": { "type": ["number", "null"] } }
       },
       "rowDescriptions": {
         "type": ["array", "null"],
@@ -1218,30 +1075,14 @@
         "enum": ["column", "line", "area", "pie", "scatter", "radar", null],
         "description": "Bounded internal-data chart family for set_chart_type."
       },
-      "row": {
-        "type": ["number", "null"]
-      },
-      "column": {
-        "type": ["number", "null"]
-      },
-      "index": {
-        "type": ["number", "null"]
-      },
-      "count": {
-        "type": ["number", "null"]
-      },
-      "startRow": {
-        "type": ["number", "null"]
-      },
-      "endRow": {
-        "type": ["number", "null"]
-      },
-      "startColumn": {
-        "type": ["number", "null"]
-      },
-      "endColumn": {
-        "type": ["number", "null"]
-      },
+      "row": { "type": ["number", "null"] },
+      "column": { "type": ["number", "null"] },
+      "index": { "type": ["number", "null"] },
+      "count": { "type": ["number", "null"] },
+      "startRow": { "type": ["number", "null"] },
+      "endRow": { "type": ["number", "null"] },
+      "startColumn": { "type": ["number", "null"] },
+      "endColumn": { "type": ["number", "null"] },
       "rows": {
         "type": ["integer", "null"],
         "minimum": 1,
@@ -1490,5 +1331,177 @@
       "columns",
       "tableCellFormat"
     ]
-  }
+  },
+  "stockEngineLimitations": [
+    {
+      "op": "add_text_box",
+      "minimumVerifiedPatch": 14,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "add_shape",
+      "minimumVerifiedPatch": 14,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "duplicate_element",
+      "minimumVerifiedPatch": 14,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "font_size",
+      "minimumVerifiedPatch": 14,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "bold",
+      "minimumVerifiedPatch": 14,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "italic",
+      "minimumVerifiedPatch": 14,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "font_family",
+      "minimumVerifiedPatch": 14,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "insert_slide",
+      "minimumVerifiedPatch": 9,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_slide_layout",
+      "minimumVerifiedPatch": 14,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_background",
+      "minimumVerifiedPatch": 2,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_table_cell",
+      "minimumVerifiedPatch": 2,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "rename_slide",
+      "minimumVerifiedPatch": 2,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_slide_hidden",
+      "minimumVerifiedPatch": 2,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_alt_text",
+      "minimumVerifiedPatch": 3,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_shape_name",
+      "minimumVerifiedPatch": 3,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_text_box",
+      "minimumVerifiedPatch": 3,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_character_spacing",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_script_position",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_shape_shadow",
+      "minimumVerifiedPatch": 3,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "text_shadow",
+      "minimumVerifiedPatch": 9,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_object_lock",
+      "minimumVerifiedPatch": 9,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "replace_text_range",
+      "minimumVerifiedPatch": 4,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "insert_table_rows",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "delete_table_rows",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "insert_table_columns",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "delete_table_columns",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "merge_table_cells",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "split_table_cell",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_table_row_height",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_table_column_width",
+      "minimumVerifiedPatch": 5,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_table_cell_format",
+      "minimumVerifiedPatch": 6,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_slide_transition",
+      "minimumVerifiedPatch": 7,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_animation_timing",
+      "minimumVerifiedPatch": 8,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_object_interaction",
+      "minimumVerifiedPatch": 18,
+      "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    }
+  ]
 }

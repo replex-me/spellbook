@@ -44,10 +44,13 @@
       "runtimeGuard": "The connector checks the live editor patch level and document permission before every operation."
     },
     "runtimeVerified": [
+      "insert_slide",
       "duplicate_slide",
       "delete_slide",
       "move_slide",
       "set_speaker_notes",
+      "add_text_box",
+      "add_shape",
       "add_table",
       "align",
       "distribute",
@@ -55,8 +58,13 @@
       "replace_text",
       "move",
       "resize",
+      "font_size",
+      "bold",
+      "italic",
       "underline",
       "strikethrough",
+      "text_shadow",
+      "font_family",
       "font_color",
       "fill_color",
       "line_color",
@@ -69,19 +77,10 @@
       "paragraph_alignment",
       "flip",
       "ungroup",
+      "duplicate_element",
       "delete_element",
       "set_chart_data",
-      "set_chart_type"
-    ],
-    "enginePatchReady": [
-      "add_text_box",
-      "add_shape",
-      "duplicate_element",
-      "font_size",
-      "bold",
-      "italic",
-      "font_family",
-      "insert_slide",
+      "set_chart_type",
       "set_slide_layout",
       "set_background",
       "set_table_cell",
@@ -93,8 +92,8 @@
       "set_character_spacing",
       "set_script_position",
       "set_shape_shadow",
-      "text_shadow",
       "set_object_lock",
+      "set_object_interaction",
       "replace_text_range",
       "insert_table_rows",
       "delete_table_rows",
@@ -107,18 +106,20 @@
       "set_table_cell_format",
       "set_slide_transition",
       "set_animation_timing",
-      "set_object_interaction"
+      "crop_image"
     ],
-    "runtimeValidationRequired": ["crop_image"],
+    "enginePatchReady": [],
+    "runtimeValidationRequired": [],
     "formatExcluded": ["set_printable"],
-    "enginePatchReadyTransactions": ["multi_command_slide_structure"],
+    "enginePatchReadyTransactions": [],
     "runtimeVerifiedAuxiliaryTools": [
       {
         "op": "insert_generated_image",
         "editorOperation": "insert_image",
         "reason": "Image generation and binary asset delivery are platform-mediated. Live revision, target slide, permission, exact one-image insertion, native Undo and Redo pass, but the operation has not yet been unified with native_edit/native_batch_edit."
       }
-    ]
+    ],
+    "runtimeVerifiedTransactions": ["multi_command_slide_structure"]
   },
   "semanticFamilies": [
     {
@@ -130,29 +131,19 @@
     {
       "id": "slide_structure",
       "scope": "insert, duplicate, delete, reorder, hide, layout, rename and sections",
-      "states": [
-        "runtime_verified",
-        "engine_patch_ready",
-        "typed_adapter_required"
-      ],
-      "next": [
-        "activate rename after patched-engine probe",
-        "activate exact slide visibility after patched-engine probe",
-        "activate multi-command slide-structure transactions after object-name-preserving MovePage is built and probed",
-        "add section observation and typed operations"
-      ]
+      "states": ["runtime_verified", "typed_adapter_required"],
+      "next": ["add section observation and typed operations"]
     },
     {
       "id": "slide_background_master_theme",
       "scope": "background fills, master assignment, master objects, theme and slide size",
       "states": [
-        "engine_patch_ready",
+        "runtime_verified",
         "observation_verified",
         "typed_adapter_required",
         "visual_validation_required"
       ],
       "next": [
-        "activate solid background after patched-engine probe",
         "add bounded master/theme mutation tools without allowing slide-layout Undo to mutate master placeholders"
       ]
     },
@@ -173,7 +164,7 @@
         "visual_validation_required"
       ],
       "next": [
-        "add line style/arrowhead and shape shadow first",
+        "add line style and arrowhead adapters with exact readback",
         "gate gradient/effects on serialized and visual equivalence"
       ]
     },
@@ -187,7 +178,6 @@
       ],
       "next": [
         "expose run and paragraph identities",
-        "activate formatting-preserving range replacement after the undo-v5 engine candidate passes compiled unit, browser, Undo/Redo and save/reopen gates",
         "model dynamic fields explicitly"
       ]
     },
@@ -196,7 +186,6 @@
       "scope": "font family/size/color, weight, posture, underline, strike, shadow, case, script and spacing",
       "states": ["runtime_verified", "typed_adapter_required"],
       "next": [
-        "activate superscript/subscript and character spacing after patched-engine verification",
         "add case and language only after the bridge can enter Impress Outliner text-edit mode with an explicit range; selecting a shape or UNO text cursor does not activate the human text-edit command context"
       ]
     },
@@ -219,15 +208,13 @@
       "scope": "create, cell text/style/borders, rows, columns, merge/split, dimensions and distribution",
       "states": [
         "runtime_verified",
-        "engine_patch_ready",
         "observation_verified",
         "typed_adapter_required",
         "visual_validation_required"
       ],
       "next": [
-        "activate cell text and eight structural operations after undo-v5 browser and save/reopen gates",
         "verify merged-cell content, formatting and exact outline geometry on representative tables",
-        "activate the bounded cell fill, font family/color/size/weight/underline/strike/shadow/spacing, paragraph, margin and four-side border adapter after the cell-property engine patch passes native Undo and round-trip gates",
+        "extend the verified bounded cell-format adapter to paragraph, margin and four-side border variants only after each property has exact readback",
         "verify each border color and point width through BorderLine readback, Undo/Redo, save/reopen and PowerPoint instead of treating a visible border as completion"
       ]
     },
@@ -237,14 +224,12 @@
       "states": [
         "runtime_verified",
         "observation_verified",
-        "runtime_validation_required",
         "typed_adapter_required",
         "visual_validation_required"
       ],
       "next": [
         "move image insert into the same typed transaction contract",
-        "build and verify the bounded GraphicCrop native Undo path without replacing or rasterizing the source picture",
-        "add media metadata and keep crop unavailable for imported picture-to-shape cases whose no-op Collabora save already flattens the source rectangle",
+        "add media metadata and preserve the imported picture-to-shape exclusion where a no-op Collabora save already flattens the source rectangle",
         "keep remote asset fetching platform-mediated"
       ]
     },
@@ -293,13 +278,12 @@
       "id": "hyperlinks_actions",
       "scope": "links, action settings, mouse-over/click behavior and QR objects",
       "states": [
+        "runtime_verified",
         "observation_verified",
-        "engine_patch_ready",
         "visual_validation_required"
       ],
       "next": [
-        "compile undo-v18 and run the native, browser Undo/save/reopen and slideshow-navigation conformance scenario",
-        "verify saved external and internal actions in PowerPoint without broadening the safe HTTP(S)-only AI contract",
+        "extend beyond the verified safe HTTP(S) click action only after each action type has saved-state and PowerPoint playback evidence",
         "keep mouse-over, executable programs, macros, sounds and arbitrary files outside the AI contract until each gets an explicit product and security decision"
       ]
     },
@@ -307,13 +291,12 @@
       "id": "animations_transitions_timing",
       "scope": "object animations, slide transitions, durations, order and rehearsal timing",
       "states": [
+        "runtime_verified",
         "observation_verified",
         "typed_adapter_required",
         "visual_validation_required"
       ],
       "next": [
-        "activate the bounded named slide-transition presets after the UndoTransition engine command passes compiled, browser, playback and PowerPoint gates",
-        "activate the bounded element-effect duration, delay and start-mode adapter after its UndoAnimation engine command passes compiled, browser, playback and PowerPoint gates",
         "add bounded preset replacement, effect insertion/removal and effect-order mutation after each operation has the same native history and playback evidence",
         "validate playback rather than static screenshots alone"
       ]

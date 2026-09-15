@@ -129,6 +129,24 @@ change-budget checks, human visual review, and PowerPoint validation; image
 existence or a list of required target names can no longer stand in for those
 outcomes.
 
+Promote individual native operations into the public runtime contract only
+from that evidence-bound browser report and validation receipt:
+
+```bash
+pnpm office:runtime:promote -- \
+  --browser-report /secure/path/conformance-report.json \
+  --validation /secure/path/spellbook-office-runtime.validation.json \
+  --version <next-contract-semver>
+```
+
+The promotion command rejects partial operation sets, failed native,
+save/reopen, change-budget or PowerPoint gates, mismatched source and patch
+identities, and unknown evidence hashes. It is idempotent and preserves the
+stock-engine limitation list. Operation-level `runtime_verified` means the
+bounded command passed its required gates on the declared patched engine; it
+does not upgrade an agent-reviewed runtime candidate to the human-reviewed
+`release_verified` state.
+
 The candidate wrapper records the public source revision, Collabora source
 commit, engine digest and patch-series hash as OCI labels. The receipt is the
 only artifact a managed downstream needs to lock; it must not copy this patch

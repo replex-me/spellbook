@@ -138,9 +138,10 @@ test("runtime mutation contracts are generated from the public capability model"
   const operations = capabilities.mutationModel.operations;
   assert.equal(Object.keys(operations).length, 64);
   assert.equal(operations.set_printable.availability, "format_excluded");
-  assert.equal(
-    operations.crop_image.availability,
-    "runtime_validation_required",
+  assert.ok(
+    Object.values(operations)
+      .filter((operation) => operation.availability !== "format_excluded")
+      .every((operation) => operation.availability === "runtime_verified"),
   );
   assert.equal(operations.insert_slide.minEnginePatch, 9);
   assert.equal(operations.set_object_interaction.minEnginePatch, 18);
