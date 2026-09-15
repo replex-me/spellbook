@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { candidateBrowserReportErrors } from "./verify-candidate-powerpoint.mjs";
+import {
+  candidateBrowserReportErrors,
+  candidateNativeConformanceErrors,
+} from "./verify-candidate-powerpoint.mjs";
 
 const operations = [
   "replace_text",
@@ -22,6 +26,16 @@ const operations = [
   "font_color",
   "paragraph_alignment",
 ];
+const capabilities = JSON.parse(
+  readFileSync(
+    new URL("../../contracts/native-edit-capabilities.json", import.meta.url),
+    "utf8",
+  ),
+);
+const nativeOperations = Object.entries(capabilities.mutationModel.operations)
+  .filter(([, operation]) => operation.availability !== "format_excluded")
+  .map(([operation]) => operation)
+  .sort();
 
 test("PowerPoint admission requires the complete receipt-bound endurance report", () => {
   const report = {
@@ -53,6 +67,39 @@ test("PowerPoint admission requires the complete receipt-bound endurance report"
       ...report,
       verifiedElementOperations: operations.slice(1),
     }).join("; "),
-    /17-operation/u,
+    /17-operation bridge/u,
+  );
+});
+
+test("PowerPoint admission also requires every typed native operation", () => {
+  const scenarios = Array.from({ length: 10 }, (_, index) => ({
+    scenario: `scenario-${index}`,
+    status: "passed",
+    reopenVerified: true,
+    missingSelectedOperations: [],
+    changeBudget: { valid: true },
+  }));
+  const report = {
+    status: "browser-native-conformance-verified",
+    candidateReceiptSha256: "a".repeat(64),
+    expectedOperations: nativeOperations,
+    executedOperations: nativeOperations,
+    missingOperations: [],
+    scenarios,
+  };
+  assert.deepEqual(candidateNativeConformanceErrors(report), []);
+  assert.match(
+    candidateNativeConformanceErrors({
+      ...report,
+      executedOperations: nativeOperations.slice(1),
+    }).join("; "),
+    /complete native operation contract/u,
+  );
+  assert.match(
+    candidateNativeConformanceErrors({
+      ...report,
+      scenarios: scenarios.slice(1),
+    }).join("; "),
+    /all 10 scenarios/u,
   );
 });

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -139,5 +141,55 @@ test("browser Office server emits the required cross-origin isolation headers", 
     await new Promise((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
+  }
+});
+
+test("browser conformance reuses an exact fixture and captures one PPTX save", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "spellbook-browser-probe-"),
+  );
+  const source = path.join(root, "source.pptx");
+  const output = path.join(root, "saved.pptx");
+  const sourceBytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 1]);
+  const savedBytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 2]);
+  await writeFile(source, sourceBytes);
+  const server = createHarnessServer({
+    browserProbeSource: source,
+    browserProbeOutput: output,
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const origin = `http://127.0.0.1:${address.port}`;
+  try {
+    const fixture = await fetch(`${origin}/fixtures/browser-probe.pptx`);
+    assert.equal(fixture.status, 200);
+    assert.deepEqual(Buffer.from(await fixture.arrayBuffer()), sourceBytes);
+    const bridge = await fetch(
+      `${origin}/extensions/org.spellbook.editor/browser-probe.html`,
+    );
+    assert.equal(bridge.status, 200);
+    assert.match(await bridge.text(), /probeHistory/u);
+
+    const saved = await fetch(`${origin}/browser-probe/save`, {
+      method: "POST",
+      body: savedBytes,
+    });
+    assert.equal(saved.status, 201);
+    assert.deepEqual(await saved.json(), { bytes: savedBytes.byteLength });
+    assert.deepEqual(await readFile(output), savedBytes);
+
+    const duplicate = await fetch(`${origin}/browser-probe/save`, {
+      method: "POST",
+      body: savedBytes,
+    });
+    assert.equal(duplicate.status, 409);
+    assert.deepEqual(await duplicate.json(), {
+      error: "browser_probe_output_exists",
+    });
+  } finally {
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+    await rm(root, { recursive: true, force: true });
   }
 });

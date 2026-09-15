@@ -14,7 +14,7 @@ const documentTool = path.join(
   repositoryRoot,
   "services/document-worker/tools/Spellbook.Document.Tool/bin/Release/net10.0/Spellbook.Document.Tool.dll",
 );
-const requiredElementOperations = Object.freeze([
+const requiredBridgeOperations = Object.freeze([
   "replace_text",
   "move",
   "resize",
@@ -33,6 +33,18 @@ const requiredElementOperations = Object.freeze([
   "font_color",
   "paragraph_alignment",
 ]);
+const nativeCapabilities = JSON.parse(
+  await fs.readFile(
+    path.join(repositoryRoot, "contracts/native-edit-capabilities.json"),
+    "utf8",
+  ),
+);
+const requiredNativeOperations = Object.freeze(
+  Object.entries(nativeCapabilities.mutationModel.operations)
+    .filter(([, operation]) => operation.availability !== "format_excluded")
+    .map(([operation]) => operation)
+    .sort(),
+);
 
 export function candidateBrowserReportErrors(report) {
   const errors = [];
@@ -43,16 +55,18 @@ export function candidateBrowserReportErrors(report) {
   if (!/^[0-9a-f]{64}$/u.test(report?.candidateRuntime?.receiptSha256 ?? ""))
     errors.push("candidate build receipt is not bound to the report");
   if (
-    !sameStringSet(report?.verifiedElementOperations, requiredElementOperations)
+    !sameStringSet(report?.verifiedElementOperations, requiredBridgeOperations)
   )
-    errors.push("the complete 17-operation product set was not verified");
+    errors.push(
+      "the complete 17-operation bridge endurance subset was not verified",
+    );
   if (
     report?.endurance?.status !== "browser-product-endurance-verified" ||
     !Number.isSafeInteger(report?.endurance?.cycles) ||
     report.endurance.cycles < 100
   )
     errors.push("the single-session endurance run did not reach 100 cycles");
-  if (!sameStringSet(report?.endurance?.operations, requiredElementOperations))
+  if (!sameStringSet(report?.endurance?.operations, requiredBridgeOperations))
     errors.push("endurance did not rotate through all 17 element operations");
   if (JSON.stringify(report?.changedParts) !== '["ppt/slides/slide1.xml"]')
     errors.push("the final edit changed collateral OOXML parts");
@@ -64,6 +78,36 @@ export function candidateBrowserReportErrors(report) {
     errors.push("the browser run emitted page errors");
   if ((report?.requestFailures?.length ?? -1) !== 0)
     errors.push("the browser run emitted request failures");
+  return errors;
+}
+
+export function candidateNativeConformanceErrors(report) {
+  const errors = [];
+  if (report?.status !== "browser-native-conformance-verified")
+    errors.push("browser native conformance status is not verified");
+  if (!/^[0-9a-f]{64}$/u.test(report?.candidateReceiptSha256 ?? ""))
+    errors.push("browser native conformance has no candidate receipt");
+  if (!sameStringSet(report?.expectedOperations, requiredNativeOperations))
+    errors.push("browser native conformance expected-operation set differs");
+  if (!sameStringSet(report?.executedOperations, requiredNativeOperations))
+    errors.push("the complete native operation contract was not executed");
+  if ((report?.missingOperations?.length ?? -1) !== 0)
+    errors.push("browser native conformance reports missing operations");
+  if (!Array.isArray(report?.scenarios) || report.scenarios.length !== 10)
+    errors.push("browser native conformance did not run all 10 scenarios");
+  else
+    for (const scenario of report.scenarios) {
+      if (
+        scenario?.status !== "passed" ||
+        scenario?.reopenVerified !== true ||
+        scenario?.missingSelectedOperations?.length !== 0 ||
+        (scenario?.changeBudget?.valid ?? scenario?.changeBudget?.Valid) !==
+          true
+      )
+        errors.push(
+          `browser native scenario is incomplete: ${scenario?.scenario ?? "unknown"}`,
+        );
+    }
   return errors;
 }
 
@@ -81,7 +125,21 @@ async function main() {
   const browserReport = JSON.parse(
     await fs.readFile(path.join(evidenceRoot, "result.json"), "utf8"),
   );
-  const errors = candidateBrowserReportErrors(browserReport);
+  const nativeConformancePath = path.resolve(
+    requiredFlagValue("--native-conformance", process.argv),
+  );
+  const nativeConformance = JSON.parse(
+    await fs.readFile(nativeConformancePath, "utf8"),
+  );
+  const errors = [
+    ...candidateBrowserReportErrors(browserReport),
+    ...candidateNativeConformanceErrors(nativeConformance),
+  ];
+  if (
+    nativeConformance.candidateReceiptSha256 !==
+    browserReport.candidateRuntime?.receiptSha256
+  )
+    errors.push("browser bridge and native conformance use different runtimes");
   const candidateDeck = path.join(evidenceRoot, "saved-product-bridge.pptx");
   const candidateBytes = await fs.readFile(candidateDeck);
   if (sha256(candidateBytes) !== browserReport.savedSha256)
@@ -170,6 +228,8 @@ async function main() {
     errors,
     browserEvidenceRoot: evidenceRoot,
     browserReceiptSha256: browserReport.candidateRuntime.receiptSha256,
+    nativeConformanceSha256: sha256(await fs.readFile(nativeConformancePath)),
+    verifiedNativeOperations: nativeConformance.executedOperations,
     savedSha256: browserReport.savedSha256,
     openXmlValidation,
     outputRoot: runRoot,

@@ -4,22 +4,37 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { admitCandidateRuntime } from "./candidate-runtime.mjs";
-import { candidateBrowserReportErrors } from "./verify-candidate-powerpoint.mjs";
+import {
+  candidateBrowserReportErrors,
+  candidateNativeConformanceErrors,
+} from "./verify-candidate-powerpoint.mjs";
 
 export function createCandidatePromotion({
   admittedRuntime,
   browserReport,
   browserReportSha256,
+  nativeConformanceReport,
+  nativeConformanceReportSha256,
   powerpointReport,
   powerpointReportSha256,
   verifiedAt = new Date().toISOString(),
 }) {
-  const errors = candidateBrowserReportErrors(browserReport);
+  const errors = [
+    ...candidateBrowserReportErrors(browserReport),
+    ...candidateNativeConformanceErrors(nativeConformanceReport),
+  ];
   if (
     admittedRuntime.receiptSha256 !==
     browserReport.candidateRuntime?.receiptSha256
   )
     errors.push("browser report does not identify the admitted build receipt");
+  if (
+    admittedRuntime.receiptSha256 !==
+    nativeConformanceReport?.candidateReceiptSha256
+  )
+    errors.push(
+      "native conformance report does not identify the admitted build receipt",
+    );
   if (powerpointReport?.valid !== true || powerpointReport.errors?.length !== 0)
     errors.push("native PowerPoint evidence is not valid");
   if (powerpointReport?.browserReceiptSha256 !== admittedRuntime.receiptSha256)
@@ -28,8 +43,16 @@ export function createCandidatePromotion({
     );
   if (powerpointReport?.savedSha256 !== browserReport.savedSha256)
     errors.push("PowerPoint evidence does not identify the browser-saved PPTX");
+  if (
+    powerpointReport?.nativeConformanceSha256 !== nativeConformanceReportSha256
+  )
+    errors.push(
+      "PowerPoint evidence does not identify the native conformance report",
+    );
   if (!/^[0-9a-f]{64}$/u.test(browserReportSha256 ?? ""))
     errors.push("browser evidence digest is invalid");
+  if (!/^[0-9a-f]{64}$/u.test(nativeConformanceReportSha256 ?? ""))
+    errors.push("native conformance evidence digest is invalid");
   if (!/^[0-9a-f]{64}$/u.test(powerpointReportSha256 ?? ""))
     errors.push("PowerPoint evidence digest is invalid");
   if (errors.length) throw new Error(errors.join("; "));
@@ -47,8 +70,10 @@ export function createCandidatePromotion({
     },
     evidence: {
       browserReportSha256,
+      nativeConformanceReportSha256,
       powerpointReportSha256,
       verifiedElementOperations: browserReport.verifiedElementOperations,
+      verifiedNativeOperations: nativeConformanceReport.executedOperations,
       enduranceCycles: browserReport.endurance.cycles,
       changedParts: browserReport.changedParts,
       savedSha256: browserReport.savedSha256,
@@ -66,19 +91,28 @@ async function main() {
   const browserReportPath = path.resolve(
     requiredFlagValue("--browser-report", process.argv),
   );
+  const nativeConformanceReportPath = path.resolve(
+    requiredFlagValue("--native-conformance", process.argv),
+  );
   const powerpointReportPath = path.resolve(
     requiredFlagValue("--powerpoint-report", process.argv),
   );
   const output = path.resolve(requiredFlagValue("--output", process.argv));
   const admittedRuntime = await admitCandidateRuntime({ runtimeDirectory });
-  const [browserBytes, powerpointBytes] = await Promise.all([
-    fs.readFile(browserReportPath),
-    fs.readFile(powerpointReportPath),
-  ]);
+  const [browserBytes, nativeConformanceBytes, powerpointBytes] =
+    await Promise.all([
+      fs.readFile(browserReportPath),
+      fs.readFile(nativeConformanceReportPath),
+      fs.readFile(powerpointReportPath),
+    ]);
   const promotion = createCandidatePromotion({
     admittedRuntime,
     browserReport: JSON.parse(browserBytes.toString("utf8")),
     browserReportSha256: sha256(browserBytes),
+    nativeConformanceReport: JSON.parse(
+      nativeConformanceBytes.toString("utf8"),
+    ),
+    nativeConformanceReportSha256: sha256(nativeConformanceBytes),
     powerpointReport: JSON.parse(powerpointBytes.toString("utf8")),
     powerpointReportSha256: sha256(powerpointBytes),
   });

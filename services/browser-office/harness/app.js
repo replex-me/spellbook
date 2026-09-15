@@ -14,10 +14,11 @@ const insertSlideButton = document.querySelector("#insert-slide");
 const undoButton = document.querySelector("#undo");
 const saveButton = document.querySelector("#save");
 const productMode = location.pathname === "/workspace";
+const query = new URLSearchParams(location.search);
+const browserProbeMode = productMode && query.get("browserProbe") === "1";
 const productBridgeSessionId = productMode ? crypto.randomUUID() : "";
-const expectedHostOrigin = productMode
-  ? new URLSearchParams(location.search).get("hostOrigin")
-  : null;
+const expectedHostOrigin = productMode ? query.get("hostOrigin") : null;
+const networkFetch = globalThis.fetch.bind(globalThis);
 
 let enginePort;
 let engineDocumentOpen = false;
@@ -1289,8 +1290,7 @@ async function checkpointLiveNativeState(live, reason) {
     },
   };
   currentBytes = afterBytes;
-  if (previousManualSnapshot)
-    commands[commands.length - 1] = snapshotCommand;
+  if (previousManualSnapshot) commands[commands.length - 1] = snapshotCommand;
   else commands.push(snapshotCommand);
   productUndoHistory.length = 0;
   productRedoHistory.length = 0;
@@ -1558,7 +1558,10 @@ async function handleProductHostMessage(message) {
         await request("dispatch", { unoCommand: command });
         const live = await observeNativeDocument();
         if (live.revision !== reconciledModelRevision)
-          await checkpointLiveNativeState(live, `manual_${command.toLowerCase()}`);
+          await checkpointLiveNativeState(
+            live,
+            `manual_${command.toLowerCase()}`,
+          );
         const status = await request("status");
         reportHostModified(
           Boolean(status.modified) || Boolean(unreconciledModelRevision),
@@ -1914,6 +1917,25 @@ undoButton.addEventListener("click", async () => {
 
 saveButton.addEventListener("click", async () => {
   if (!currentBytes) throw new Error("Open a PPTX before saving.");
+  if (browserProbeMode) {
+    const bytes = await exportProductDocument();
+    const response = await networkFetch("/browser-probe/save", {
+      method: "POST",
+      headers: {
+        "content-type":
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      },
+      body: bytes,
+    });
+    if (!response.ok) {
+      const value = await response.json().catch(() => ({}));
+      throw new Error(
+        value.error ?? `Browser probe save failed: ${response.status}`,
+      );
+    }
+    status.textContent = "저장 확인 중…";
+    return;
+  }
   await recordBytes("manual-save", currentBytes, currentSlideCount, {
     operation: "export_current_candidate",
   });
@@ -1923,6 +1945,143 @@ saveButton.addEventListener("click", async () => {
 if (productMode) {
   body.dataset.mode = "product";
   window.addEventListener("message", connectProductHost);
+}
+
+let browserProbePort;
+const browserProbeEvents = [];
+
+function waitForBrowserProbeEvent(match, timeoutMs = 30_000) {
+  const existing = browserProbeEvents.find((event) =>
+    Object.entries(match).every(([key, value]) => event[key] === value),
+  );
+  if (existing) return Promise.resolve(existing);
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + timeoutMs;
+    const poll = () => {
+      const event = browserProbeEvents.find((candidate) =>
+        Object.entries(match).every(([key, value]) => candidate[key] === value),
+      );
+      if (event) resolve(event);
+      else if (Date.now() >= deadline)
+        reject(
+          new Error(`Browser probe event timed out: ${JSON.stringify(match)}`),
+        );
+      else setTimeout(poll, 25);
+    };
+    poll();
+  });
+}
+
+async function browserProbeNativeCall(nativeRequest) {
+  const id = `browser-probe-native-${++requestSequence}`;
+  browserProbePort.postMessage({ id, request: nativeRequest });
+  const event = await waitForBrowserProbeEvent({ id });
+  if (event.error) throw new Error(event.error);
+  return event.value;
+}
+
+async function browserProbeHistory(direction = null) {
+  if (direction !== null) {
+    if (!["undo", "redo"].includes(direction))
+      throw new Error("invalid_history_direction");
+    const requestId = `browser-probe-history-${++requestSequence}`;
+    browserProbePort.postMessage({
+      type: "command",
+      messageId: "Send_UNO_Command",
+      values: { Command: direction === "undo" ? ".uno:Undo" : ".uno:Redo" },
+      requestId,
+    });
+    await waitForBrowserProbeEvent({
+      type: "command-complete",
+      messageId: "Send_UNO_Command",
+      requestId,
+    });
+  }
+  return {
+    undo: Array.from(
+      { length: productUndoHistory.length },
+      () => "AI presentation edit",
+    ),
+    redo: Array.from(
+      { length: productRedoHistory.length },
+      () => "AI presentation edit",
+    ),
+  };
+}
+
+async function startBrowserProbe() {
+  if (!browserProbeMode) return;
+  if (!patchedBrowserRuntimeAdmitted())
+    throw new Error("Browser probe requires an admitted candidate runtime.");
+  const channel = new MessageChannel();
+  browserProbePort = channel.port1;
+  browserProbePort.onmessage = (event) => browserProbeEvents.push(event.data);
+  browserProbePort.start();
+  window.postMessage(
+    {
+      type: "spellbook.browser-office-connect",
+      protocolVersion: 1,
+    },
+    requireProductHostOrigin(),
+    [channel.port2],
+  );
+  await waitForBrowserProbeEvent({ type: "ready" });
+
+  const sourceResponse = await networkFetch("/fixtures/browser-probe.pptx");
+  if (!sourceResponse.ok)
+    throw new Error(`Browser probe source failed: ${sourceResponse.status}`);
+  const bytes = new Uint8Array(await sourceResponse.arrayBuffer());
+  const openRequestId = `browser-probe-open-${++requestSequence}`;
+  const transferable = bytes.slice();
+  browserProbePort.postMessage(
+    {
+      type: "open",
+      requestId: openRequestId,
+      fileName: "browser-probe.pptx",
+      revision: '"browser-probe:baseline"',
+      maxBytes: 64 * 1024 * 1024,
+      bytes: transferable.buffer,
+    },
+    [transferable.buffer],
+  );
+  await waitForBrowserProbeEvent({
+    type: "open-complete",
+    requestId: openRequestId,
+  });
+
+  globalThis.__spellbookLaunch = { accessToken: "browser-probe" };
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(
+      typeof input === "string" ? input : input.url,
+      location.href,
+    );
+    if (url.pathname !== "/native/probe") return networkFetch(input, init);
+    try {
+      const request = JSON.parse(String(init?.body ?? "null"));
+      const value = await browserProbeNativeCall(request);
+      return new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
+        }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        },
+      );
+    }
+  };
+  saveButton.textContent = "저장";
+  saveButton.disabled = false;
+  const extensionFrame = document.createElement("iframe");
+  extensionFrame.hidden = true;
+  extensionFrame.src = "/extensions/org.spellbook.editor/browser-probe.html";
+  document.body.append(extensionFrame);
+  body.dataset.browserProbe = "ready";
 }
 
 window.addEventListener("error", (event) => {
@@ -1984,9 +2143,12 @@ script.onload = () => {
             requireProductHostOrigin(),
           );
           startProductHeartbeat();
-        } else if (
-          new URLSearchParams(location.search).get("autorun") === "1"
-        ) {
+          if (browserProbeMode)
+            void startBrowserProbe().catch((error) => {
+              body.dataset.error = error.message;
+              setState("error", error.message);
+            });
+        } else if (query.get("autorun") === "1") {
           try {
             await runConformance();
           } catch (error) {
@@ -2030,5 +2192,9 @@ globalThis.spellbookBrowserOffice = {
       hostSaveRequestId,
       checkpointInFlight,
     };
+  },
+  probeHistory(direction = null) {
+    if (!browserProbeMode) throw new Error("Browser probe mode is not active.");
+    return browserProbeHistory(direction);
   },
 };

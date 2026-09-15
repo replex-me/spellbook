@@ -1,4 +1,9 @@
-import { createReadStream, existsSync, readFileSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,6 +113,23 @@ export function buildRoutes(
     ],
   ]);
 
+  if (options.browserProbeSource) {
+    routes.set(
+      "/fixtures/browser-probe.pptx",
+      route(
+        path.resolve(options.browserProbeSource),
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      ),
+    );
+    routes.set(
+      "/extensions/org.spellbook.editor/browser-probe.html",
+      inlineRoute(
+        `<!doctype html><meta charset="utf-8"><script>globalThis.cool={callRemote(_operation,direction){return parent.spellbookBrowserOffice.probeHistory(direction);}};<\/script>`,
+        "text/html; charset=utf-8",
+      ),
+    );
+  }
+
   for (const asset of upstream.runtimeAssets) {
     const requestedPath =
       asset.path ?? path.basename(new URL(asset.url).pathname);
@@ -148,6 +170,7 @@ export function createHarnessServer(options = {}) {
     buildRoutes(root, upstream, {
       runtimeRoot: options.runtimeRoot,
       runtimeIdentity: options.runtimeIdentity,
+      browserProbeSource: options.browserProbeSource,
     });
   const hostOrigin = validateHostOrigin(
     options.hostOrigin ?? process.env.SPELLBOOK_BROWSER_HOST_ORIGIN,
@@ -177,6 +200,61 @@ export function createHarnessServer(options = {}) {
           ...upstream.sourceCandidate,
         }),
       );
+      return;
+    }
+    if (
+      pathname === "/browser-probe/save" &&
+      request.method === "POST" &&
+      options.browserProbeOutput
+    ) {
+      const chunks = [];
+      let bytes = 0;
+      request.on("data", (chunk) => {
+        bytes += chunk.byteLength;
+        if (bytes > 64 * 1024 * 1024) request.destroy();
+        else chunks.push(chunk);
+      });
+      request.on("end", () => {
+        const value = Buffer.concat(chunks);
+        if (
+          !value.byteLength ||
+          value.byteLength > 64 * 1024 * 1024 ||
+          value[0] !== 0x50 ||
+          value[1] !== 0x4b
+        ) {
+          response.writeHead(400, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          response.end(JSON.stringify({ error: "invalid_browser_probe_pptx" }));
+          return;
+        }
+        try {
+          writeFileSync(path.resolve(options.browserProbeOutput), value, {
+            flag: "wx",
+            mode: 0o600,
+          });
+        } catch (error) {
+          response.writeHead(error?.code === "EEXIST" ? 409 : 500, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          response.end(
+            JSON.stringify({
+              error:
+                error?.code === "EEXIST"
+                  ? "browser_probe_output_exists"
+                  : "browser_probe_save_failed",
+            }),
+          );
+          return;
+        }
+        response.writeHead(201, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+        });
+        response.end(JSON.stringify({ bytes: value.byteLength }));
+      });
       return;
     }
     const target = routes.get(pathname);

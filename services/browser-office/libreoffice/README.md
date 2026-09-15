@@ -83,12 +83,18 @@ node services/browser-office/verify-product-bridge.mjs \
   --endurance-cycles 100 \
   --output artifacts/browser-office/candidate-v7
 
+pnpm browser-office:verify:native-conformance -- \
+  --candidate-runtime /absolute/output \
+  --output artifacts/browser-office/candidate-v7-native
+
 pnpm browser-office:verify:candidate-powerpoint -- \
-  --browser-evidence artifacts/browser-office/candidate-v7
+  --browser-evidence artifacts/browser-office/candidate-v7 \
+  --native-conformance artifacts/browser-office/candidate-v7-native/conformance-report.json
 
 pnpm browser-office:promote:candidate -- \
   --candidate-runtime /absolute/output \
   --browser-report artifacts/browser-office/candidate-v7/result.json \
+  --native-conformance artifacts/browser-office/candidate-v7-native/conformance-report.json \
   --powerpoint-report /absolute/candidate-powerpoint-run/result.json \
   --output artifacts/browser-office/candidate-v7/promotion-receipt.json
 ```
@@ -98,11 +104,13 @@ SHA-256 digests match `build-receipt.json`. It also requires the receipt's
 LibreOffice commit, patch-series digest and complete toolchain identity to
 match `upstream.json`. The resulting in-memory `buildReady` identity exists
 only in that verification server; the tracked manifest remains fail-closed
-until all promotion evidence passes. The promotion run must keep one browser
-and document session alive while exercising the complete admitted operation
-matrix; the product bridge's endurance loop currently covers the shared
-element subset and must not be treated as full-contract evidence. Every cycle
-performs edit, observation, Undo, restored-state
+until all promotion evidence passes. The product bridge keeps one browser and
+document session alive for 100 edit/history/save cycles, while the native
+conformance command reuses the same ten scenario programs and fixtures that
+admitted the server engine to exercise all 63 typed operations in the browser.
+Each scenario requires apply readback, Undo/Redo, save/reopen and its declared
+OOXML change budget; a command name advertised by the adapter is not evidence.
+The endurance loop performs edit, observation, Undo, restored-state
 observation, Redo, observation, final Undo and save acknowledgement; periodic
 exact-byte checks prove that the final Undo restored the original package.
 The PowerPoint follow-up refuses a partial browser report, re-hashes the saved

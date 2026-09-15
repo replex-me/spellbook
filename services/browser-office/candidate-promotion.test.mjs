@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createCandidatePromotion } from "./candidate-promotion.mjs";
@@ -22,6 +23,16 @@ const operations = [
   "font_color",
   "paragraph_alignment",
 ];
+const capabilities = JSON.parse(
+  readFileSync(
+    new URL("../../contracts/native-edit-capabilities.json", import.meta.url),
+    "utf8",
+  ),
+);
+const nativeOperations = Object.entries(capabilities.mutationModel.operations)
+  .filter(([, operation]) => operation.availability !== "format_excluded")
+  .map(([operation]) => operation)
+  .sort();
 const receiptSha256 = "a".repeat(64);
 const savedSha256 = "b".repeat(64);
 const admittedRuntime = {
@@ -49,10 +60,25 @@ const browserReport = {
   pageErrors: [],
   requestFailures: [],
 };
+const nativeConformanceReport = {
+  status: "browser-native-conformance-verified",
+  candidateReceiptSha256: receiptSha256,
+  expectedOperations: nativeOperations,
+  executedOperations: nativeOperations,
+  missingOperations: [],
+  scenarios: Array.from({ length: 10 }, (_, index) => ({
+    scenario: `scenario-${index}`,
+    status: "passed",
+    reopenVerified: true,
+    missingSelectedOperations: [],
+    changeBudget: { valid: true },
+  })),
+};
 const powerpointReport = {
   valid: true,
   errors: [],
   browserReceiptSha256: receiptSha256,
+  nativeConformanceSha256: "1".repeat(64),
   savedSha256,
   renderer: { name: "Microsoft PowerPoint", version: "16.109.1" },
   slideCounts: { source: 1, candidate: 1 },
@@ -64,6 +90,8 @@ test("promotion receipt binds runtime, browser endurance and PowerPoint", () => 
     admittedRuntime,
     browserReport,
     browserReportSha256: "e".repeat(64),
+    nativeConformanceReport,
+    nativeConformanceReportSha256: "1".repeat(64),
     powerpointReport,
     powerpointReportSha256: "f".repeat(64),
     verifiedAt: "2026-09-15T00:00:00.000Z",
@@ -77,9 +105,15 @@ test("promotion receipt binds runtime, browser endurance and PowerPoint", () => 
         admittedRuntime,
         browserReport,
         browserReportSha256: "e".repeat(64),
+        nativeConformanceReport,
+        nativeConformanceReportSha256: "1".repeat(64),
         powerpointReport: { ...powerpointReport, savedSha256: "0".repeat(64) },
         powerpointReportSha256: "f".repeat(64),
       }),
     /browser-saved PPTX/u,
+  );
+  assert.deepEqual(
+    promotion.evidence.verifiedNativeOperations,
+    nativeOperations,
   );
 });
