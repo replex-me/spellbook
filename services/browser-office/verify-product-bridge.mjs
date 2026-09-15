@@ -816,8 +816,11 @@ async function waitForEvent(page, expected) {
             : undefined,
       })),
     );
+    const diagnostics = await page.evaluate(() =>
+      globalThis.spellbookBrowserOffice?.diagnostics?.(),
+    );
     throw new Error(
-      `${error instanceof Error ? error.message : String(error)}; expected=${JSON.stringify(expected)}; events=${JSON.stringify(events)}`,
+      `${error instanceof Error ? error.message : String(error)}; expected=${JSON.stringify(expected)}; events=${JSON.stringify(events)}; diagnostics=${JSON.stringify(diagnostics)}`,
     );
   }
   return page.evaluate(

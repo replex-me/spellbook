@@ -1724,4 +1724,22 @@ globalThis.spellbookBrowserOffice = {
     return bytes ? Array.from(bytes) : null;
   },
   evidence: observed,
+  diagnostics() {
+    return {
+      state: body.dataset.state,
+      error: body.dataset.error || null,
+      pending: [...pending.entries()].map(([requestId, waiter]) => ({
+        requestId,
+        command: waiter.command,
+      })),
+      mutationPending: [...mutationPending.keys()],
+      commandCount: commands.length,
+      undoCount: productUndoHistory.length,
+      redoCount: productRedoHistory.length,
+      reconciledModelRevision,
+      unreconciledModelRevision,
+      hostSaveRequestId,
+      checkpointInFlight,
+    };
+  },
 };
