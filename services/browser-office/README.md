@@ -41,6 +41,16 @@ and reopened in PowerPoint, but rewrote untouched slide, layout, master, theme
 and font data. Spellbook therefore never promotes that whole-file output as
 the authoritative PPTX.
 
+The browser worker also adapts ZetaJS to the same fixed
+`spellbookDocumentOperation` program used by the Collabora extension. The
+headless browser gate opens a real PPTX, observes its slide and element model,
+replaces text through the bounded `replace_text` command, and verifies native
+Undo restores the original revision. This proves that browser and server
+engines can share one AI command implementation instead of accumulating two
+feature-specific code paths. It does not claim full browser parity: commands
+whose contract requires a Spellbook engine patch remain unavailable on the
+stock ZetaOffice binary.
+
 Browser candidates and their replayable command journal are checkpointed in
 OPFS with two alternating slots. Each slot writes the base package and
 candidate before a checksummed metadata commit record; recovery ignores a

@@ -95,6 +95,70 @@ async function writeAndOpen(bytes, name = "document.pptx") {
   return result;
 }
 
+async function runNativeBridgeProbe() {
+  const before = (
+    await request("native", {
+      nativeRequest: { operation: "observe", captureSlideIndexes: [] },
+    })
+  ).value;
+  if (!before?.slides?.length || before.unit !== "1/100mm")
+    throw new Error(
+      "Browser native observation did not return the PPTX model.",
+    );
+  const target = before.slides
+    .flatMap((slide) => slide.elements)
+    .find((element) => typeof element.text === "string" && element.text);
+  if (!target)
+    throw new Error(
+      "Browser native bridge fixture has no editable text target.",
+    );
+  const replacement = `${target.text} · browser AI bridge`;
+  const edited = (
+    await request("native", {
+      nativeRequest: {
+        operation: "edit",
+        expectedRevision: before.revision,
+        expectedSlides: JSON.stringify(before.slides),
+        command: {
+          op: "replace_text",
+          elementId: target.elementId,
+          text: replacement,
+        },
+        permission: {
+          mode: "selection",
+          elementIds: [target.elementId],
+          slideIndexes: [],
+        },
+        suppressCapture: true,
+      },
+    })
+  ).value;
+  const changed = edited.slides
+    .flatMap((slide) => slide.elements)
+    .find((element) => element.elementId === target.elementId);
+  if (changed?.text !== replacement || edited.revision === before.revision)
+    throw new Error("Browser native edit did not change the selected text.");
+  await request("dispatch", { unoCommand: "Undo" });
+  const restored = (
+    await request("native", {
+      nativeRequest: { operation: "observe", captureSlideIndexes: [] },
+    })
+  ).value;
+  if (restored.revision !== before.revision)
+    throw new Error(
+      "Browser native Undo did not restore the observed revision.",
+    );
+  observed.nativeBridge = {
+    operation: "replace_text",
+    slideCount: before.slides.length,
+    elementId: target.elementId,
+    editedRevision: edited.revision,
+    restoredRevision: restored.revision,
+    status: "observe-edit-undo-passed",
+  };
+  body.dataset.nativeBridge = "observe-edit-undo";
+}
+
 async function recordBytes(label, bytes, slideCount, mutation) {
   const entry = {
     label,
@@ -212,6 +276,8 @@ async function runConformance() {
   commands.length = 0;
   history.length = 0;
   const initial = await writeAndOpen(fixture, "general-native-surface.pptx");
+  await runNativeBridgeProbe();
+  await writeAndOpen(fixture, "general-native-surface.pptx");
   const addMutation = await addSlide();
   if (currentSlideCount !== initial.slideCount + 1)
     throw new Error("OOXML add_slide did not add exactly one slide.");
@@ -292,12 +358,17 @@ async function runConformance() {
     JSON.stringify({
       initialSlideCount: initial.slideCount,
       mutatedSha256: hidden.entry.sha256,
+      nativeBridge: observed.nativeBridge,
     }),
   );
   location.reload();
 }
 
 async function resumeConformance(expected) {
+  if (expected.nativeBridge?.status !== "observe-edit-undo-passed")
+    throw new Error("Browser native bridge evidence was not retained.");
+  observed.nativeBridge = expected.nativeBridge;
+  body.dataset.nativeBridge = "observe-edit-undo";
   const checkpoint = await journal.load();
   if (!checkpoint)
     throw new Error("OPFS did not retain a valid browser edit checkpoint.");
@@ -434,6 +505,8 @@ globalThis.Module = {
   canvas,
   uno_scripts: [
     new URL("zeta.js", runtimeBase).href,
+    new URL("/harness/mutation-contract.generated.js", location.href).href,
+    new URL("/harness/operations.js", location.href).href,
     new URL("/harness/office-thread.js", location.href).href,
   ],
   locateFile: (path, prefix) => (prefix || runtimeBase) + path,

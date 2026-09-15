@@ -37,6 +37,26 @@ export function buildRoutes(root = serviceRoot, upstream = manifest) {
       ),
     ],
     [
+      "/harness/mutation-contract.generated.js",
+      route(
+        path.join(
+          repositoryRoot,
+          "services/office-editor/extension/mutation-contract.generated.js",
+        ),
+        "text/javascript; charset=utf-8",
+      ),
+    ],
+    [
+      "/harness/operations.js",
+      route(
+        path.join(
+          repositoryRoot,
+          "services/office-editor/extension/operations.js",
+        ),
+        "text/javascript; charset=utf-8",
+      ),
+    ],
+    [
       "/harness/styles.css",
       route(path.join(root, "harness/styles.css"), "text/css; charset=utf-8"),
     ],

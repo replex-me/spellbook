@@ -8,6 +8,16 @@ let context;
 let desktop;
 let model;
 
+function installSpellbookUnoAdapter() {
+  globalThis.uno = {
+    idl: zetajs.uno,
+    componentContext: context,
+    Any: zetajs.Any,
+    sameUnoObject: zetajs.sameUnoObject,
+    type: zetajs.type,
+  };
+}
+
 function post(command, details = {}) {
   zetajs.mainPort.postMessage({ command, ...details });
 }
@@ -56,6 +66,7 @@ function start() {
   context = zetajs.getUnoComponentContext();
   css = zetajs.uno.com.sun.star;
   desktop = css.frame.Desktop.create(context);
+  installSpellbookUnoAdapter();
   zetajs.mainPort.onmessage = (event) => {
     const { command, requestId } = event.data;
     try {
@@ -69,6 +80,22 @@ function start() {
             requestId,
             unoCommand: event.data.unoCommand,
             slideCount: slideCount(),
+          });
+          break;
+        case "native":
+          if (
+            typeof spellbookDocumentOperation !== "function" ||
+            typeof spellbookMutationContracts !== "object"
+          )
+            throw new Error(
+              "Spellbook native operation program is unavailable.",
+            );
+          post("native-complete", {
+            requestId,
+            value: spellbookDocumentOperation({
+              ...event.data.nativeRequest,
+              mutationContracts: spellbookMutationContracts,
+            }),
           });
           break;
         case "close":

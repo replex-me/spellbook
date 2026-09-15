@@ -67,6 +67,7 @@ try {
     restoredSha256: document.body.dataset.restoredSha256 ?? null,
     topologyOperations: document.body.dataset.topologyOperations ?? null,
     metadataOperations: document.body.dataset.metadataOperations ?? null,
+    nativeBridge: document.body.dataset.nativeBridge ?? null,
     recovery: document.body.dataset.recovery ?? null,
     status: document.querySelector("#status")?.textContent ?? null,
     evidence: globalThis.spellbookBrowserOffice.evidence,
@@ -131,6 +132,16 @@ try {
       : null,
     result.metadataOperations !== "rename,hide"
       ? "browser metadata sequence is incomplete"
+      : null,
+    result.nativeBridge !== "observe-edit-undo"
+      ? "browser native AI bridge did not pass observe/edit/Undo"
+      : null,
+    result.evidence.nativeBridge?.status !== "observe-edit-undo-passed"
+      ? "browser native AI bridge evidence is incomplete"
+      : null,
+    result.evidence.nativeBridge?.editedRevision ===
+    result.evidence.nativeBridge?.restoredRevision
+      ? "browser native AI edit did not produce a distinct revision"
       : null,
     result.recovery !== "opfs-two-slot"
       ? "browser page-reload recovery did not use the OPFS journal"

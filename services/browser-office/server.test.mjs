@@ -9,6 +9,8 @@ test("browser Office routes preserve isolation, asset identity and encodings", (
   assert.ok(routes.has("/runtime/zeta.js"));
   assert.ok(routes.has("/runtime/ooxml-worker.js"));
   assert.ok(routes.has("/harness/opfs-journal.mjs"));
+  assert.ok(routes.has("/harness/mutation-contract.generated.js"));
+  assert.ok(routes.has("/harness/operations.js"));
   assert.equal(
     routes.get("/runtime/soffice.wasm").headers["Content-Encoding"],
     "br",
