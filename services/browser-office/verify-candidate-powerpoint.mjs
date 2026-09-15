@@ -39,11 +39,20 @@ const nativeCapabilities = JSON.parse(
     "utf8",
   ),
 );
+const nativeConformance = JSON.parse(
+  await fs.readFile(
+    path.join(repositoryRoot, "contracts/native-mutation-conformance.json"),
+    "utf8",
+  ),
+);
 const requiredNativeOperations = Object.freeze(
   Object.entries(nativeCapabilities.mutationModel.operations)
     .filter(([, operation]) => operation.availability !== "format_excluded")
     .map(([operation]) => operation)
     .sort(),
+);
+const requiredNativeScenarios = Object.freeze(
+  nativeConformance.executionOrder.slice().sort(),
 );
 
 export function candidateBrowserReportErrors(report) {
@@ -107,8 +116,16 @@ export function candidateNativeConformanceErrors(report) {
     errors.push("the complete native operation contract was not executed");
   if ((report?.missingOperations?.length ?? -1) !== 0)
     errors.push("browser native conformance reports missing operations");
-  if (!Array.isArray(report?.scenarios) || report.scenarios.length !== 10)
-    errors.push("browser native conformance did not run all 10 scenarios");
+  if (
+    !Array.isArray(report?.scenarios) ||
+    !sameStringSet(
+      report.scenarios.map((scenario) => scenario?.scenario),
+      requiredNativeScenarios,
+    )
+  )
+    errors.push(
+      `browser native conformance did not run all ${requiredNativeScenarios.length} contract scenarios`,
+    );
   else
     for (const scenario of report.scenarios) {
       if (

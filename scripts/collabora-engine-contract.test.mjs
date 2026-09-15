@@ -136,18 +136,22 @@ test("runtime mutation contracts are generated from the public capability model"
     Number(patchVersion.groups.version),
   );
   const operations = capabilities.mutationModel.operations;
-  assert.equal(Object.keys(operations).length, 64);
+  assert.equal(Object.keys(operations).length, 98);
   assert.equal(operations.set_printable.availability, "format_excluded");
   assert.ok(
     Object.values(operations)
       .filter((operation) => operation.availability !== "format_excluded")
-      .every((operation) => operation.availability === "runtime_verified"),
+      .every((operation) =>
+        ["runtime_verified", "runtime_validation_required"].includes(
+          operation.availability,
+        ),
+      ),
   );
   assert.equal(operations.insert_slide.minEnginePatch, 9);
   assert.equal(operations.set_object_interaction.minEnginePatch, 18);
   assert.equal(operations.set_object_interaction.family, "object_interaction");
   const exposedOperations = capabilities.toolInputSchema.properties.op.enum;
-  assert.equal(exposedOperations.length, 63);
+  assert.equal(exposedOperations.length, 97);
   assert.equal(new Set(exposedOperations).size, exposedOperations.length);
   assert.deepEqual(
     exposedOperations.slice().sort(),
@@ -161,6 +165,8 @@ test("runtime mutation contracts are generated from the public capability model"
     exposedOperations.length,
   );
   const operationGroups = capabilities.operationGroups;
+  for (const operation of operationGroups.document)
+    assert.ok(["document", "master"].includes(operations[operation].target));
   for (const operation of operationGroups.slide)
     assert.equal(operations[operation].target, "slide");
   for (const operation of operationGroups.create) {

@@ -32,6 +32,15 @@ const capabilities = JSON.parse(
     "utf8",
   ),
 );
+const conformance = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../contracts/native-mutation-conformance.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
 const nativeOperations = Object.entries(capabilities.mutationModel.operations)
   .filter(([, operation]) => operation.availability !== "format_excluded")
   .map(([operation]) => operation)
@@ -73,8 +82,8 @@ test("PowerPoint admission requires the complete receipt-bound endurance report"
 });
 
 test("PowerPoint admission also requires every typed native operation", () => {
-  const scenarios = Array.from({ length: 10 }, (_, index) => ({
-    scenario: `scenario-${index}`,
+  const scenarios = conformance.executionOrder.map((scenario) => ({
+    scenario,
     status: "passed",
     reopenVerified: true,
     missingSelectedOperations: [],
@@ -102,6 +111,6 @@ test("PowerPoint admission also requires every typed native operation", () => {
       ...report,
       scenarios: scenarios.slice(1),
     }).join("; "),
-    /all 10 scenarios/u,
+    /all 15 contract scenarios/u,
   );
 });

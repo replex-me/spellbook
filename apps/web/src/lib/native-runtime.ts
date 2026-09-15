@@ -368,9 +368,21 @@ export async function completeNativeTask(
     typeof input.error === "string" ? input.error.slice(0, 1_000) : null;
   if (!error && !validObservation(input.value))
     throw new HttpError(400, "invalid_native_result");
+  const value = error
+    ? null
+    : {
+        ...(input.value as Record<string, unknown>),
+        assets: await db()`
+          select id as "assetId", file_name as "fileName", content_type as "contentType",
+            case when content_type like 'image/%' then 'image' else 'media' end as kind,
+            width, height
+          from spellbook_assets where document_id=${native.document_id}
+          order by created_at desc limit 100
+        `,
+      };
   const [updated] = await db()`
     update spellbook_native_tasks set status=${error ? "failed" : "completed"},
-      result=${error ? null : db().json(input.value as never)}, error=${error}, updated_at=now()
+      result=${error ? null : db().json(value as never)}, error=${error}, updated_at=now()
     where id=${input.id} and session_id=${native.id} and status in ('queued','delivered')
       and expires_at > now() returning id
   `;

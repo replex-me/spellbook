@@ -13,6 +13,7 @@ import {
   nativeElementOperations,
   nativeIdentityReplacingOperations,
   nativeMultiElementOperations,
+  nativePlatformAssetOperations,
   nativeSlideOperations,
 } from "./native-edit-contract.js";
 
@@ -26,6 +27,14 @@ export interface NativeObservation {
   }>;
   activeSlide: number;
   selectedElementIds: string[];
+  assets?: Array<{
+    assetId: string;
+    fileName: string;
+    contentType: string;
+    kind: "image" | "media";
+    width: number;
+    height: number;
+  }>;
   textDetails?: {
     slideIndex: number;
     elements: Array<{
@@ -228,6 +237,18 @@ export async function runNativeTurn(
       throw new Error(
         `${operation}에는 undo-v${operationContract.minEnginePatch} 이상의 편집 엔진이 필요합니다.`,
       );
+    if (nativePlatformAssetOperations.has(operation)) {
+      const expectedKind = operation.endsWith("_image") ? "image" : "media";
+      const asset = state.assets?.find(
+        (candidate) => candidate.assetId === command.assetId,
+      );
+      if (!asset)
+        throw new Error(
+          "Asset target not present in the current document observation.",
+        );
+      if (asset.kind !== expectedKind)
+        throw new Error(`Expected a ${expectedKind} asset for ${operation}.`);
+    }
     const documentOperation = nativeDocumentOperations.has(operation);
     const slideOperation = nativeSlideOperations.has(operation);
     const createOperation = nativeCreateOperations.has(operation);
@@ -342,7 +363,7 @@ export async function runNativeTurn(
           {
             type: "function",
             name: "native_edit",
-            description: `Change one observed object or slide in the SAME open editor with native undo. The schema includes all ${nativeEditOperationCount} bounded PPTX operations implemented by Spellbook: slide creation/reorder/layout/background/visibility/transition, speaker notes and animation timing; object creation/duplication/deletion/topology/geometry/style/text/range formatting/locking/cropping and safe click interactions; table content/structure/style; and fixed-size internal chart data plus column/line/area/pie/scatter/radar chart-family changes. Operations that need a patched engine are rejected unless the live observation reports the required undo-v level. For set_chart_data, keep the observed dimensions when changing data, rowDescriptions (category labels), or columnDescriptions (series labels). An identity-replacing chart operation must be isolated in its own edit. External interactions accept credential-free HTTP(S) only; do not add one without explicit user intent. Linked or external-workbook chart mutation and arbitrary master/theme authoring are outside this bounded schema. Observe after stale state. Do not send executable code.`,
+            description: `Change one observed object or slide in the SAME open editor with native undo. The schema includes all ${nativeEditOperationCount} bounded PPTX operations implemented by Spellbook: slide creation/reorder/layout/background/visibility/transition, speaker notes and animation timing; object creation/duplication/deletion/topology/geometry/style/text/range formatting/locking/cropping and safe click interactions; image/audio/video insertion or identity-preserving replacement using an observed document-scoped assetId; media playback, SmartArt semantic nodes, equations, Fontwork, 3D material and accessibility reading order; table content/structure/style; and fixed-size internal chart data plus column/line/area/pie/scatter/radar chart-family changes. Operations that need a patched engine are rejected unless the live observation reports the required undo-v level. Asset insertion/replacement must use native_edit and cannot be put in native_batch_edit because binary delivery crosses the trusted host boundary. For set_chart_data, keep the observed dimensions when changing data, rowDescriptions (category labels), or columnDescriptions (series labels). An identity-replacing operation must be isolated in its own edit. External interactions accept credential-free HTTP(S) only; do not add one without explicit user intent. Linked or external-workbook chart mutation and arbitrary new master/layout authoring are outside this bounded schema; set_master_theme only edits a fully observed existing master theme. Observe after stale state. Do not send executable code.`,
             inputSchema: nativeEditContract.toolInputSchema,
           },
           {
@@ -472,7 +493,7 @@ export async function runNativeTurn(
               if (input.permission.mode === "read_only")
                 throw new Error("읽기 전용 권한입니다.");
               const command = args as NativeEditCommand;
-              authorize(command, observed);
+              const slideIndex = authorize(command, observed);
               input.onTool("슬라이드 수정");
               const expectedSlides = JSON.stringify(observed.slides);
               const expectedRevision = observed.revision;
@@ -480,13 +501,22 @@ export async function runNativeTurn(
               // edit. Require another observation instead of replaying stale targets.
               observed = undefined;
               observed = await input.host.call(
-                {
-                  operation: "edit",
-                  expectedRevision,
-                  expectedSlides,
-                  command,
-                  permission: input.permission,
-                },
+                nativePlatformAssetOperations.has(command.op ?? "")
+                  ? {
+                      ...command,
+                      operation: command.op,
+                      slideIndex,
+                      expectedRevision,
+                      expectedSlides,
+                      permission: input.permission,
+                    }
+                  : {
+                      operation: "edit",
+                      expectedRevision,
+                      expectedSlides,
+                      command,
+                      permission: input.permission,
+                    },
                 signal,
               );
               if (registerMutationEvidence(observed)) {
@@ -511,6 +541,14 @@ export async function runNativeTurn(
                 typeof batch.dryRun !== "boolean"
               )
                 throw new Error("Invalid native edit transaction.");
+              if (
+                batch.commands.some((command) =>
+                  nativePlatformAssetOperations.has(command.op ?? ""),
+                )
+              )
+                throw new Error(
+                  "자산 삽입과 교체는 신뢰된 파일 전송 경계를 사용하므로 native_edit에서 한 번에 하나씩 실행해야 합니다.",
+                );
               if (
                 batch.commands.length > 1 &&
                 batch.commands.some((command) =>

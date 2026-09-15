@@ -107,6 +107,22 @@ try {
     delay: changes.delay,
     start: changes.start,
   });
+  const applyExactly = async (state, command, label) => {
+    const historyBefore = await history();
+    const applied = await edit(state, [command]);
+    const historyAfter = await history();
+    if (
+      applied.transaction?.status !== "applied" ||
+      applied.transaction?.commandCount !== 1 ||
+      applied.transaction?.undoActionsAdded !== 1 ||
+      historyAfter.undo.length !== historyBefore.undo.length + 1
+    )
+      throw new Error(`${label} was not one exact native transaction.`);
+    await history("undo");
+    await waitForState(state, `${label} Undo`);
+    await history("redo");
+    return waitForState(applied, `${label} Redo`);
+  };
 
   const before = await call({ operation: "observe" });
   const patchLevelMatch = /^undo-v([1-9][0-9]*)$/.exec(
@@ -191,7 +207,84 @@ try {
   await history("undo");
   await waitForState(firstRedone, "Animation timing batch Undo");
   await history("redo");
-  const redone = await waitForState(batchAfter, "Animation timing batch Redo");
+  let redone = await waitForState(batchAfter, "Animation timing batch Redo");
+
+  const effectsBeforeAdd = observedEffects(redone);
+  redone = await applyExactly(
+    redone,
+    {
+      op: "add_animation_effect",
+      elementId: effectsBeforeAdd[0].elementId,
+      presetId: "ooo-entrance-appear",
+      duration: 0.8,
+      delay: 0.1,
+      start: "after-previous",
+      animationIndex: effectsBeforeAdd.length,
+    },
+    "Add animation effect",
+  );
+  const previousAnimationIds = new Set(
+    effectsBeforeAdd.map((effect) => effect.animationId),
+  );
+  let lifecycleEffect = observedEffects(redone).find(
+    (effect) => !previousAnimationIds.has(effect.animationId),
+  );
+  if (!lifecycleEffect)
+    throw new Error("Added animation effect was not observable.");
+
+  const replacementPreset =
+    lifecycleEffect.preset.id === "ooo-entrance-wipe"
+      ? "ooo-entrance-appear"
+      : "ooo-entrance-wipe";
+  const replacementIndex = lifecycleEffect.sequenceIndex;
+  redone = await applyExactly(
+    redone,
+    {
+      op: "replace_animation_effect",
+      elementId: lifecycleEffect.elementId,
+      animationId: lifecycleEffect.animationId,
+      presetId: replacementPreset,
+    },
+    "Replace animation effect",
+  );
+  lifecycleEffect = observedEffects(redone)[replacementIndex];
+  if (
+    !lifecycleEffect ||
+    lifecycleEffect.elementId !== effectsBeforeAdd[0].elementId ||
+    lifecycleEffect.preset?.id !== replacementPreset
+  )
+    throw new Error("Replaced animation effect was not observable.");
+
+  const moveTargetIndex = lifecycleEffect.sequenceIndex === 0 ? 1 : 0;
+  redone = await applyExactly(
+    redone,
+    {
+      op: "move_animation_effect",
+      elementId: lifecycleEffect.elementId,
+      animationId: lifecycleEffect.animationId,
+      animationIndex: moveTargetIndex,
+    },
+    "Move animation effect",
+  );
+  lifecycleEffect = observedEffects(redone)[moveTargetIndex];
+  if (
+    !lifecycleEffect ||
+    lifecycleEffect.elementId !== effectsBeforeAdd[0].elementId ||
+    lifecycleEffect.preset?.id !== replacementPreset
+  )
+    throw new Error("Moved animation effect was not observable.");
+
+  redone = await applyExactly(
+    redone,
+    {
+      op: "remove_animation_effect",
+      elementId: lifecycleEffect.elementId,
+      animationId: lifecycleEffect.animationId,
+    },
+    "Remove animation effect",
+  );
+  if (observedEffects(redone).length !== effectsBeforeAdd.length)
+    throw new Error("Animation effect removal did not restore the item count.");
 
   const playbackTarget = batchCommands[0];
   const playback = await verifySlideshowPlayback(page, {
@@ -207,7 +300,13 @@ try {
   });
   const report = {
     enginePatchLevel: redone.engine.patchLevel,
-    operation: "set_animation_timing",
+    commands: [
+      "set_animation_timing",
+      "add_animation_effect",
+      "replace_animation_effect",
+      "move_animation_effect",
+      "remove_animation_effect",
+    ],
     atomic: true,
     batchAtomic: true,
     undoExact: true,

@@ -1,5 +1,5 @@
 import { requireSession, routeError } from "@/lib/http";
-import { getImageAsset } from "@/lib/image-assets";
+import { getAsset } from "@/lib/image-assets";
 
 export async function GET(
   request: Request,
@@ -7,11 +7,7 @@ export async function GET(
 ) {
   try {
     const { id, assetId } = await context.params;
-    const asset = await getImageAsset(
-      await requireSession(request),
-      id,
-      assetId,
-    );
+    const asset = await getAsset(await requireSession(request), id, assetId);
     return new Response(new Uint8Array(asset.data), {
       headers: {
         "content-type": asset.contentType,

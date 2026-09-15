@@ -48,6 +48,22 @@
     GlowEffectColor: "long",
     GlowEffectTransparency: "short",
     SoftEdgeRadius: "long",
+    Loop: "boolean",
+    Mute: "boolean",
+    VolumeDB: "short",
+    Zoom: "media-zoom",
+    FontWorkStyle: "long",
+    FontWorkAdjust: "long",
+    FontWorkDistance: "long",
+    FontWorkStart: "long",
+    FontWorkMirror: "boolean",
+    FontWorkOutline: "boolean",
+    D3DMaterialColor: "long",
+    D3DMaterialEmission: "long",
+    D3DMaterialSpecular: "long",
+    D3DMaterialSpecularIntensity: "short",
+    D3DDoubleSided: "boolean",
+    NavigationOrder: "long",
   });
 
   function createSpellbookBrowserNativeAdapter({ uno, runtimeIdentity }) {
@@ -56,7 +72,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v10";
+      runtimeIdentity.patchLevel === "browser-undo-v11";
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(
@@ -199,7 +215,9 @@
               controller.setCurrentPage(sourcePage);
               dispatch(".uno:InsertPage");
               if (pages.getCount() <= sourceIndex + 1)
-                throw new Error("Browser slide insertion did not create a page.");
+                throw new Error(
+                  "Browser slide insertion did not create a page.",
+                );
               const insertedPage = pages.getByIndex(sourceIndex + 1);
               if (typeof insertedPage.setMasterPage === "function")
                 insertedPage.setMasterPage(masterPage);
@@ -518,13 +536,7 @@
           const timing = assertRecord(value, "Browser animation timing");
           assertExactKeys(
             timing,
-            [
-              "EffectIndex",
-              "ExpectedPresetId",
-              "Duration",
-              "Delay",
-              "Start",
-            ],
+            ["EffectIndex", "ExpectedPresetId", "Duration", "Delay", "Start"],
             "Browser animation timing",
           );
           const targetPath = parsePath(
@@ -1166,7 +1178,9 @@
             } else {
               const rules = paragraph.getPropertyValue("NumberingRules");
               const entries = Array.from(rules.getByIndex(payload.Level));
-              const values = new Map(entries.map((entry) => [entry.Name, entry]));
+              const values = new Map(
+                entries.map((entry) => [entry.Name, entry]),
+              );
               const numberingType =
                 payload.ListType === "bullet"
                   ? css.style.NumberingType.CHAR_SPECIAL
@@ -1203,7 +1217,10 @@
                 );
                 paragraph.setPropertyValue(
                   "NumberingRules",
-                  new uno.Any(uno.type.interface(css.container.XIndexReplace), rules),
+                  new uno.Any(
+                    uno.type.interface(css.container.XIndexReplace),
+                    rules,
+                  ),
                 );
                 paragraph.setPropertyValue(
                   "NumberingLevel",
@@ -1249,6 +1266,10 @@
                 (!Number.isSafeInteger(propertyValue) ||
                   propertyValue < 0 ||
                   propertyValue > 4)) ||
+              (typeName === "media-zoom" &&
+                (!Number.isSafeInteger(propertyValue) ||
+                  propertyValue < 0 ||
+                  propertyValue > 8)) ||
               (["short", "long"].includes(typeName) &&
                 !Number.isSafeInteger(propertyValue))
             )
@@ -1270,11 +1291,123 @@
                     ][propertyValue],
                   ),
                 );
+            if (typeName === "media-zoom")
+              return () =>
+                shape.setPropertyValue(
+                  name,
+                  new uno.Any(
+                    uno.type.enum(css.media.ZoomLevel),
+                    [
+                      css.media.ZoomLevel.NOT_AVAILABLE,
+                      css.media.ZoomLevel.ORIGINAL,
+                      css.media.ZoomLevel.FIT_TO_WINDOW,
+                      css.media.ZoomLevel.FIT_TO_WINDOW_FIXED_ASPECT,
+                      css.media.ZoomLevel.FULLSCREEN,
+                      css.media.ZoomLevel.ZOOM_1_TO_4,
+                      css.media.ZoomLevel.ZOOM_1_TO_2,
+                      css.media.ZoomLevel.ZOOM_2_TO_1,
+                      css.media.ZoomLevel.ZOOM_4_TO_1,
+                    ][propertyValue],
+                  ),
+                );
             return propertyWrite(shape, name, typeName, propertyValue);
           });
           return {
             mutates: true,
             apply: () => writes.forEach((write) => write()),
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("SetDiagramNode."),
+        prepare: ({ key, value, state }) => {
+          const payload = assertRecord(value, "Browser diagram mutation");
+          assertExactKeys(
+            payload,
+            ["Action", "ExpectedText", "Occurrence", "Text"],
+            "Browser diagram mutation",
+          );
+          if (
+            !["set", "add", "delete"].includes(payload.Action) ||
+            typeof payload.ExpectedText !== "string" ||
+            typeof payload.Text !== "string" ||
+            !Number.isSafeInteger(payload.Occurrence)
+          )
+            throw new Error("Browser diagram mutation is invalid.");
+          const shape = resolveShape(
+            state.currentPage,
+            parsePath(
+              key.slice("SetDiagramNode.".length),
+              "Browser diagram target",
+            ),
+            "Browser diagram target",
+          );
+          return {
+            mutates: true,
+            apply: () =>
+              shape.setPropertyValue(
+                "SpellbookDiagramMutation",
+                any("string", JSON.stringify(payload)),
+              ),
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("SetEquationSource."),
+        prepare: ({ key, value, state }) => {
+          const payload = assertRecord(value, "Browser equation mutation");
+          assertExactKeys(
+            payload,
+            ["ExpectedSource", "Source"],
+            "Browser equation mutation",
+          );
+          if (
+            typeof payload.ExpectedSource !== "string" ||
+            typeof payload.Source !== "string"
+          )
+            throw new Error("Browser equation mutation is invalid.");
+          const shape = resolveShape(
+            state.currentPage,
+            parsePath(
+              key.slice("SetEquationSource.".length),
+              "Browser equation target",
+            ),
+            "Browser equation target",
+          );
+          return {
+            mutates: true,
+            apply: () =>
+              shape.setPropertyValue(
+                "SpellbookEquationMutation",
+                any("string", JSON.stringify(payload)),
+              ),
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("ReplaceWithInsertedObject."),
+        prepare: ({ key, value, state }) => {
+          const oldPath = parsePath(
+            key.slice("ReplaceWithInsertedObject.".length),
+            "Browser old asset target",
+          );
+          const newPath = parsePath(value, "Browser inserted asset target");
+          if (oldPath.length !== 1 || newPath.length !== 1)
+            throw new Error(
+              "Browser asset replacement requires top-level objects.",
+            );
+          const inserted = resolveShape(
+            state.currentPage,
+            newPath,
+            "Browser inserted asset target",
+          );
+          return {
+            mutates: true,
+            apply: () =>
+              inserted.setPropertyValue(
+                "SpellbookReplaceObject",
+                any("long", oldPath[0]),
+              ),
           };
         },
       },

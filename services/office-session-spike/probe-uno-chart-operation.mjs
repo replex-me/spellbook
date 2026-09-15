@@ -218,7 +218,7 @@ try {
   await dispatchHistory("undo");
   await waitForRevision(before.revision, before, "Chart operation Undo");
   await dispatchHistory("redo");
-  const redone = await waitForRevision(
+  const chartDataRedone = await waitForRevision(
     after.revision,
     after,
     "Chart operation Redo",
@@ -226,13 +226,98 @@ try {
   await page.waitForTimeout(1_000);
   await waitForRevision(after.revision, after, "Settled chart operation");
 
+  const chartDataTarget = chartDataRedone.slides
+    .flatMap((slide) => slide.elements)
+    .find((element) => element.stableId === target.stableId);
+  if (!chartDataTarget?.chart?.format)
+    throw new Error("Chart format was not observable after the data edit.");
+  const previousFormat = chartDataTarget.chart.format;
+  const chartFormat = {
+    title: previousFormat.title
+      ? `${previousFormat.title} formatted`
+      : "Spellbook chart",
+    legendVisible: true,
+    legendPosition: previousFormat.legendPosition === "left" ? "right" : "left",
+    categoryAxisVisible: !previousFormat.categoryAxisVisible,
+    valueAxisVisible: !previousFormat.valueAxisVisible,
+    showValues: !previousFormat.series.every(
+      (series) => series.label?.showValues,
+    ),
+    showCategoryNames: !previousFormat.series.every(
+      (series) => series.label?.showCategoryNames,
+    ),
+    showSeriesNames: !previousFormat.series.every(
+      (series) => series.label?.showSeriesNames,
+    ),
+    seriesColors: previousFormat.series.map(
+      (series, index) =>
+        ((Number.isInteger(series.color) ? series.color : index * 0x224466) ^
+          0x010101) &
+        0xffffff,
+    ),
+  };
+  const afterFormat = await call({
+    operation: "edit_batch",
+    expectedRevision: chartDataRedone.revision,
+    expectedSlides: JSON.stringify(chartDataRedone.slides),
+    commands: [
+      {
+        op: "set_chart_format",
+        elementId: chartDataTarget.elementId,
+        chartFormat,
+      },
+    ],
+    dryRun: false,
+    permission: { mode: "document", slideIndexes: [], elementIds: [] },
+  });
+  const formattedTarget = afterFormat.slides
+    .flatMap((slide) => slide.elements)
+    .find((element) => element.stableId === target.stableId);
+  const expectedSeries = chartFormat.seriesColors.map((color) => ({ color }));
+  if (
+    !formattedTarget?.chart?.format ||
+    formattedTarget.chart.format.title !== chartFormat.title ||
+    formattedTarget.chart.format.legendVisible !== chartFormat.legendVisible ||
+    formattedTarget.chart.format.legendPosition !==
+      chartFormat.legendPosition ||
+    formattedTarget.chart.format.categoryAxisVisible !==
+      chartFormat.categoryAxisVisible ||
+    formattedTarget.chart.format.valueAxisVisible !==
+      chartFormat.valueAxisVisible ||
+    formattedTarget.chart.format.series.length !== expectedSeries.length ||
+    formattedTarget.chart.format.series.some(
+      (series, index) =>
+        series.color !== expectedSeries[index].color ||
+        series.label?.showValues !== chartFormat.showValues ||
+        series.label?.showCategoryNames !== chartFormat.showCategoryNames ||
+        series.label?.showSeriesNames !== chartFormat.showSeriesNames,
+    ) ||
+    afterFormat.transaction?.status !== "applied" ||
+    afterFormat.transaction?.commandCount !== 1 ||
+    afterFormat.transaction?.undoActionsAdded !== 1
+  )
+    throw new Error("Chart format operation did not apply exactly.");
+
+  await dispatchHistory("undo");
+  await waitForRevision(
+    chartDataRedone.revision,
+    chartDataRedone,
+    "Chart format Undo",
+  );
+  await dispatchHistory("redo");
+  const redone = await waitForRevision(
+    afterFormat.revision,
+    afterFormat,
+    "Chart format Redo",
+  );
+
   await page.getByRole("button", { name: "저장", exact: true }).click();
   await page.getByRole("status").filter({ hasText: "저장 확인 중…" }).waitFor({
     timeout: 20_000,
   });
   const report = {
     enginePatchLevel: redone.engine?.patchLevel,
-    operation: "set_chart_data",
+    commands: ["set_chart_data", "set_chart_format"],
     multiCommandBatchRejected: true,
     singleCommandBatchAtomic: true,
     undoExact: true,
@@ -240,14 +325,14 @@ try {
     expected: {
       masterCount: redone.masters.length,
       target: {
-        stableId: afterTarget.stableId,
-        objectName: afterTarget.objectName,
-        zIndex: afterTarget.zIndex,
-        x: afterTarget.x,
-        y: afterTarget.y,
-        width: afterTarget.width,
-        height: afterTarget.height,
-        chart: afterTarget.chart,
+        stableId: formattedTarget.stableId,
+        objectName: formattedTarget.objectName,
+        zIndex: formattedTarget.zIndex,
+        x: formattedTarget.x,
+        y: formattedTarget.y,
+        width: formattedTarget.width,
+        height: formattedTarget.height,
+        chart: formattedTarget.chart,
       },
     },
   };

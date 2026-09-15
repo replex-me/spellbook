@@ -128,7 +128,7 @@ function patchedBrowserRuntimeAdmitted() {
   return (
     runtime?.buildReady === true &&
     runtime.buildCommit === runtime.candidateCommit &&
-    runtime.patchLevel === "browser-undo-v10"
+    runtime.patchLevel === "browser-undo-v11"
   );
 }
 
@@ -614,9 +614,14 @@ function productMutationMatches(prepared, nativeValue) {
 
 async function prepareProductPackageMutation(nativeRequest) {
   if (
-    !["edit", "edit_batch", "insert_image"].includes(
-      nativeRequest?.operation,
-    ) ||
+    ![
+      "edit",
+      "edit_batch",
+      "insert_image",
+      "replace_image",
+      "insert_media",
+      "replace_media",
+    ].includes(nativeRequest?.operation) ||
     nativeRequest.dryRun === true
   )
     return null;
@@ -634,14 +639,29 @@ async function prepareProductPackageMutation(nativeRequest) {
     await checkpointLiveNativeState(live, "manual_before_ai");
   }
   const expectedSlides = parseExpectedSlides(nativeRequest.expectedSlides);
-  if (nativeRequest.operation === "insert_image") {
-    if (
-      !(nativeRequest.imageBytes instanceof ArrayBuffer) ||
-      !nativeRequest.imageBytes.byteLength ||
-      nativeRequest.imageBytes.byteLength > 5_000_000 ||
-      !["image/png", "image/jpeg"].includes(nativeRequest.mediaType)
+  if (
+    ["insert_image", "replace_image", "insert_media", "replace_media"].includes(
+      nativeRequest.operation,
     )
-      throw new Error("invalid_generated_image");
+  ) {
+    const isImage = nativeRequest.operation.endsWith("_image");
+    if (
+      !(nativeRequest.assetBytes instanceof ArrayBuffer) ||
+      !nativeRequest.assetBytes.byteLength ||
+      nativeRequest.assetBytes.byteLength >
+        (isImage ? 5_000_000 : 25_000_000) ||
+      (isImage
+        ? !["image/png", "image/jpeg"].includes(nativeRequest.mediaType)
+        : ![
+            "audio/mpeg",
+            "audio/wav",
+            "audio/ogg",
+            "audio/mp4",
+            "video/mp4",
+            "video/webm",
+          ].includes(nativeRequest.mediaType))
+    )
+      throw new Error("invalid_asset");
     return {
       persistence: "native_snapshot",
       beforeBytes: currentBytes.slice(),
@@ -649,12 +669,14 @@ async function prepareProductPackageMutation(nativeRequest) {
       beforeSlides: expectedSlides,
       nativeRequest: structuredClone(nativeRequest),
       persistedNativeRequest: {
-        operation: "insert_image",
+        operation: nativeRequest.operation,
         mediaType: nativeRequest.mediaType,
         slideIndex: nativeRequest.slideIndex,
+        elementId: nativeRequest.elementId ?? null,
+        assetId: nativeRequest.assetId ?? null,
         permission: structuredClone(nativeRequest.permission),
       },
-      sourceOperations: ["insert_image"],
+      sourceOperations: [nativeRequest.operation],
     };
   }
   const nativeCommands =

@@ -7,6 +7,10 @@ const source = readFileSync(
   new URL("./harness/native-transform-adapter.js", import.meta.url),
   "utf8",
 );
+const officeThreadSource = readFileSync(
+  new URL("./harness/office-thread.js", import.meta.url),
+  "utf8",
+);
 const nativeCapabilities = JSON.parse(
   readFileSync(
     new URL("../../contracts/native-edit-capabilities.json", import.meta.url),
@@ -26,8 +30,7 @@ function loadFactory() {
           {
             ...contract,
             domain:
-              nativeCapabilities.mutationModel.families[contract.family]
-                .domain,
+              nativeCapabilities.mutationModel.families[contract.family].domain,
           },
         ],
       ),
@@ -80,64 +83,64 @@ function fixture() {
       },
     }));
     return {
-    name,
-    text: initialText,
-    properties: {},
-    textProperties: {},
-    paragraphs,
-    getString() {
-      return this.text;
-    },
-    setString(value) {
-      this.text = value;
-      mutations.push([name, "Text", "string", value]);
-    },
-    createTextCursor() {
-      const target = this;
-      let start = 0;
-      let end = 0;
-      return {
-        gotoStart(expand) {
-          if (expand) start = 0;
-          else start = end = 0;
-        },
-        gotoEnd(expand) {
-          if (expand) end = target.text.length;
-          else start = end = target.text.length;
-        },
-        goRight(count, expand) {
-          if (end + count > target.text.length) return false;
-          if (expand) end += count;
-          else start = end += count;
-          return true;
-        },
-        getString() {
-          return target.text.slice(start, end);
-        },
-        setString(value) {
-          target.text =
-            target.text.slice(0, start) + value + target.text.slice(end);
-          end = start + value.length;
-          mutations.push([name, "TextRange", "string", value]);
-        },
-        setPropertyValue(property, value) {
-          target.textProperties[property] = value.val;
-          mutations.push([name, property, value.type, value.val]);
-        },
-      };
-    },
-    createEnumeration() {
-      let index = 0;
-      return {
-        hasMoreElements: () => index < paragraphs.length,
-        nextElement: () => paragraphs[index++],
-      };
-    },
-    setPropertyValue(property, value) {
-      this.properties[property] = value.val;
-      mutations.push([name, property, value.type, value.val]);
-    },
-  };
+      name,
+      text: initialText,
+      properties: {},
+      textProperties: {},
+      paragraphs,
+      getString() {
+        return this.text;
+      },
+      setString(value) {
+        this.text = value;
+        mutations.push([name, "Text", "string", value]);
+      },
+      createTextCursor() {
+        const target = this;
+        let start = 0;
+        let end = 0;
+        return {
+          gotoStart(expand) {
+            if (expand) start = 0;
+            else start = end = 0;
+          },
+          gotoEnd(expand) {
+            if (expand) end = target.text.length;
+            else start = end = target.text.length;
+          },
+          goRight(count, expand) {
+            if (end + count > target.text.length) return false;
+            if (expand) end += count;
+            else start = end += count;
+            return true;
+          },
+          getString() {
+            return target.text.slice(start, end);
+          },
+          setString(value) {
+            target.text =
+              target.text.slice(0, start) + value + target.text.slice(end);
+            end = start + value.length;
+            mutations.push([name, "TextRange", "string", value]);
+          },
+          setPropertyValue(property, value) {
+            target.textProperties[property] = value.val;
+            mutations.push([name, property, value.type, value.val]);
+          },
+        };
+      },
+      createEnumeration() {
+        let index = 0;
+        return {
+          hasMoreElements: () => index < paragraphs.length,
+          nextElement: () => paragraphs[index++],
+        };
+      },
+      setPropertyValue(property, value) {
+        this.properties[property] = value.val;
+        mutations.push([name, property, value.type, value.val]);
+      },
+    };
   };
   const page = (name, children) => {
     const notesShape = shape(`${name}-notes`, "Existing notes");
@@ -289,7 +292,7 @@ function fixture() {
     buildReady: true,
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v9",
+    patchLevel: "browser-undo-v11",
   };
   return {
     adapter: factory({ uno, runtimeIdentity }),
@@ -320,6 +323,21 @@ test("browser adapter advertises the complete bounded PPTX operation surface", (
   );
 });
 
+test("browser runtime decodes image and media assets without exposing model URLs", () => {
+  for (const operation of [
+    "insert_image",
+    "replace_image",
+    "insert_media",
+    "replace_media",
+  ])
+    assert.match(officeThreadSource, new RegExp(`"${operation}"`, "u"));
+  assert.match(officeThreadSource, /assetSignatureIsValid/u);
+  assert.match(officeThreadSource, /GraphicProvider\.create/u);
+  assert.match(officeThreadSource, /dispatch\("InsertAVMedia"/u);
+  assert.match(officeThreadSource, /"SpellbookReplaceObject"/u);
+  assert.match(officeThreadSource, /FS\.unlink\(path\)/u);
+});
+
 test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime", () => {
   const runtime = fixture();
   const adapter = runtime.factory({
@@ -328,7 +346,7 @@ test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime",
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v9",
+      patchLevel: "browser-undo-v11",
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
@@ -362,7 +380,7 @@ test("browser adapter routes stock slide lifecycle through Impress commands", ()
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v9",
+      patchLevel: "browser-undo-v11",
     },
   });
   assert.equal(stockAdapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
@@ -394,7 +412,7 @@ test("browser adapter deletes a slide only after native structure admission", ()
       buildReady: true,
       buildCommit: "candidate",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v9",
+      patchLevel: "browser-undo-v11",
       nativeSlideStructureReady: true,
     },
   });

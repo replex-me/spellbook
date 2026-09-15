@@ -1,5 +1,7 @@
 import { requireSession, routeError } from "@/lib/http";
-import { uploadImage } from "@/lib/image-assets";
+import { ASSET_UPLOAD_MAX_BYTES, uploadAsset } from "@/lib/image-assets";
+
+const multipartOverheadAllowance = 100_000;
 
 export async function POST(
   request: Request,
@@ -7,8 +9,11 @@ export async function POST(
 ) {
   try {
     const session = await requireSession(request);
-    if (Number(request.headers.get("content-length")) > 5_100_000)
-      return Response.json({ error: "image_too_large" }, { status: 413 });
+    if (
+      Number(request.headers.get("content-length")) >
+      ASSET_UPLOAD_MAX_BYTES + multipartOverheadAllowance
+    )
+      return Response.json({ error: "asset_too_large" }, { status: 413 });
     const reader = request.body?.getReader();
     if (!reader)
       return Response.json({ error: "file_required" }, { status: 400 });
@@ -18,9 +23,9 @@ export async function POST(
       const item = await reader.read();
       if (item.done) break;
       bytes += item.value.byteLength;
-      if (bytes > 5_100_000) {
+      if (bytes > ASSET_UPLOAD_MAX_BYTES + multipartOverheadAllowance) {
         await reader.cancel();
-        return Response.json({ error: "image_too_large" }, { status: 413 });
+        return Response.json({ error: "asset_too_large" }, { status: 413 });
       }
       chunks.push(item.value);
     }
@@ -32,7 +37,7 @@ export async function POST(
     if (!(file instanceof File))
       return Response.json({ error: "file_required" }, { status: 400 });
     return Response.json(
-      await uploadImage(session, (await context.params).id, file),
+      await uploadAsset(session, (await context.params).id, file),
       { status: 201 },
     );
   } catch (error) {

@@ -49,7 +49,6 @@ export function reviewedAiSavePolicy(
   const operations = new Set<MutationOperation>();
   const families = new Set<MutationFamily>();
   const targetSlideIndexes = new Set<number>();
-  let insertedImage = false;
 
   for (const task of tasks) {
     const request = objectValue(task.request);
@@ -66,9 +65,14 @@ export function reviewedAiSavePolicy(
     for (const index of changedSlideIndexes)
       targetSlideIndexes.add(Number(index));
 
-    if (request.operation === "insert_image") {
-      insertedImage = true;
-      families.add("object_creation");
+    if (
+      typeof request.operation === "string" &&
+      request.operation in capabilities.mutationModel.operations &&
+      capabilities.mutationModel.operations[
+        request.operation as MutationOperation
+      ].execution === "platform_asset"
+    ) {
+      addOperation(request.operation, operations, families);
       continue;
     }
     if (request.operation === "edit") {
@@ -87,7 +91,7 @@ export function reviewedAiSavePolicy(
     throw new Error("native_ai_change_evidence_missing");
 
   const allowedCategories = new Set<string>();
-  let allowPartCreationOrDeletion = insertedImage;
+  let allowPartCreationOrDeletion = false;
   for (const familyName of families) {
     const family = capabilities.mutationModel.families[familyName];
     for (const category of family.changeBudget) allowedCategories.add(category);

@@ -53,22 +53,32 @@ describe("native save change budgets", () => {
     ]);
   });
 
-  it("grants package creation only for a creation mutation", () => {
-    const policy = reviewedAiSavePolicy([
-      {
-        id: "task-image",
-        request: { operation: "insert_image", slideIndex: 1 },
-        result: result([1]),
-      },
-    ]);
+  it.each([
+    "insert_image",
+    "replace_image",
+    "insert_media",
+    "replace_media",
+  ] as const)(
+    "derives the %s save budget from the platform asset contract",
+    (operation) => {
+      const policy = reviewedAiSavePolicy([
+        {
+          id: `task-${operation}`,
+          request: { operation, slideIndex: 1 },
+          result: result([1]),
+        },
+      ]);
 
-    expect(policy.budget.allowPartCreationOrDeletion).toBe(true);
-    expect(policy.budget.allowedCategories).toEqual([
-      "media_parts",
-      "slide_parts",
-      "slide_relationships",
-    ]);
-  });
+      expect(policy.budget.allowPartCreationOrDeletion).toBe(true);
+      expect(policy.budget.allowedCategories).toEqual([
+        "media_parts",
+        "package_manifest",
+        "presentation_relationships",
+        "slide_parts",
+        "slide_relationships",
+      ]);
+    },
+  );
 
   it("fails closed when reviewed AI change evidence has no bounded mutation", () => {
     expect(() =>

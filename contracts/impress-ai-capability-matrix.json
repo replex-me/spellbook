@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "reviewedAt": "2026-09-16",
   "purpose": "Route the complete raw Impress command inventory into product-level families, track release-evidence maturity, and distinguish it from AI tool exposure. Raw UNO commands are evidence inputs, not an AI API.",
   "engineBaseline": {
@@ -39,7 +39,7 @@
       "policy": "Every observed Impress UI command is routed to a product semantic family. Routing proves inventory coverage only; it does not make a raw UNO command an AI tool or satisfy that family's runtime release gates."
     },
     "aiToolExposure": {
-      "count": 66,
+      "count": 97,
       "source": "native-edit-capabilities.json#toolInputSchema.properties.op.enum",
       "runtimeGuard": "The connector checks the live editor patch level and document permission before every operation."
     },
@@ -112,17 +112,42 @@
     "runtimeValidationRequired": [
       "set_slide_metadata",
       "set_line_style",
-      "set_paragraph_format"
+      "set_paragraph_format",
+      "set_sections",
+      "set_chart_format",
+      "set_slide_size",
+      "set_master_theme",
+      "add_connector",
+      "add_freeform",
+      "set_connector",
+      "set_shape_fill",
+      "set_shape_effects",
+      "set_text_language",
+      "set_text_case",
+      "set_paragraph_list",
+      "add_comment",
+      "edit_comment",
+      "delete_comment",
+      "insert_image",
+      "replace_image",
+      "insert_media",
+      "replace_media",
+      "set_media_playback",
+      "set_smartart_node",
+      "add_smartart_node",
+      "delete_smartart_node",
+      "set_fontwork",
+      "set_3d_material",
+      "set_equation_source",
+      "set_reading_order",
+      "add_animation_effect",
+      "remove_animation_effect",
+      "replace_animation_effect",
+      "move_animation_effect"
     ],
     "formatExcluded": ["set_printable"],
     "enginePatchReadyTransactions": [],
-    "runtimeVerifiedAuxiliaryTools": [
-      {
-        "op": "insert_generated_image",
-        "editorOperation": "insert_image",
-        "reason": "Image generation and binary asset delivery are platform-mediated. Live revision, target slide, permission, exact one-image insertion, native Undo and Redo pass, but the operation has not yet been unified with native_edit/native_batch_edit."
-      }
-    ],
+    "runtimeVerifiedAuxiliaryTools": [],
     "runtimeVerifiedTransactions": ["multi_command_slide_structure"]
   },
   "semanticFamilies": [
@@ -135,8 +160,10 @@
     {
       "id": "slide_structure",
       "scope": "insert, duplicate, delete, reorder, hide, layout, rename and sections",
-      "states": ["runtime_verified", "typed_adapter_required"],
-      "next": ["add section observation and typed operations"]
+      "states": ["runtime_verified", "runtime_validation_required"],
+      "next": [
+        "promote the implemented section adapter only after native Undo, save/reopen and independent PowerPoint validation"
+      ]
     },
     {
       "id": "slide_background_master_theme",
@@ -149,15 +176,21 @@
         "visual_validation_required"
       ],
       "next": [
-        "add bounded master/theme mutation tools without allowing slide-layout Undo to mutate master placeholders"
+        "promote the implemented bounded slide-size and existing-master theme adapter after visual and PowerPoint validation",
+        "keep arbitrary new master/layout authoring outside the bounded beta contract"
       ]
     },
     {
       "id": "shape_geometry_arrangement",
       "scope": "position, size, rotation, flip, z-order, alignment, distribution, grouping, duplication and deletion",
-      "states": ["runtime_verified", "typed_adapter_required"],
+      "states": [
+        "runtime_verified",
+        "runtime_validation_required",
+        "typed_adapter_required"
+      ],
       "next": [
-        "add lock/aspect-ratio, equal-size, connector and freeform adapters with exact readback"
+        "validate the implemented connector and freeform geometry paths against saved PPTX output",
+        "use the existing resize and alignment primitives for equal-size operations instead of adding a duplicate command"
       ]
     },
     {
@@ -169,9 +202,7 @@
         "typed_adapter_required",
         "visual_validation_required"
       ],
-      "next": [
-        "gate gradient/effects on serialized and visual equivalence"
-      ]
+      "next": ["gate gradient/effects on serialized and visual equivalence"]
     },
     {
       "id": "text_content",
@@ -189,9 +220,10 @@
     {
       "id": "character_formatting",
       "scope": "font family/size/color, weight, posture, underline, strike, shadow, case, script and spacing",
-      "states": ["runtime_verified", "typed_adapter_required"],
+      "states": ["runtime_verified", "runtime_validation_required"],
       "next": [
-        "add case and language only after the bridge can enter Impress Outliner text-edit mode with an explicit range; selecting a shape or UNO text cursor does not activate the human text-edit command context"
+        "promote the implemented whole-object case and language adapters after save/reopen and PowerPoint validation",
+        "keep range-specific language and case mutation outside the contract until range-level readback is available"
       ]
     },
     {
@@ -204,7 +236,7 @@
         "visual_validation_required"
       ],
       "next": [
-        "add list structure and numbering identities before list mutation",
+        "promote the implemented paragraph identity and list mutation path after save/reopen and PowerPoint validation",
         "detect overflow with engine metrics plus screenshot review"
       ]
     },
@@ -214,6 +246,7 @@
       "states": [
         "runtime_verified",
         "observation_verified",
+        "runtime_validation_required",
         "typed_adapter_required",
         "visual_validation_required"
       ],
@@ -229,12 +262,13 @@
       "states": [
         "runtime_verified",
         "observation_verified",
+        "runtime_validation_required",
         "typed_adapter_required",
         "visual_validation_required"
       ],
       "next": [
-        "move image insert into the same typed transaction contract",
-        "add media metadata and preserve the imported picture-to-shape exclusion where a no-op Collabora save already flattens the source rectangle",
+        "promote typed image and media insertion, identity-preserving replacement and playback settings after native history and save/reopen validation",
+        "preserve the imported picture-to-shape exclusion where a no-op Collabora save already flattens the source rectangle",
         "keep remote asset fetching platform-mediated"
       ]
     },
@@ -244,12 +278,13 @@
       "states": [
         "runtime_verified",
         "observation_verified",
+        "runtime_validation_required",
         "typed_adapter_required",
         "visual_validation_required"
       ],
       "next": [
         "map embedded workbook and external-link identity separately from the verified chart type, series, category/series labels and data-matrix observation",
-        "separate data edits from chart styling",
+        "promote the implemented chart-format adapter after identity-replacement, visual and PowerPoint validation",
         "extend beyond the verified fixed-size internal-data values and labels to embedded workbooks and externally linked charts"
       ]
     },
@@ -258,10 +293,11 @@
       "scope": "diagram data, layout, styles and fallback drawing shapes",
       "states": [
         "observation_verified",
-        "typed_adapter_required",
+        "runtime_validation_required",
         "visual_validation_required"
       ],
       "next": [
+        "promote the implemented semantic node set, add and delete adapters only on diagrams whose semantic model is observable",
         "route imported fallback groups without semantic diagram data to an OOXML-aware preservation path",
         "never flatten SmartArt merely to make it editable"
       ]
@@ -270,13 +306,13 @@
       "id": "connectors_freeform_3d_fontwork",
       "scope": "connectors and glue points, Bezier/freeform, 3D and Fontwork",
       "states": [
-        "observation_required",
-        "typed_adapter_required",
+        "observation_verified",
+        "runtime_validation_required",
         "visual_validation_required"
       ],
       "next": [
-        "model endpoints and parent relationships before geometry edits",
-        "treat 3D and Fontwork as separate typed families"
+        "promote the implemented connector, freeform, 3D material and Fontwork adapters after visual and PowerPoint validation",
+        "keep connector endpoint attachment bounded to observed top-level objects and glue points"
       ]
     },
     {
@@ -302,29 +338,34 @@
         "visual_validation_required"
       ],
       "next": [
-        "add bounded preset replacement, effect insertion/removal and effect-order mutation after each operation has the same native history and playback evidence",
+        "promote the implemented effect insertion, removal, preset replacement and ordering adapters after native history, reopen and playback evidence",
         "validate playback rather than static screenshots alone"
       ]
     },
     {
       "id": "notes_comments_accessibility",
       "scope": "speaker notes, annotations, author threads, alt text, title/description and reading order",
-      "states": ["observation_required", "typed_adapter_required"],
+      "states": [
+        "runtime_verified",
+        "observation_verified",
+        "runtime_validation_required",
+        "visual_validation_required"
+      ],
       "next": [
-        "separate private notes from visible slide content",
-        "add accessibility audit and reading-order adapters"
+        "promote the implemented comment lifecycle, accessibility audit and complete top-level reading-order adapter after save/reopen and PowerPoint validation",
+        "continue to expose speaker notes separately from visible slide content"
       ]
     },
     {
       "id": "equations_embedded_objects",
       "scope": "math, OLE/package objects and linked files",
       "states": [
-        "observation_required",
-        "typed_adapter_required",
+        "observation_verified",
+        "runtime_validation_required",
         "security_excluded"
       ],
       "next": [
-        "allow bounded math edits only after round-trip evidence",
+        "promote the implemented bounded Math formula-source adapter after round-trip and PowerPoint evidence",
         "do not execute or fetch embedded active content"
       ]
     },

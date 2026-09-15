@@ -6,14 +6,14 @@
     "repository": "https://git.libreoffice.org/core",
     "ref": "distro/allotropia/zeta-24-2",
     "buildCommit": "efaf0670b4d055f838a2849becb10f08aa06a257",
-    "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
+    "candidateCommit": "54c24cf299a3b2f6e3c86500c33c4227f0fb55fe"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v10",
+    "patchLevel": "browser-undo-v11",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "0d26040591c42cf598d4587a1bf0398fb55eb5e737a8832d5293915a0927c976",
+    "patchSeriesSha256": "09303fd80014b52b3f33b43a325ac701c9e29fd7209f1a12193bd496b9d5614b",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
@@ -24,7 +24,8 @@
       "libreoffice/patches/0007-browser-text-appearance-undo.patch",
       "libreoffice/patches/0008-browser-metadata-line-paragraph-undo.patch",
       "libreoffice/patches/0009-browser-document-design-animation.patch",
-      "libreoffice/patches/0010-browser-advanced-shape-connector-undo.patch"
+      "libreoffice/patches/0010-browser-advanced-shape-connector-undo.patch",
+      "libreoffice/patches/0011-browser-semantic-assets-accessibility.patch"
     ],
     "invariants": [
       "table-cell-native-undo",
@@ -62,9 +63,16 @@
       "document-slide-size-native-undo",
       "master-theme-native-undo",
       "complete-theme-copy-roundtrip",
-      "animation-lifecycle-native-undo"
-      ,"advanced-shape-style-native-undo"
-      ,"connector-geometry-native-undo"
+      "animation-lifecycle-native-undo",
+      "advanced-shape-style-native-undo",
+      "connector-geometry-native-undo",
+      "semantic-diagram-native-undo",
+      "equation-source-native-undo",
+      "asset-replacement-native-undo",
+      "media-content-preserves-playback-native-undo",
+      "media-playback-native-undo",
+      "reading-order-native-undo",
+      "semantic-asset-native-regression-tests"
     ],
     "requiredCppunitTargets": [
       "CppunitTest_sd_uiimpress",

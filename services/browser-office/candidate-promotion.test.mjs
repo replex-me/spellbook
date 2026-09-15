@@ -29,6 +29,15 @@ const capabilities = JSON.parse(
     "utf8",
   ),
 );
+const conformance = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../contracts/native-mutation-conformance.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
 const nativeOperations = Object.entries(capabilities.mutationModel.operations)
   .filter(([, operation]) => operation.availability !== "format_excluded")
   .map(([operation]) => operation)
@@ -39,7 +48,7 @@ const admittedRuntime = {
   receiptSha256,
   receipt: {
     spellbookSourceRevision: "c".repeat(40),
-    libreOffice: { patchLevel: "browser-undo-v9" },
+    libreOffice: { patchLevel: "browser-undo-v11" },
     toolchain: { emsdk: { version: "3.1.65" } },
     artifacts: [{ name: "soffice.wasm", sha256: "d".repeat(64) }],
   },
@@ -68,8 +77,8 @@ const nativeConformanceReport = {
   expectedOperations: nativeOperations,
   executedOperations: nativeOperations,
   missingOperations: [],
-  scenarios: Array.from({ length: 10 }, (_, index) => ({
-    scenario: `scenario-${index}`,
+  scenarios: conformance.executionOrder.map((scenario) => ({
+    scenario,
     status: "passed",
     reopenVerified: true,
     missingSelectedOperations: [],

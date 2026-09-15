@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "2.13.0",
+  "version": "2.14.0",
   "coordinateUnit": "1/100mm",
   "nativeUndoRequired": true,
   "verifiedWith": {
@@ -15,7 +15,7 @@
     }
   },
   "aiExposure": {
-    "operationCount": 85,
+    "operationCount": 97,
     "policy": "Expose every bounded operation except format-excluded mutations. Before execution, authorize against the current document permission and the live editor engine patch level. Availability records release-evidence maturity; it does not silently remove an implemented operation from the model schema."
   },
   "transaction": {
@@ -42,6 +42,10 @@
       "slide_transform": {
         "atomicBoundary": "sfx_list_action",
         "description": "Typed document-structure commands executed by LibreOffice as one SfxUndoManager list action."
+      },
+      "platform_asset": {
+        "atomicBoundary": "editor_file_insert_action",
+        "description": "Binary assets are authorized and delivered by the host, then inserted into the live editor as one native Undo action; models never receive file or network authority."
       }
     },
     "changeBudgetContract": {
@@ -219,6 +223,60 @@
         "fixture": "media-geometry",
         "verification": ["structure", "save_reopen", "change_budget", "visual"],
         "changeBudget": ["slide_parts"]
+      },
+      "media_asset": {
+        "domain": "platform_asset",
+        "undoProvider": "editor_file_insert_action",
+        "fixture": "media-asset",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "allowPartCreationOrDeletion": true,
+        "changeBudget": [
+          "package_manifest",
+          "presentation_relationships",
+          "slide_parts",
+          "slide_relationships",
+          "media_parts"
+        ]
+      },
+      "media_playback": {
+        "domain": "slide_transform",
+        "undoProvider": "media_property_snapshot",
+        "fixture": "media-playback",
+        "verification": ["structure", "save_reopen", "change_budget"],
+        "changeBudget": ["slide_parts", "slide_relationships", "media_parts"]
+      },
+      "diagram_model": {
+        "domain": "slide_transform",
+        "undoProvider": "diagram_model_snapshot",
+        "fixture": "smartart-diagram",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "allowPartCreationOrDeletion": true,
+        "changeBudget": ["slide_parts", "slide_relationships", "diagram_parts"]
+      },
+      "fontwork": {
+        "domain": "slide_transform",
+        "undoProvider": "sdr_attribute_action",
+        "fixture": "fontwork",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts"]
+      },
+      "object_3d": {
+        "domain": "slide_transform",
+        "undoProvider": "sdr_attribute_action",
+        "fixture": "object-3d",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": ["slide_parts", "media_parts"]
+      },
+      "equation": {
+        "domain": "slide_transform",
+        "undoProvider": "embedded_model_snapshot",
+        "fixture": "equation",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "changeBudget": [
+          "slide_parts",
+          "slide_relationships",
+          "embedded_workbooks"
+        ]
       },
       "slide_transition": {
         "domain": "slide_transform",
@@ -907,6 +965,102 @@
         "availability": "runtime_verified",
         "minEnginePatch": 6
       },
+      "insert_image": {
+        "family": "media_asset",
+        "target": "slide",
+        "execution": "platform_asset",
+        "identityEffect": "create",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 0
+      },
+      "replace_image": {
+        "family": "media_asset",
+        "target": "element",
+        "execution": "platform_asset",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "insert_media": {
+        "family": "media_asset",
+        "target": "slide",
+        "execution": "platform_asset",
+        "identityEffect": "create",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 0
+      },
+      "replace_media": {
+        "family": "media_asset",
+        "target": "element",
+        "execution": "platform_asset",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "set_media_playback": {
+        "family": "media_playback",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "set_smartart_node": {
+        "family": "diagram_model",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "add_smartart_node": {
+        "family": "diagram_model",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "create",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "delete_smartart_node": {
+        "family": "diagram_model",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "delete",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "set_fontwork": {
+        "family": "fontwork",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "set_3d_material": {
+        "family": "object_3d",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "set_equation_source": {
+        "family": "equation",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
+      "set_reading_order": {
+        "family": "object_topology",
+        "target": "elements",
+        "execution": "native_transform",
+        "identityEffect": "reorder",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 24
+      },
       "set_paragraph_format": {
         "family": "object_text",
         "target": "element",
@@ -950,13 +1104,12 @@
     }
   },
   "operationGroups": {
-    "document": ["set_slide_size", "set_master_theme"],
+    "document": ["set_slide_size", "set_master_theme", "set_sections"],
     "slide": [
       "insert_slide",
       "duplicate_slide",
       "delete_slide",
       "move_slide",
-      "set_sections",
       "set_speaker_notes",
       "set_slide_layout",
       "set_background",
@@ -964,6 +1117,8 @@
       "set_slide_hidden",
       "set_slide_transition",
       "set_slide_metadata",
+      "insert_image",
+      "insert_media",
       "add_comment",
       "edit_comment",
       "delete_comment"
@@ -975,7 +1130,7 @@
       "add_freeform",
       "add_table"
     ],
-    "multiElement": ["align", "distribute", "group"],
+    "multiElement": ["align", "distribute", "group", "set_reading_order"],
     "element": [
       "replace_text",
       "move",
@@ -1034,6 +1189,15 @@
       "replace_animation_effect",
       "move_animation_effect",
       "crop_image",
+      "replace_image",
+      "replace_media",
+      "set_media_playback",
+      "set_smartart_node",
+      "add_smartart_node",
+      "delete_smartart_node",
+      "set_fontwork",
+      "set_3d_material",
+      "set_equation_source",
       "set_paragraph_format",
       "set_paragraph_list",
       "set_connector"
@@ -1058,6 +1222,18 @@
     "add_comment",
     "edit_comment",
     "delete_comment",
+    "insert_image",
+    "replace_image",
+    "insert_media",
+    "replace_media",
+    "set_media_playback",
+    "set_smartart_node",
+    "add_smartart_node",
+    "delete_smartart_node",
+    "set_fontwork",
+    "set_3d_material",
+    "set_equation_source",
+    "set_reading_order",
     "add_animation_effect",
     "remove_animation_effect",
     "replace_animation_effect",
@@ -1168,6 +1344,18 @@
           "replace_animation_effect",
           "move_animation_effect",
           "crop_image",
+          "insert_image",
+          "replace_image",
+          "insert_media",
+          "replace_media",
+          "set_media_playback",
+          "set_smartart_node",
+          "add_smartart_node",
+          "delete_smartart_node",
+          "set_fontwork",
+          "set_3d_material",
+          "set_equation_source",
+          "set_reading_order",
           "set_paragraph_format",
           "set_paragraph_list",
           "set_connector",
@@ -1220,17 +1408,29 @@
         "additionalProperties": false,
         "properties": {
           "name": { "type": "string", "minLength": 1, "maxLength": 255 },
-          "colorSchemeName": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "colorSchemeName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
           "colors": {
             "type": "array",
             "minItems": 12,
             "maxItems": 12,
             "items": { "type": "integer", "minimum": 0, "maximum": 16777215 }
           },
-          "fontSchemeName": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "fontSchemeName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
           "majorLatin": { "type": "string", "minLength": 1, "maxLength": 255 },
           "majorAsian": { "type": "string", "minLength": 1, "maxLength": 255 },
-          "majorComplex": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "majorComplex": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
           "minorLatin": { "type": "string", "minLength": 1, "maxLength": 255 },
           "minorAsian": { "type": "string", "minLength": 1, "maxLength": 255 },
           "minorComplex": { "type": "string", "minLength": 1, "maxLength": 255 }
@@ -1374,6 +1574,115 @@
       "author": { "type": ["string", "null"], "maxLength": 255 },
       "initials": { "type": ["string", "null"], "maxLength": 16 },
       "commentIndex": { "type": ["integer", "null"], "minimum": 0 },
+      "assetId": {
+        "type": ["string", "null"],
+        "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$",
+        "description": "Document-scoped asset id returned by the host. The model never supplies a URL or path."
+      },
+      "mediaPlayback": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "loop": { "type": ["boolean", "null"] },
+          "muted": { "type": ["boolean", "null"] },
+          "volumeDb": {
+            "type": ["integer", "null"],
+            "minimum": -10000,
+            "maximum": 0
+          },
+          "zoom": {
+            "type": ["string", "null"],
+            "enum": [
+              "original",
+              "fit",
+              "zoom_1_to_2",
+              "zoom_1_to_4",
+              "zoom_2_to_1",
+              "zoom_4_to_1",
+              null
+            ]
+          }
+        },
+        "required": ["loop", "muted", "volumeDb", "zoom"]
+      },
+      "smartartNode": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "expectedText": { "type": ["string", "null"], "maxLength": 4000 },
+          "occurrence": { "type": "integer", "minimum": 0, "maximum": 999 },
+          "text": { "type": ["string", "null"], "maxLength": 4000 }
+        },
+        "required": ["expectedText", "occurrence", "text"],
+        "description": "One semantic SmartArt data node. Replacement/deletion is stale-guarded by its observed text and occurrence; add uses text with expectedText null."
+      },
+      "fontwork": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "style": { "type": ["integer", "null"], "minimum": 0, "maximum": 6 },
+          "adjust": { "type": ["integer", "null"], "minimum": 0, "maximum": 3 },
+          "distance": {
+            "type": ["integer", "null"],
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "start": {
+            "type": ["integer", "null"],
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "mirror": { "type": ["boolean", "null"] },
+          "outline": { "type": ["boolean", "null"] }
+        },
+        "required": [
+          "style",
+          "adjust",
+          "distance",
+          "start",
+          "mirror",
+          "outline"
+        ]
+      },
+      "material3d": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 16777215
+          },
+          "emission": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 16777215
+          },
+          "specular": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 16777215
+          },
+          "specularIntensity": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "doubleSided": { "type": ["boolean", "null"] }
+        },
+        "required": [
+          "color",
+          "emission",
+          "specular",
+          "specularIntensity",
+          "doubleSided"
+        ]
+      },
+      "equationSource": {
+        "type": ["string", "null"],
+        "maxLength": 20000,
+        "description": "LibreOffice Math source for an observed embedded equation only; arbitrary OLE objects remain excluded."
+      },
       "x": { "type": ["number", "null"] },
       "y": { "type": ["number", "null"] },
       "width": { "type": ["number", "null"] },
@@ -1447,8 +1756,16 @@
             "type": "string",
             "enum": ["none", "solid", "gradient", "hatch"]
           },
-          "color": { "type": ["integer", "null"], "minimum": 0, "maximum": 16777215 },
-          "opacity": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+          "color": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 16777215
+          },
+          "opacity": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 100
+          },
           "catalogName": { "type": ["string", "null"], "maxLength": 255 }
         },
         "required": ["type", "color", "opacity", "catalogName"],
@@ -1458,10 +1775,26 @@
         "type": ["object", "null"],
         "additionalProperties": false,
         "properties": {
-          "glowRadius": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
-          "glowColor": { "type": ["integer", "null"], "minimum": 0, "maximum": 16777215 },
-          "glowOpacity": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
-          "softEdgeRadius": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 }
+          "glowRadius": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "glowColor": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 16777215
+          },
+          "glowOpacity": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "softEdgeRadius": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 100000
+          }
         },
         "required": ["glowRadius", "glowColor", "glowOpacity", "softEdgeRadius"]
       },
@@ -1473,11 +1806,31 @@
             "type": ["string", "null"],
             "enum": ["left", "center", "right", "justify", null]
           },
-          "leftMargin": { "type": ["number", "null"], "minimum": -100000, "maximum": 100000 },
-          "rightMargin": { "type": ["number", "null"], "minimum": -100000, "maximum": 100000 },
-          "firstLineIndent": { "type": ["number", "null"], "minimum": -100000, "maximum": 100000 },
-          "topMargin": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
-          "bottomMargin": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
+          "leftMargin": {
+            "type": ["number", "null"],
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "rightMargin": {
+            "type": ["number", "null"],
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "firstLineIndent": {
+            "type": ["number", "null"],
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "topMargin": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "bottomMargin": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 100000
+          },
           "direction": {
             "type": ["string", "null"],
             "enum": ["left-to-right", "right-to-left", "top-to-bottom", null]
@@ -1561,23 +1914,40 @@
         "type": ["object", "null"],
         "additionalProperties": false,
         "properties": {
-          "kind": { "type": "string", "enum": ["standard", "curve", "straight"] },
+          "kind": {
+            "type": "string",
+            "enum": ["standard", "curve", "straight"]
+          },
           "start": {
             "type": "object",
             "additionalProperties": false,
-            "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            },
             "required": ["x", "y"]
           },
           "end": {
             "type": "object",
             "additionalProperties": false,
-            "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            },
             "required": ["x", "y"]
           },
           "startElementId": { "type": ["string", "null"] },
           "endElementId": { "type": ["string", "null"] },
-          "startGluePoint": { "type": ["integer", "null"], "minimum": -1, "maximum": 65535 },
-          "endGluePoint": { "type": ["integer", "null"], "minimum": -1, "maximum": 65535 }
+          "startGluePoint": {
+            "type": ["integer", "null"],
+            "minimum": -1,
+            "maximum": 65535
+          },
+          "endGluePoint": {
+            "type": ["integer", "null"],
+            "minimum": -1,
+            "maximum": 65535
+          }
         },
         "required": [
           "kind",
@@ -1861,6 +2231,12 @@
       "author",
       "initials",
       "commentIndex",
+      "assetId",
+      "mediaPlayback",
+      "smartartNode",
+      "fontwork",
+      "material3d",
+      "equationSource",
       "x",
       "y",
       "width",
@@ -2096,6 +2472,11 @@
       "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
     },
     {
+      "op": "crop_image",
+      "minimumVerifiedPatch": 6,
+      "reason": "Image crop changes require native graphic-crop Undo and PPTX round-trip support."
+    },
+    {
       "op": "set_slide_size",
       "minimumVerifiedPatch": 22,
       "reason": "A document-wide page-size edit must resize every slide and master through one native page-format Undo group and preserve the PPTX presentation size."
@@ -2129,6 +2510,116 @@
       "op": "set_object_interaction",
       "minimumVerifiedPatch": 18,
       "reason": "This operation is verified only on the declared patched engine; the stock engine does not satisfy its native Undo or OOXML round-trip contract."
+    },
+    {
+      "op": "set_slide_metadata",
+      "minimumVerifiedPatch": 19,
+      "reason": "Slide metadata changes require the declared native snapshot and PPTX round-trip patch."
+    },
+    {
+      "op": "set_line_style",
+      "minimumVerifiedPatch": 19,
+      "reason": "Line preset and marker changes require the declared native attribute Undo patch."
+    },
+    {
+      "op": "set_paragraph_format",
+      "minimumVerifiedPatch": 19,
+      "reason": "Paragraph geometry and direction changes require the declared native text Undo patch."
+    },
+    {
+      "op": "set_sections",
+      "minimumVerifiedPatch": 20,
+      "reason": "Section mutations require a document-level section snapshot and PPTX round-trip patch."
+    },
+    {
+      "op": "add_connector",
+      "minimumVerifiedPatch": 23,
+      "reason": "Connector creation requires native identity, endpoint and geometry Undo support."
+    },
+    {
+      "op": "add_freeform",
+      "minimumVerifiedPatch": 23,
+      "reason": "Freeform creation requires native path identity and geometry Undo support."
+    },
+    {
+      "op": "set_connector",
+      "minimumVerifiedPatch": 23,
+      "reason": "Connector endpoint and attachment changes require native attribute and geometry Undo support."
+    },
+    {
+      "op": "set_shape_fill",
+      "minimumVerifiedPatch": 23,
+      "reason": "Gradient and hatch catalog changes require native style-catalog validation and Undo support."
+    },
+    {
+      "op": "set_shape_effects",
+      "minimumVerifiedPatch": 23,
+      "reason": "Glow and soft-edge changes require native attribute Undo and PPTX round-trip support."
+    },
+    {
+      "op": "set_text_language",
+      "minimumVerifiedPatch": 23,
+      "reason": "Language changes across Latin, Asian and complex scripts require the declared native text patch."
+    },
+    {
+      "op": "set_text_case",
+      "minimumVerifiedPatch": 23,
+      "reason": "Case-map changes require the declared native text Undo patch."
+    },
+    {
+      "op": "set_paragraph_list",
+      "minimumVerifiedPatch": 23,
+      "reason": "List structure changes require native numbering-rule snapshots and PPTX round-trip support."
+    },
+    {
+      "op": "replace_image",
+      "minimumVerifiedPatch": 24,
+      "reason": "Image replacement requires a trusted host asset transfer and one native replacement Undo action."
+    },
+    {
+      "op": "replace_media",
+      "minimumVerifiedPatch": 24,
+      "reason": "Media replacement requires a trusted host asset transfer and one native replacement Undo action."
+    },
+    {
+      "op": "set_media_playback",
+      "minimumVerifiedPatch": 24,
+      "reason": "Media playback properties require native property snapshots and PPTX round-trip support."
+    },
+    {
+      "op": "set_smartart_node",
+      "minimumVerifiedPatch": 24,
+      "reason": "SmartArt semantic edits require diagram-model snapshots instead of destructive shape flattening."
+    },
+    {
+      "op": "add_smartart_node",
+      "minimumVerifiedPatch": 24,
+      "reason": "SmartArt semantic node creation requires diagram-model snapshots and relationship preservation."
+    },
+    {
+      "op": "delete_smartart_node",
+      "minimumVerifiedPatch": 24,
+      "reason": "SmartArt semantic node deletion requires diagram-model snapshots and relationship preservation."
+    },
+    {
+      "op": "set_fontwork",
+      "minimumVerifiedPatch": 24,
+      "reason": "Fontwork geometry changes require native attribute Undo and PPTX round-trip support."
+    },
+    {
+      "op": "set_3d_material",
+      "minimumVerifiedPatch": 24,
+      "reason": "3D material changes require native attribute Undo and PPTX round-trip support."
+    },
+    {
+      "op": "set_equation_source",
+      "minimumVerifiedPatch": 24,
+      "reason": "Equation source changes require an embedded Math model snapshot and one native Undo action."
+    },
+    {
+      "op": "set_reading_order",
+      "minimumVerifiedPatch": 24,
+      "reason": "Accessibility reading-order changes require a complete native navigation-order snapshot."
     }
   ]
 }

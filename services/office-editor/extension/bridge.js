@@ -26,19 +26,42 @@ let readyTimer;
 const bridgeSessionId = `${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2)}`;
-const imageSignatureIsValid = (bytes, mediaType) => {
-  const view = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 8));
+const assetSignatureIsValid = (bytes, mediaType) => {
+  const view = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 16));
   const png =
-    view.length === 8 &&
+    view.length >= 8 &&
     [137, 80, 78, 71, 13, 10, 26, 10].every(
       (value, index) => view[index] === value,
     );
   const jpeg = view[0] === 0xff && view[1] === 0xd8;
-  return mediaType === "image/png" ? png : mediaType === "image/jpeg" && jpeg;
+  const riff = String.fromCharCode(...view.slice(0, 4)) === "RIFF";
+  const wave = riff && String.fromCharCode(...view.slice(8, 12)) === "WAVE";
+  const webm =
+    view[0] === 0x1a &&
+    view[1] === 0x45 &&
+    view[2] === 0xdf &&
+    view[3] === 0xa3;
+  const ogg = String.fromCharCode(...view.slice(0, 4)) === "OggS";
+  const mp3 =
+    String.fromCharCode(...view.slice(0, 3)) === "ID3" ||
+    (view[0] === 0xff && (view[1] & 0xe0) === 0xe0);
+  const isoMedia = String.fromCharCode(...view.slice(4, 8)) === "ftyp";
+  return (
+    {
+      "image/png": png,
+      "image/jpeg": jpeg,
+      "audio/mpeg": mp3,
+      "audio/wav": wave,
+      "audio/ogg": ogg,
+      "video/webm": webm,
+      "video/mp4": isoMedia,
+      "audio/mp4": isoMedia,
+    }[mediaType] === true
+  );
 };
 const elementCount = (state) =>
   state.slides.reduce((total, slide) => total + slide.elements.length, 0);
-const waitForInsertedImage = async (before, slideIndex) => {
+const waitForInsertedAsset = async (before, slideIndex, operation) => {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -56,45 +79,61 @@ const waitForInsertedImage = async (before, slideIndex) => {
       elementCount(state) === elementCount(before) + 1 &&
       otherSlidesUnchanged
     ) {
-      const issueKey = (issue) =>
-        JSON.stringify({
-          slideIndex: issue.slideIndex,
-          code: issue.code,
-          stableId: issue.stableId ?? null,
-          stableIds: issue.stableIds ?? null,
-        });
-      const beforeIssues = new Set(
-        (before.layoutAudit?.issues ?? []).map(issueKey),
+      const beforeStableIds = new Set(
+        before.slides[slideIndex].elements.map((element) => element.stableId),
       );
-      const introducedIssues = (state.layoutAudit?.issues ?? []).filter(
-        (issue) => !beforeIssues.has(issueKey(issue)),
+      const added = state.slides[slideIndex].elements.filter(
+        (element) =>
+          element.parentElementId === null &&
+          !beforeStableIds.has(element.stableId),
       );
-      return {
-        ...state,
-        changedSlideIndexes: [slideIndex],
-        visualEvidenceComplete:
-          state.images?.length === 1 &&
-          state.images[0]?.slideIndex === slideIndex,
-        layoutAudit: {
-          ...state.layoutAudit,
-          introducedIssueCount: introducedIssues.length,
-          introducedIssues,
-        },
-      };
+      const expectedKind = operation.endsWith("_image")
+        ? "GraphicObjectShape"
+        : "MediaShape";
+      if (added.length === 1 && String(added[0].kind).endsWith(expectedKind))
+        return state;
     }
   }
-  throw new Error("generated_image_was_not_inserted");
+  throw new Error("asset_was_not_inserted");
 };
-const insertImage = async (request) => {
-  const { imageBytes, mediaType, slideIndex, expectedRevision, permission } =
-    request;
+const mutateAsset = async (request) => {
+  const {
+    assetBytes,
+    mediaType,
+    slideIndex,
+    expectedRevision,
+    expectedSlides,
+    permission,
+    operation,
+    elementId,
+    fileName,
+  } = request;
+  const isImage = operation.endsWith("_image");
+  const maximumBytes = isImage ? 5_000_000 : 25_000_000;
+  const imageTypes = ["image/png", "image/jpeg"];
+  const mediaTypes = [
+    "audio/mpeg",
+    "audio/wav",
+    "audio/ogg",
+    "audio/mp4",
+    "video/mp4",
+    "video/webm",
+  ];
   if (
-    !(imageBytes instanceof ArrayBuffer) ||
-    !imageBytes.byteLength ||
-    imageBytes.byteLength > 5_000_000 ||
-    !imageSignatureIsValid(imageBytes, mediaType)
+    ![
+      "insert_image",
+      "replace_image",
+      "insert_media",
+      "replace_media",
+    ].includes(operation) ||
+    !(assetBytes instanceof ArrayBuffer) ||
+    !assetBytes.byteLength ||
+    assetBytes.byteLength > maximumBytes ||
+    !(isImage ? imageTypes : mediaTypes).includes(mediaType) ||
+    !assetSignatureIsValid(assetBytes, mediaType) ||
+    typeof expectedSlides !== "string"
   )
-    throw new Error("invalid_generated_image");
+    throw new Error("invalid_asset");
   const before = await window.presentNative.observe();
   if (
     typeof expectedRevision !== "string" ||
@@ -107,22 +146,78 @@ const insertImage = async (request) => {
     slideIndex >= before.slides.length ||
     before.activeSlide !== slideIndex
   )
-    throw new Error("generated_image_slide_changed");
+    throw new Error("asset_slide_changed");
   if (
     !permission ||
-    !["slides", "document"].includes(permission.mode) ||
+    !["selection", "slides", "document"].includes(permission.mode) ||
+    (operation.startsWith("insert_") && permission.mode === "selection") ||
     (permission.mode === "slides" &&
-      !permission.slideIndexes?.includes(slideIndex))
+      !permission.slideIndexes?.includes(slideIndex)) ||
+    (permission.mode === "selection" &&
+      !permission.elementIds?.includes(elementId))
   )
     throw new Error("outside_edit_permission");
-  const extension = mediaType === "image/png" ? "png" : "jpg";
-  const file = new File([imageBytes], `AI-generated.${extension}`, {
+  const extensionByType = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/mp4": "m4a",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+  };
+  const extension = extensionByType[mediaType];
+  if (!extension) throw new Error("unsupported_asset_type");
+  const safeName =
+    typeof fileName === "string" && fileName.trim()
+      ? fileName.trim().slice(0, 200)
+      : `AI-asset.${extension}`;
+  const file = new File([assetBytes], safeName, {
     type: mediaType,
   });
   const editorMap = window.parent.app?.map;
   if (!editorMap) throw new Error("native_editor_map_unavailable");
-  editorMap.fire("insertgraphic", { file });
-  return waitForInsertedImage(before, slideIndex);
+  let checkpoint;
+  editorMap.fire("blockUI", { message: "AI가 자산을 편집하고 있습니다…" });
+  try {
+    checkpoint = await cool.callRemote(spellbookDocumentOperation, {
+      operation: "asset_begin",
+      assetOperation: operation,
+      elementId,
+      slideIndex,
+      expectedRevision,
+      expectedSlides,
+      permission,
+      mutationContracts: spellbookMutationContracts,
+    });
+    editorMap.fire(isImage ? "insertgraphic" : "insertmultimedia", { file });
+    await waitForInsertedAsset(before, slideIndex, operation);
+    return await cool.callRemote(spellbookDocumentOperation, {
+      operation: "asset_finish",
+      assetOperation: operation,
+      elementId,
+      slideIndex,
+      expectedSlides,
+      beforeAudit: before.layoutAudit,
+      undoCount: checkpoint.undoCount,
+      beforeElementIds: checkpoint.beforeElementIds,
+      mutationContracts: spellbookMutationContracts,
+    });
+  } catch (error) {
+    if (checkpoint)
+      await cool
+        .callRemote(spellbookDocumentOperation, {
+          operation: "asset_abort",
+          undoCount: checkpoint.undoCount,
+          expectedSlides,
+          mutationContracts: spellbookMutationContracts,
+        })
+        .catch(() => undefined);
+    throw error;
+  } finally {
+    editorMap.fire("unblockUI");
+  }
 };
 window.addEventListener("message", (event) => {
   if (
@@ -142,15 +237,26 @@ window.addEventListener("message", (event) => {
     const message = event.data;
     if (
       !message?.id ||
-      !["observe", "edit", "edit_batch", "insert_image"].includes(
-        message.request?.operation,
-      )
+      ![
+        "observe",
+        "edit",
+        "edit_batch",
+        "insert_image",
+        "replace_image",
+        "insert_media",
+        "replace_media",
+      ].includes(message.request?.operation)
     )
       return;
     if (!completed.has(message.id)) {
       const task = tail.then(() =>
-        message.request.operation === "insert_image"
-          ? insertImage(message.request)
+        [
+          "insert_image",
+          "replace_image",
+          "insert_media",
+          "replace_media",
+        ].includes(message.request.operation)
+          ? mutateAsset(message.request)
           : cool.callRemote(spellbookDocumentOperation, {
               ...message.request,
               mutationContracts: spellbookMutationContracts,

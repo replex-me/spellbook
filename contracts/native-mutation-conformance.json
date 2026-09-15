@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0",
-  "enginePatchLevel": 19,
+  "version": "1.1.0",
+  "enginePatchLevel": 24,
   "executionOrder": [
     "table-structure",
     "layout-master",
@@ -12,6 +12,11 @@
     "slide-transition",
     "animation-timing",
     "object-interaction",
+    "semantic-assets",
+    "smartart-diagram",
+    "fontwork",
+    "object-3d",
+    "equation",
     "general-native-surface"
   ],
   "genericProviders": {
@@ -173,6 +178,48 @@
         "structure",
         "visual"
       ]
+    },
+    "sections-history": {
+      "minEnginePatch": 20,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureSectionsUndoRedoRoundtrip",
+      "proves": ["single_undo", "exact_undo_redo", "save_reopen", "structure"]
+    },
+    "animation-lifecycle-history": {
+      "minEnginePatch": 21,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureAnimationLifecycleUndoRoundtrip",
+      "proves": ["single_undo", "exact_undo_redo", "save_reopen", "structure"]
+    },
+    "document-design-history": {
+      "minEnginePatch": 22,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentDesignSizeAndThemeUndoRoundtrip",
+      "proves": ["single_undo", "exact_undo_redo", "save_reopen", "structure"]
+    },
+    "reading-order-history": {
+      "minEnginePatch": 24,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureObjectPropertiesUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    },
+    "asset-replacement-history": {
+      "minEnginePatch": 24,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureAssetReplacementUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    },
+    "media-replacement-history": {
+      "minEnginePatch": 24,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureMediaReplacementUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
+    },
+    "media-playback-history": {
+      "minEnginePatch": 24,
+      "target": "CppunitTest_sd_uiimpress",
+      "name": "testDocumentStructureMediaPlaybackUndoRedo",
+      "proves": ["single_undo", "exact_undo_redo", "structure"]
     },
     "table-cell-history": {
       "minEnginePatch": 6,
@@ -388,6 +435,106 @@
         "save_reopen",
         "playback"
       ]
+    },
+    "semantic-assets": {
+      "minEnginePatch": 24,
+      "source": "eval/public/fixtures/general-native-surface.pptx",
+      "sourceSha256": "9bc86d459f0216802746c51f4a1beebb33ff49e74fde54fcc9134eb415b51cf8",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-semantic-family.mjs",
+        "args": ["semantic-assets"]
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-semantic-family-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "smartart-diagram": {
+      "minEnginePatch": 24,
+      "source": "eval/public/downloads/lo-smartart-org.pptx",
+      "sourceSha256": "7a457c32c73efed6244cf79e184994a2f2a0cb65901f6ce4f3dfcd22dbcf4ac1",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-semantic-family.mjs",
+        "args": ["smartart-diagram"]
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-semantic-family-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "fontwork": {
+      "minEnginePatch": 24,
+      "source": "eval/public/downloads/lo-wordart-3d.pptx",
+      "sourceSha256": "c883abf998a2f1faef97fc5fd01531d42530249f1728c51c0aeb6958ab3e512a",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-semantic-family.mjs",
+        "args": ["fontwork"]
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-semantic-family-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "object-3d": {
+      "minEnginePatch": 24,
+      "source": "eval/public/downloads/ox-shape-3d.pptx",
+      "sourceSha256": "e51fb1f09b3e9492b5b06a9bd31d0db16c0bf8b4455e7c5df65a97174715caa7",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-semantic-family.mjs",
+        "args": ["object-3d"]
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-semantic-family-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
+    },
+    "equation": {
+      "minEnginePatch": 24,
+      "source": "eval/public/downloads/lo-equation.pptx",
+      "sourceSha256": "b9bc871d807225cb92cbc2dfbead959e86920d3e0b2dc53ad6d59fb0110e45b7",
+      "targetSlideIndexes": [0],
+      "apply": {
+        "script": "services/office-session-spike/probe-uno-semantic-family.mjs",
+        "args": ["equation"]
+      },
+      "reopen": {
+        "script": "services/office-session-spike/probe-uno-semantic-family-reopen.mjs"
+      },
+      "proves": [
+        "structure",
+        "apply_readback",
+        "single_undo",
+        "exact_undo_redo",
+        "save_reopen"
+      ]
     }
   },
   "fixtures": {
@@ -396,7 +543,8 @@
       "nativeTests": [
         "strict-transform-rollback",
         "insert-slide-inherits-layout",
-        "slide-multi-move-history"
+        "slide-multi-move-history",
+        "sections-history"
       ]
     },
     "slide-properties": {
@@ -406,6 +554,8 @@
         "rename-slide-history",
         "slide-visibility-history",
         "layout-master-history",
+        "layout-existing-master-history",
+        "empty-content-placeholder-roundtrip",
         "layout-animation-tree-history",
         "metadata-line-paragraph-history"
       ]
@@ -414,9 +564,13 @@
       "scenarios": ["general-native-surface"],
       "nativeTests": ["strict-transform-rollback"]
     },
+    "document-design": {
+      "scenarios": ["layout-master"],
+      "nativeTests": ["document-design-history"]
+    },
     "object-creation": {
       "scenarios": ["general-native-surface"],
-      "nativeTests": []
+      "nativeTests": ["object-creation-history", "object-duplication-history"]
     },
     "object-geometry": {
       "scenarios": ["general-native-surface"],
@@ -437,13 +591,14 @@
         "strict-transform-rollback",
         "text-range-history",
         "text-properties-history",
+        "text-formatting-all-scripts-history",
         "text-shadow-roundtrip",
         "metadata-line-paragraph-history"
       ]
     },
     "object-topology": {
       "scenarios": ["general-native-surface"],
-      "nativeTests": []
+      "nativeTests": ["reading-order-history"]
     },
     "table-content": {
       "scenarios": ["general-native-surface"],
@@ -465,17 +620,45 @@
       "scenarios": ["picture-crop"],
       "nativeTests": ["graphic-crop-history"]
     },
+    "media-asset": {
+      "scenarios": ["semantic-assets"],
+      "nativeTests": ["asset-replacement-history", "media-replacement-history"]
+    },
+    "media-playback": {
+      "scenarios": ["semantic-assets"],
+      "nativeTests": ["media-playback-history"]
+    },
+    "smartart-diagram": {
+      "scenarios": ["smartart-diagram"],
+      "nativeTests": []
+    },
+    "fontwork": {
+      "scenarios": ["fontwork"],
+      "nativeTests": []
+    },
+    "object-3d": {
+      "scenarios": ["object-3d"],
+      "nativeTests": []
+    },
+    "equation": {
+      "scenarios": ["equation"],
+      "nativeTests": []
+    },
     "slide-transition": {
       "scenarios": ["slide-transition"],
       "nativeTests": ["slide-transition-history"]
     },
     "animation-timing": {
       "scenarios": ["animation-timing"],
-      "nativeTests": ["animation-history"]
+      "nativeTests": ["animation-history", "animation-lifecycle-history"]
     },
     "object-interaction": {
       "scenarios": ["object-interaction"],
       "nativeTests": ["object-interaction-history"]
+    },
+    "comments": {
+      "scenarios": ["general-native-surface"],
+      "nativeTests": []
     }
   }
 }

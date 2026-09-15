@@ -797,23 +797,29 @@ function spellbookDocumentOperation(request) {
     const numeric = Number(value);
     if (Number.isInteger(numeric))
       return ["left", "right", "justify", "center", "stretch"][numeric] ?? null;
-    return {
-      LEFT: "left",
-      RIGHT: "right",
-      BLOCK: "justify",
-      CENTER: "center",
-      STRETCH: "stretch",
-    }[enumToken(value)] ?? null;
+    return (
+      {
+        LEFT: "left",
+        RIGHT: "right",
+        BLOCK: "justify",
+        CENTER: "center",
+        STRETCH: "stretch",
+      }[enumToken(value)] ?? null
+    );
   };
   const writingModeName = (value) => {
     const numeric = Number(value);
     if (Number.isInteger(numeric))
-      return ["left-to-right", "right-to-left", "top-to-bottom"][numeric] ?? null;
-    return {
-      LR_TB: "left-to-right",
-      RL_TB: "right-to-left",
-      TB_RL: "top-to-bottom",
-    }[enumToken(value)] ?? null;
+      return (
+        ["left-to-right", "right-to-left", "top-to-bottom"][numeric] ?? null
+      );
+    return (
+      {
+        LR_TB: "left-to-right",
+        RL_TB: "right-to-left",
+        TB_RL: "top-to-bottom",
+      }[enumToken(value)] ?? null
+    );
   };
   const normalizeUnoValue = (value, depth = 0) => {
     if (depth > 8) return null;
@@ -853,9 +859,10 @@ function spellbookDocumentOperation(request) {
       const master = masterPages.getByIndex(masterIndex);
       const background = safeProperty(master, "Background");
       const themeProperties = Object.fromEntries(
-        (normalizeUnoValue(
-          safeProperty(master, "ThemeUnoRepresentation"),
-        ) ?? [])
+        (
+          normalizeUnoValue(safeProperty(master, "ThemeUnoRepresentation")) ??
+          []
+        )
           .filter((entry) => typeof entry?.name === "string")
           .map((entry) => [entry.name, entry.value]),
       );
@@ -1152,9 +1159,7 @@ function spellbookDocumentOperation(request) {
       return label
         ? {
             showValues: Boolean(safeMember(label, "ShowNumber")),
-            showCategoryNames: Boolean(
-              safeMember(label, "ShowCategoryName"),
-            ),
+            showCategoryNames: Boolean(safeMember(label, "ShowCategoryName")),
             showSeriesNames: Boolean(safeMember(label, "ShowSeriesName")),
           }
         : null;
@@ -1233,12 +1238,12 @@ function spellbookDocumentOperation(request) {
         title: titleText(chartModel),
         legendVisible: Boolean(legend),
         legendPosition: legend
-          ? {
+          ? ({
               LINE_START: "left",
               LINE_END: "right",
               PAGE_START: "top",
               PAGE_END: "bottom",
-            }[enumToken(safeProperty(legend, "AnchorPosition"))] ?? null
+            }[enumToken(safeProperty(legend, "AnchorPosition"))] ?? null)
           : null,
         categoryAxisVisible: categoryAxis
           ? Boolean(safeProperty(categoryAxis, "Show"))
@@ -1273,20 +1278,55 @@ function spellbookDocumentOperation(request) {
     const diagramData = safeProperty(shape, "DiagramData");
     const engineMarksDiagram = safeProperty(shape, "IsDiagram") === true;
     const namedAsDiagram = /^Diagram(?:\s|$)/i.test(name);
-    if (!engineMarksDiagram && !diagramData && !namedAsDiagram) return null;
+    let nativeState = null;
+    try {
+      const serialized = safeProperty(shape, "SpellbookDiagramState");
+      if (typeof serialized === "string" && serialized.length <= 50000)
+        nativeState = JSON.parse(serialized);
+    } catch (_) {}
+    if (!engineMarksDiagram && !diagramData && !namedAsDiagram && !nativeState)
+      return null;
+    const semanticNodes = [];
+    const occurrences = new Map();
+    const appendText = (candidate) => {
+      const text = String(candidate ?? "").trim();
+      if (!text) return;
+      const occurrence = occurrences.get(text) ?? 0;
+      occurrences.set(text, occurrence + 1);
+      semanticNodes.push({ text, occurrence });
+    };
+    const collectText = (container) => {
+      for (let index = 0; index < childCount(container); index += 1) {
+        const child = container.getByIndex(index);
+        let text = "";
+        try {
+          text = String(child.getString() ?? "").trim();
+        } catch (_) {}
+        appendText(text);
+        if (childCount(child)) collectText(child);
+      }
+    };
+    if (Array.isArray(nativeState?.nodes))
+      nativeState.nodes.forEach((node) => appendText(node?.text));
+    else collectText(shape);
     return {
       importedAsGroup,
-      semanticModelAvailable: engineMarksDiagram && Boolean(diagramData),
+      semanticModelAvailable:
+        Boolean(nativeState) &&
+        (hasEnginePatch(24) || runtimeSupports("set_smartart_node")),
       sourcePreservationDataAvailable: Boolean(
         safeProperty(shape, "InteropGrabBag"),
       ),
       childCount: childCount(shape),
+      semanticNodes,
     };
   };
   const connectorDetails = (shape, shapeKind) => {
     if (!String(shapeKind).endsWith("ConnectorShape")) return null;
     const point = (value) =>
-      value && Number.isFinite(Number(value.X)) && Number.isFinite(Number(value.Y))
+      value &&
+      Number.isFinite(Number(value.X)) &&
+      Number.isFinite(Number(value.Y))
         ? { x: Number(value.X), y: Number(value.Y) }
         : null;
     return {
@@ -1303,10 +1343,14 @@ function spellbookDocumentOperation(request) {
     if (!/(?:PolyPolygon|PolyLine|OpenBezier|ClosedBezier)/u.test(shapeKind))
       return null;
     const polygons = safeProperty(shape, "PolyPolygon");
-    if (!polygons || typeof polygons[Symbol.iterator] !== "function") return null;
+    if (!polygons || typeof polygons[Symbol.iterator] !== "function")
+      return null;
     try {
       return Array.from(polygons, (polygon) =>
-        Array.from(polygon, (point) => ({ x: Number(point.X), y: Number(point.Y) })),
+        Array.from(polygon, (point) => ({
+          x: Number(point.X),
+          y: Number(point.Y),
+        })),
       );
     } catch (_) {
       return null;
@@ -1316,6 +1360,7 @@ function spellbookDocumentOperation(request) {
     const mediaUrl = safeProperty(shape, "MediaURL");
     if (!mediaUrl && !String(shapeKind).endsWith("MediaShape")) return null;
     return {
+      sourceId: mediaUrl ? revisionOf(mediaUrl) : null,
       urlKind:
         typeof mediaUrl !== "string" || !mediaUrl
           ? null
@@ -1328,7 +1373,53 @@ function spellbookDocumentOperation(request) {
       loop: safeProperty(shape, "Loop"),
       muted: safeProperty(shape, "Mute"),
       volumeDb: safeProperty(shape, "VolumeDB"),
-      zoom: enumName(safeProperty(shape, "Zoom")),
+      zoom:
+        {
+          ORIGINAL: "original",
+          FIT_TO_WINDOW: "fit",
+          FIT_TO_WINDOW_FIXED_ASPECT: "fit",
+          ZOOM_1_TO_2: "zoom_1_to_2",
+          ZOOM_1_TO_4: "zoom_1_to_4",
+          ZOOM_2_TO_1: "zoom_2_to_1",
+          ZOOM_4_TO_1: "zoom_4_to_1",
+        }[enumToken(safeProperty(shape, "Zoom"))] ?? null,
+    };
+  };
+  const fontworkDetails = (shape) => {
+    const style = safeProperty(shape, "FontWorkStyle");
+    if (style === null) return null;
+    return {
+      style,
+      adjust: safeProperty(shape, "FontWorkAdjust"),
+      distance: safeProperty(shape, "FontWorkDistance"),
+      start: safeProperty(shape, "FontWorkStart"),
+      mirror: safeProperty(shape, "FontWorkMirror"),
+      outline: safeProperty(shape, "FontWorkOutline"),
+    };
+  };
+  const material3dDetails = (shape) => {
+    const color = safeProperty(shape, "D3DMaterialColor");
+    if (color === null) return null;
+    return {
+      color,
+      emission: safeProperty(shape, "D3DMaterialEmission"),
+      specular: safeProperty(shape, "D3DMaterialSpecular"),
+      specularIntensity: safeProperty(shape, "D3DMaterialSpecularIntensity"),
+      doubleSided: safeProperty(shape, "D3DDoubleSided"),
+    };
+  };
+  const equationDetails = (shape, shapeKind) => {
+    if (!String(shapeKind).endsWith("OLE2Shape")) return null;
+    const embeddedModel = safeProperty(shape, "Model");
+    if (!embeddedModel) return null;
+    const services = safeCall(embeddedModel, "getSupportedServiceNames", []);
+    if (
+      !Array.from(services).includes("com.sun.star.formula.FormulaProperties")
+    )
+      return null;
+    return {
+      source: safeProperty(embeddedModel, "Formula"),
+      service: "com.sun.star.formula.FormulaProperties",
     };
   };
   const slideComments = (page) => {
@@ -1519,7 +1610,10 @@ function spellbookDocumentOperation(request) {
             connector: connectorDetails(shape, shapeKind),
             freeform: freeformDetails(shape, shapeKind),
             media: mediaDetails(shape, shapeKind),
-            readingOrder: safeProperty(shape, "NavigationOrder"),
+            fontwork: fontworkDetails(shape),
+            material3d: material3dDetails(shape),
+            equation: equationDetails(shape, shapeKind),
+            readingOrder: safeProperty(shape, "NavigationOrder") ?? index,
           });
           if (children) visit(shape, elementId, elementId, stableId);
         }
@@ -1557,6 +1651,7 @@ function spellbookDocumentOperation(request) {
       }
       const background = safeProperty(page, "Background");
       const layoutIssues = [];
+      const accessibilityIssues = [];
       const pageWidth = page.getPropertyValue("Width");
       const pageHeight = page.getPropertyValue("Height");
       const pageArea = pageWidth * pageHeight;
@@ -1566,6 +1661,35 @@ function spellbookDocumentOperation(request) {
         if (element.width <= 0 || element.height <= 0)
           layoutIssues.push({
             code: "invalid_size",
+            elementId: element.elementId,
+            stableId: element.stableId,
+          });
+        if (
+          element.parentElementId === null &&
+          (element.picture ||
+            element.media ||
+            element.chart ||
+            element.diagram ||
+            element.equation ||
+            element.material3d) &&
+          element.decorative !== true &&
+          !String(element.title ?? "").trim() &&
+          !String(element.description ?? "").trim()
+        )
+          accessibilityIssues.push({
+            code: "missing_accessible_description",
+            severity: "warning",
+            elementId: element.elementId,
+            stableId: element.stableId,
+          });
+        if (
+          element.decorative === true &&
+          (String(element.title ?? "").trim() ||
+            String(element.description ?? "").trim())
+        )
+          accessibilityIssues.push({
+            code: "decorative_object_has_alt_text",
+            severity: "warning",
             elementId: element.elementId,
             stableId: element.stableId,
           });
@@ -1723,6 +1847,11 @@ function spellbookDocumentOperation(request) {
         topLevelElementCount: page.getCount(),
         elements,
         layoutIssues,
+        readingOrder: elements
+          .filter((element) => element.parentElementId === null)
+          .sort((left, right) => left.readingOrder - right.readingOrder)
+          .map((element) => element.elementId),
+        accessibilityIssues,
       });
     }
     const actionByUnoName = {
@@ -1763,6 +1892,12 @@ function spellbookDocumentOperation(request) {
     }
     const issues = slides.flatMap((slide) =>
       slide.layoutIssues.map((issue) => ({
+        slideIndex: slide.slideIndex,
+        ...issue,
+      })),
+    );
+    const accessibilityIssues = slides.flatMap((slide) =>
+      slide.accessibilityIssues.map((issue) => ({
         slideIndex: slide.slideIndex,
         ...issue,
       })),
@@ -1817,6 +1952,10 @@ function spellbookDocumentOperation(request) {
         elements: detailedTextElements,
       },
       layoutAudit: { issueCount: issues.length, issues },
+      accessibilityAudit: {
+        issueCount: accessibilityIssues.length,
+        issues: accessibilityIssues,
+      },
     };
   }
 
@@ -1929,6 +2068,263 @@ function spellbookDocumentOperation(request) {
           captureSlideIndexes.length === changedSlideIndexes.length),
     };
   };
+
+  const parseAssetExpectedSlides = (value) => {
+    try {
+      const slides = JSON.parse(value);
+      if (!Array.isArray(slides) || slides.length < 1 || slides.length > 500)
+        throw new Error("invalid_expected_document");
+      return slides;
+    } catch (_) {
+      throw new Error("invalid_expected_document");
+    }
+  };
+  const assetPermissionAllows = (
+    permission,
+    operation,
+    slideIndex,
+    elementId,
+  ) => {
+    if (!permission || typeof permission !== "object") return false;
+    if (permission.mode === "document") return true;
+    if (permission.mode === "slides")
+      return permission.slideIndexes?.includes(slideIndex) === true;
+    return (
+      operation.startsWith("replace_") &&
+      permission.mode === "selection" &&
+      permission.elementIds?.includes(elementId) === true
+    );
+  };
+  const assetStateMatchesExpected = (
+    state,
+    expectedSlides,
+    expectedRevision,
+  ) =>
+    typeof expectedRevision === "string"
+      ? state.revision === expectedRevision
+      : documentStateJson(state.slides) === documentStateJson(expectedSlides);
+  const assetKindMatches = (element, operation) =>
+    operation.endsWith("_image")
+      ? String(element?.kind).endsWith("GraphicObjectShape")
+      : String(element?.kind).endsWith("MediaShape");
+
+  // Binary assets are delivered by the trusted host rather than exposed as a
+  // model-controlled URL. The host opens this native Undo context, inserts
+  // exactly one decoded object through the editor, and closes it here after a
+  // typed readback. Replacement therefore remains one user-visible Undo step.
+  if (request.operation === "asset_begin") {
+    const assetOperation = request.assetOperation;
+    const contract = mutationContractFor(assetOperation);
+    if (
+      contract.execution !== "platform_asset" ||
+      ![
+        "insert_image",
+        "replace_image",
+        "insert_media",
+        "replace_media",
+      ].includes(assetOperation)
+    )
+      throw new Error("unsupported_asset_operation");
+    const before = read();
+    const expectedSlides = parseAssetExpectedSlides(request.expectedSlides);
+    if (
+      !assetStateMatchesExpected(
+        before,
+        expectedSlides,
+        request.expectedRevision,
+      )
+    )
+      throw new Error("document_changed_observe_again");
+    const slideIndex = Number.isInteger(request.slideIndex)
+      ? request.slideIndex
+      : Number(String(request.elementId ?? "").split("/")[0]);
+    if (
+      !Number.isInteger(slideIndex) ||
+      slideIndex < 0 ||
+      slideIndex >= before.slides.length ||
+      before.activeSlide !== slideIndex
+    )
+      throw new Error("asset_slide_changed");
+    const target = request.elementId
+      ? before.slides[slideIndex].elements.find(
+          (element) => element.elementId === request.elementId,
+        )
+      : null;
+    if (
+      assetOperation.startsWith("replace_") &&
+      (!target ||
+        target.parentElementId !== null ||
+        !assetKindMatches(target, assetOperation))
+    )
+      throw new Error("invalid_asset_replacement_target");
+    if (
+      !assetPermissionAllows(
+        request.permission,
+        assetOperation,
+        slideIndex,
+        request.elementId,
+      )
+    )
+      throw new Error("outside_edit_permission");
+    const undo = model.getUndoManager();
+    const undoCount = undo.getAllUndoActionTitles().length;
+    undo.enterUndoContext(
+      assetOperation.includes("media") ? "AI media edit" : "AI image edit",
+    );
+    return {
+      status: "ready",
+      slideIndex,
+      undoCount,
+      beforeElementIds: before.slides[slideIndex].elements.map(
+        (element) => element.stableId,
+      ),
+    };
+  }
+
+  if (request.operation === "asset_abort") {
+    const undo = model.getUndoManager();
+    try {
+      undo.leaveUndoContext();
+    } catch (_) {}
+    const undoCount = Number.isInteger(request.undoCount)
+      ? request.undoCount
+      : -1;
+    if (undoCount < 0) throw new Error("invalid_asset_undo_checkpoint");
+    while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+    const expectedSlides = parseAssetExpectedSlides(request.expectedSlides);
+    if (documentStateJson(read().slides) !== documentStateJson(expectedSlides))
+      throw new Error("asset_rollback_failed");
+    return { status: "rolled_back" };
+  }
+
+  if (request.operation === "asset_finish") {
+    const assetOperation = request.assetOperation;
+    const contract = mutationContractFor(assetOperation);
+    if (
+      contract.execution !== "platform_asset" ||
+      ![
+        "insert_image",
+        "replace_image",
+        "insert_media",
+        "replace_media",
+      ].includes(assetOperation)
+    )
+      throw new Error("unsupported_asset_operation");
+    const undo = model.getUndoManager();
+    const undoCount = Number.isInteger(request.undoCount)
+      ? request.undoCount
+      : -1;
+    if (undoCount < 0) throw new Error("invalid_asset_undo_checkpoint");
+    let contextOpen = true;
+    const expectedSlides = parseAssetExpectedSlides(request.expectedSlides);
+    const slideIndex = request.slideIndex;
+    try {
+      const inserted = read(slideIndex);
+      const beforeSlide = expectedSlides[slideIndex];
+      const insertedSlide = inserted.slides[slideIndex];
+      if (!beforeSlide || !insertedSlide)
+        throw new Error("asset_slide_changed");
+      const beforeStableIds = new Set(
+        Array.isArray(request.beforeElementIds) ? request.beforeElementIds : [],
+      );
+      const candidates = insertedSlide.elements.filter(
+        (element) =>
+          element.parentElementId === null &&
+          !beforeStableIds.has(element.stableId),
+      );
+      const otherSlidesUnchanged = expectedSlides.every(
+        (slide, index) =>
+          index === slideIndex ||
+          documentStateJson(slide) ===
+            documentStateJson(inserted.slides[index]),
+      );
+      if (
+        candidates.length !== 1 ||
+        insertedSlide.elements.length !== beforeSlide.elements.length + 1 ||
+        !otherSlidesUnchanged ||
+        !assetKindMatches(candidates[0], assetOperation)
+      )
+        throw new Error("asset_insert_readback_failed");
+      const oldTarget = assetOperation.startsWith("replace_")
+        ? beforeSlide.elements.find(
+            (element) => element.elementId === request.elementId,
+          )
+        : null;
+      if (assetOperation.startsWith("replace_")) {
+        if (!oldTarget || oldTarget.parentElementId !== null)
+          throw new Error("asset_replacement_target_changed");
+        transformSlides([
+          { JumpToSlide: slideIndex },
+          {
+            [`ReplaceWithInsertedObject.${oldTarget.elementId
+              .split("/")
+              .slice(1)
+              .join("/")}`]: candidates[0].elementId
+              .split("/")
+              .slice(1)
+              .join("/"),
+          },
+        ]);
+      }
+      undo.leaveUndoContext();
+      contextOpen = false;
+      const after = read(slideIndex);
+      const expectedCount = assetOperation.startsWith("replace_")
+        ? beforeSlide.elements.length
+        : beforeSlide.elements.length + 1;
+      const resultingAssets = after.slides[slideIndex].elements.filter(
+        (element) => assetKindMatches(element, assetOperation),
+      );
+      const replacementPreserved =
+        !oldTarget ||
+        (after.slides[slideIndex].elements.some(
+          (element) => element.stableId === oldTarget.stableId,
+        ) &&
+          !after.slides[slideIndex].elements.some(
+            (element) => element.stableId === candidates[0].stableId,
+          ));
+      if (
+        after.slides[slideIndex].elements.length !== expectedCount ||
+        resultingAssets.length < 1 ||
+        !replacementPreserved ||
+        undo.getAllUndoActionTitles().length !== undoCount + 1
+      )
+        throw new Error("asset_mutation_not_committed");
+      return {
+        ...after,
+        layoutAudit: withAuditDelta(
+          { slides: expectedSlides, layoutAudit: request.beforeAudit },
+          after,
+        ),
+        ...visualEvidence(
+          { slides: expectedSlides },
+          after,
+          [slideIndex],
+          slideIndex,
+        ),
+        transaction: {
+          status: "applied",
+          commandCount: 1,
+          atomic: true,
+          undoActionsAdded: 1,
+        },
+      };
+    } catch (error) {
+      if (contextOpen) {
+        try {
+          undo.leaveUndoContext();
+        } catch (_) {}
+      }
+      while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+      const rolledBack = read();
+      if (
+        documentStateJson(rolledBack.slides) !==
+        documentStateJson(expectedSlides)
+      )
+        throw new Error(`asset_rollback_failed:${error.message}`);
+      throw error;
+    }
+  }
 
   const detailSlideForCommand = (command) => {
     if (
@@ -2100,10 +2496,7 @@ function spellbookDocumentOperation(request) {
     if (command.op === "set_slide_size") {
       if (permission.mode !== "document")
         throw new Error("outside_edit_permission");
-      if (
-        !runtimeSupports(command.op) &&
-        !hasEnginePatch(22)
-      )
+      if (!runtimeSupports(command.op) && !hasEnginePatch(22))
         throw new Error("native_engine_document_design_patch_required");
       if (
         !Number.isInteger(command.width) ||
@@ -2197,8 +2590,7 @@ function spellbookDocumentOperation(request) {
         !Array.isArray(theme.colors) ||
         theme.colors.length !== 12 ||
         theme.colors.some(
-          (color) =>
-            !Number.isInteger(color) || color < 0 || color > 16777215,
+          (color) => !Number.isInteger(color) || color < 0 || color > 16777215,
         )
       )
         throw new Error("invalid_master_theme");
@@ -2277,10 +2669,7 @@ function spellbookDocumentOperation(request) {
           dateTimeText: ["DateTimeText", "string"],
           dateTimeFormat: ["DateTimeFormat", "integer"],
           duration: ["HighResDuration", "number"],
-          backgroundObjectsVisible: [
-            "IsBackgroundObjectsVisible",
-            "boolean",
-          ],
+          backgroundObjectsVisible: ["IsBackgroundObjectsVisible", "boolean"],
         };
         if (
           !metadata ||
@@ -2401,7 +2790,8 @@ function spellbookDocumentOperation(request) {
       if (
         command.op === "set_slide_metadata" &&
         Object.entries(slideMetadataExpected).every(
-          ([name, value]) => slideMetadataValue(before.slides[slideIndex], name) === value,
+          ([name, value]) =>
+            slideMetadataValue(before.slides[slideIndex], name) === value,
         )
       )
         return result(before, slideIndex);
@@ -2542,7 +2932,7 @@ function spellbookDocumentOperation(request) {
                             duration: command.transitionDuration,
                             fadeColor:
                               slideTransitionPresets[command.transitionEffect]
-                              .FadeColor,
+                                .FadeColor,
                           })
                         : command.op === "set_slide_metadata"
                           ? Object.entries(slideMetadataExpected).every(
@@ -2552,8 +2942,8 @@ function spellbookDocumentOperation(request) {
                                   name,
                                 ) === value,
                             )
-                        : after.slides[pageIndexAfter()]?.backgroundColor ===
-                          command.color;
+                          : after.slides[pageIndexAfter()]?.backgroundColor ===
+                            command.color;
       const changed =
         documentStateJson(before.slides) !== documentStateJson(after.slides);
       if (
@@ -2682,7 +3072,8 @@ function spellbookDocumentOperation(request) {
             annotation.getTextRange().getString() !== command.expectedText
           )
             throw new Error("observed_comment_changed");
-          if (command.op === "delete_comment") page.removeAnnotation(annotation);
+          if (command.op === "delete_comment")
+            page.removeAnnotation(annotation);
           else {
             annotation.setAuthor(command.author.trim());
             if (typeof command.initials === "string")
@@ -2696,28 +3087,43 @@ function spellbookDocumentOperation(request) {
         }
         const after = read(slideIndex);
         const afterComments = after.slides[slideIndex].comments ?? [];
+        const semanticComment = ({ commentIndex: _index, ...comment }) =>
+          comment;
+        const expectedComments = comments.map(semanticComment);
+        if (command.op === "add_comment")
+          expectedComments.push({
+            author: command.author.trim(),
+            initials:
+              typeof command.initials === "string"
+                ? command.initials.slice(0, 16)
+                : "AI",
+            text: command.text,
+            x: Math.round(command.x),
+            y: Math.round(command.y),
+          });
+        else if (command.op === "delete_comment")
+          expectedComments.splice(command.commentIndex, 1);
+        else
+          expectedComments[command.commentIndex] = {
+            ...expectedComments[command.commentIndex],
+            author: command.author.trim(),
+            ...(typeof command.initials === "string"
+              ? { initials: command.initials.slice(0, 16) }
+              : {}),
+            text: command.text,
+          };
         const applied =
-          command.op === "add_comment"
-            ? afterComments.length === comments.length + 1 &&
-              afterComments.at(-1)?.text === command.text &&
-              afterComments.at(-1)?.author === command.author.trim()
-            : command.op === "delete_comment"
-              ? afterComments.length === comments.length - 1 &&
-                !afterComments.some(
-                  (comment) =>
-                    comment.text === command.expectedText &&
-                    comment.commentIndex === command.commentIndex,
-                )
-              : afterComments[command.commentIndex]?.text === command.text &&
-                afterComments[command.commentIndex]?.author ===
-                  command.author.trim();
+          stableJson(afterComments.map(semanticComment)) ===
+          stableJson(expectedComments);
         if (
           !applied ||
           (!request.transactionActive &&
             undo.getAllUndoActionTitles().length - undoCount !== 1)
         )
           throw new Error(
-            !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+            !applied
+              ? "native_command_not_applied"
+              : "native_undo_not_recorded",
           );
         return result(after, slideIndex);
       } catch (error) {
@@ -2837,11 +3243,11 @@ function spellbookDocumentOperation(request) {
               ? "Connector"
               : command.op === "add_freeform"
                 ? "Freeform"
-            : {
-                rectangle: "Rectangle",
-                ellipse: "Oval",
-                line: "Line",
-              }[command.geometry];
+                : {
+                    rectangle: "Rectangle",
+                    ellipse: "Oval",
+                    line: "Line",
+                  }[command.geometry];
       const existingObjectNames = new Set(
         before.slides[slideIndex].elements
           .map((element) => element.objectName)
@@ -3000,11 +3406,11 @@ function spellbookDocumentOperation(request) {
               ? command.closed
                 ? "com.sun.star.drawing.PolyPolygonShape"
                 : "com.sun.star.drawing.PolyLineShape"
-          : {
-              rectangle: "com.sun.star.drawing.RectangleShape",
-              ellipse: "com.sun.star.drawing.EllipseShape",
-              line: "com.sun.star.drawing.LineShape",
-            }[command.geometry];
+              : {
+                  rectangle: "com.sun.star.drawing.RectangleShape",
+                  ellipse: "com.sun.star.drawing.EllipseShape",
+                  line: "com.sun.star.drawing.LineShape",
+                }[command.geometry];
       const shape = model.createInstance(service);
       shape.setPosition(
         new uno.idl.com.sun.star.awt.Point({
@@ -3033,18 +3439,15 @@ function spellbookDocumentOperation(request) {
         const pointType = uno.type.struct(uno.idl.com.sun.star.awt.Point);
         shape.setPropertyValue(
           "PolyPolygon",
-          new uno.Any(
-            uno.type.sequence(uno.type.sequence(pointType)),
-            [
-              command.points.map(
-                (point) =>
-                  new uno.idl.com.sun.star.awt.Point({
-                    X: Math.round(point.x),
-                    Y: Math.round(point.y),
-                  }),
-              ),
-            ],
-          ),
+          new uno.Any(uno.type.sequence(uno.type.sequence(pointType)), [
+            command.points.map(
+              (point) =>
+                new uno.idl.com.sun.star.awt.Point({
+                  X: Math.round(point.x),
+                  Y: Math.round(point.y),
+                }),
+            ),
+          ]),
         );
         shape.setPropertyValue(
           command.closed ? "FillColor" : "LineColor",
@@ -3146,11 +3549,11 @@ function spellbookDocumentOperation(request) {
           ? created?.text === command.text
           : command.op === "add_connector"
             ? created?.connector !== null
-          : command.op === "add_freeform"
-            ? created?.freeform !== null
-          : command.geometry === "line"
-            ? created?.lineColor === Math.round(command.color)
-            : created?.fill === Math.round(command.color);
+            : command.op === "add_freeform"
+              ? created?.freeform !== null
+              : command.geometry === "line"
+                ? created?.lineColor === Math.round(command.color)
+                : created?.fill === Math.round(command.color);
       const applied =
         after.slides[slideIndex].topLevelElementCount ===
           before.slides[slideIndex].topLevelElementCount + 1 &&
@@ -3201,6 +3604,82 @@ function spellbookDocumentOperation(request) {
       }
       return result(after, slideIndex);
     }
+    if (command.op === "set_reading_order") {
+      const elementIds = command.elementIds;
+      if (
+        !Array.isArray(elementIds) ||
+        elementIds.length < 2 ||
+        elementIds.length > 256 ||
+        new Set(elementIds).size !== elementIds.length ||
+        elementIds.some((id) => !/^\d+\/\d+$/.test(id))
+      )
+        throw new Error("invalid_reading_order");
+      const slideIndexes = new Set(
+        elementIds.map((elementId) => Number(elementId.split("/")[0])),
+      );
+      if (slideIndexes.size !== 1) throw new Error("targets_span_slides");
+      const slideIndex = Number(elementIds[0].split("/")[0]);
+      const topLevel = before.slides[slideIndex]?.elements.filter(
+        (element) => element.parentElementId === null,
+      );
+      if (
+        !topLevel ||
+        topLevel.length !== elementIds.length ||
+        elementIds.some(
+          (elementId) =>
+            !topLevel.some((element) => element.elementId === elementId),
+        )
+      )
+        throw new Error("reading_order_requires_every_top_level_element");
+      const allowed =
+        permission.mode === "document" ||
+        (permission.mode === "slides" &&
+          permission.slideIndexes.includes(slideIndex)) ||
+        (permission.mode === "selection" &&
+          elementIds.every((elementId) =>
+            permission.elementIds.includes(elementId),
+          ));
+      if (!allowed) throw new Error("outside_edit_permission");
+      const currentStableOrder = topLevel
+        .sort((left, right) => left.readingOrder - right.readingOrder)
+        .map((element) => element.stableId);
+      const expectedStableOrder = elementIds.map(
+        (elementId) =>
+          topLevel.find((element) => element.elementId === elementId).stableId,
+      );
+      if (stableJson(currentStableOrder) === stableJson(expectedStableOrder))
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, slideIndex);
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        ...elementIds.map((elementId, readingOrder) => ({
+          [`SetObjectProperties.${elementId.split("/").slice(1).join("/")}`]: {
+            NavigationOrder: readingOrder,
+          },
+        })),
+      ]);
+      const after = read();
+      const actualStableOrder = after.slides[slideIndex].elements
+        .filter((element) => element.parentElementId === null)
+        .sort((left, right) => left.readingOrder - right.readingOrder)
+        .map((element) => element.stableId);
+      const applied =
+        stableJson(actualStableOrder) === stableJson(expectedStableOrder);
+      if (
+        !applied ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length <= undoCount)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        );
+      }
+      return result(after, slideIndex);
+    }
+
     const multiOperation = ["align", "distribute", "group"].includes(
       command.op,
     );
@@ -3309,6 +3788,140 @@ function spellbookDocumentOperation(request) {
       (permission.mode === "selection" &&
         permission.elementIds.includes(command.elementId));
     if (!allowed) throw new Error("outside_edit_permission");
+
+    if (
+      [
+        "set_smartart_node",
+        "add_smartart_node",
+        "delete_smartart_node",
+      ].includes(command.op)
+    ) {
+      const node = command.smartartNode;
+      const action = {
+        set_smartart_node: "set",
+        add_smartart_node: "add",
+        delete_smartart_node: "delete",
+      }[command.op];
+      if (
+        element.parentElementId !== null ||
+        !element.diagram?.semanticModelAvailable ||
+        !node ||
+        typeof node !== "object" ||
+        Array.isArray(node) ||
+        Object.keys(node).some(
+          (name) => !["expectedText", "occurrence", "text"].includes(name),
+        ) ||
+        !Number.isInteger(node.occurrence) ||
+        node.occurrence < 0 ||
+        node.occurrence > 999 ||
+        (action === "add"
+          ? node.expectedText !== null ||
+            typeof node.text !== "string" ||
+            node.text.length > 4000
+          : typeof node.expectedText !== "string" ||
+            node.expectedText.length > 4000 ||
+            (action === "set"
+              ? typeof node.text !== "string" || node.text.length > 4000
+              : node.text !== null))
+      )
+        throw new Error("invalid_smartart_node");
+      const beforeTexts = element.diagram.semanticNodes.map(
+        (candidate) => candidate.text,
+      );
+      let matchedIndex = -1;
+      if (action !== "add") {
+        let occurrence = 0;
+        for (let index = 0; index < beforeTexts.length; index += 1) {
+          if (beforeTexts[index] !== node.expectedText) continue;
+          if (occurrence === node.occurrence) {
+            matchedIndex = index;
+            break;
+          }
+          occurrence += 1;
+        }
+        if (matchedIndex < 0)
+          throw new Error("smartart_node_changed_observe_again");
+      }
+      const expectedTexts = [...beforeTexts];
+      if (action === "add") expectedTexts.push(node.text);
+      else if (action === "set") expectedTexts[matchedIndex] = node.text;
+      else expectedTexts.splice(matchedIndex, 1);
+      if (stableJson(beforeTexts) === stableJson(expectedTexts))
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, slideIndex);
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      const objectPath = command.elementId.split("/").slice(1).join("/");
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        {
+          [`SetDiagramNode.${objectPath}`]: {
+            Action: action,
+            ExpectedText: node.expectedText ?? "",
+            Occurrence: node.occurrence,
+            Text: node.text ?? "",
+          },
+        },
+      ]);
+      const after = read();
+      const actualTexts = after.slides[slideIndex].elements
+        .find((candidate) => candidate.elementId === command.elementId)
+        ?.diagram?.semanticNodes?.map((candidate) => candidate.text);
+      const applied = stableJson(actualTexts) === stableJson(expectedTexts);
+      if (
+        !applied ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length <= undoCount)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        );
+      }
+      return result(after, slideIndex);
+    }
+
+    if (command.op === "set_equation_source") {
+      if (
+        element.parentElementId !== null ||
+        !element.equation ||
+        typeof command.equationSource !== "string" ||
+        command.equationSource.length > 20000 ||
+        /[\u0000]/u.test(command.equationSource)
+      )
+        throw new Error("invalid_equation_source");
+      if (element.equation.source === command.equationSource)
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, slideIndex);
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      const objectPath = command.elementId.split("/").slice(1).join("/");
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        {
+          [`SetEquationSource.${objectPath}`]: {
+            ExpectedSource: element.equation.source,
+            Source: command.equationSource,
+          },
+        },
+      ]);
+      const after = read();
+      const target = after.slides[slideIndex].elements.find(
+        (candidate) => candidate.elementId === command.elementId,
+      );
+      const applied = target?.equation?.source === command.equationSource;
+      if (
+        !applied ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length <= undoCount)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        );
+      }
+      return result(after, slideIndex);
+    }
 
     if (command.op === "set_object_interaction") {
       if (!patchedObjectInteractionEngine && !runtimeSupports(command.op))
@@ -3526,7 +4139,10 @@ function spellbookDocumentOperation(request) {
     ) {
       if (!runtimeSupports(command.op) && !hasEnginePatch(21))
         throw new Error("native_engine_animation_lifecycle_patch_required");
-      if (element.parentElementId !== null || !/^\d+\/\d+$/.test(command.elementId))
+      if (
+        element.parentElementId !== null ||
+        !/^\d+\/\d+$/.test(command.elementId)
+      )
         throw new Error("invalid_animation_effect");
       const effects = before.slides[slideIndex]?.animations?.effects;
       if (!Array.isArray(effects) || effects.length > 199)
@@ -3562,9 +4178,7 @@ function spellbookDocumentOperation(request) {
         Number.isFinite(command.delay) &&
         command.delay >= 0 &&
         command.delay <= 60 &&
-        ["on-click", "with-previous", "after-previous"].includes(
-          command.start,
-        );
+        ["on-click", "with-previous", "after-previous"].includes(command.start);
       const isAdd = command.op === "add_animation_effect";
       const isReplace = command.op === "replace_animation_effect";
       const isMove = command.op === "move_animation_effect";
@@ -3612,8 +4226,12 @@ function spellbookDocumentOperation(request) {
       ]);
       const after = read();
       const afterEffects = after.slides[slideIndex]?.animations?.effects ?? [];
-      const semantic = ({ animationId, sequenceIndex, effectIndex, ...effect }) =>
-        effect;
+      const semantic = ({
+        animationId,
+        sequenceIndex,
+        effectIndex,
+        ...effect
+      }) => effect;
       const beforeSemantic = effects.map(semantic);
       const afterSemantic = afterEffects.map(semantic);
       let applied = false;
@@ -3712,15 +4330,18 @@ function spellbookDocumentOperation(request) {
             throw new Error("invalid_paragraph_format");
         } else if (name === "direction") {
           if (
-            !["left-to-right", "right-to-left", "top-to-bottom"].includes(
-              value,
-            )
+            !["left-to-right", "right-to-left", "top-to-bottom"].includes(value)
           )
             throw new Error("invalid_paragraph_format");
         } else if (
           typeof value !== "number" ||
           !Number.isFinite(value) ||
-          value < (name === "leftMargin" || name === "rightMargin" || name === "firstLineIndent" ? -100000 : 0) ||
+          value <
+            (name === "leftMargin" ||
+            name === "rightMargin" ||
+            name === "firstLineIndent"
+              ? -100000
+              : 0) ||
           value > 100000
         )
           throw new Error("invalid_paragraph_format");
@@ -3770,7 +4391,8 @@ function spellbookDocumentOperation(request) {
             : candidate,
         ),
       }));
-      const applied = stableJson(afterParagraph) === stableJson(expectedParagraph);
+      const applied =
+        stableJson(afterParagraph) === stableJson(expectedParagraph);
       const unrelatedChanged =
         documentStateJson(after.masters) !==
           documentStateJson(before.masters) ||
@@ -4164,8 +4786,7 @@ function spellbookDocumentOperation(request) {
     if (["set_text_language", "set_text_case"].includes(command.op)) {
       if (!runtimeSupports(command.op) && !hasEnginePatch(23))
         throw new Error("native_engine_text_semantics_patch_required");
-      if (element.text === null)
-        throw new Error("unsupported_text_target");
+      if (element.text === null) throw new Error("unsupported_text_target");
       let payload;
       let matches;
       if (command.op === "set_text_language") {
@@ -4192,9 +4813,11 @@ function spellbookDocumentOperation(request) {
         };
         payload = { LanguageTag: command.languageTag };
         matches = (formatting) =>
-          [formatting?.locale, formatting?.localeAsian, formatting?.localeComplex].every(
-            (value) => stableJson(value) === stableJson(locale),
-          );
+          [
+            formatting?.locale,
+            formatting?.localeAsian,
+            formatting?.localeComplex,
+          ].every((value) => stableJson(value) === stableJson(locale));
       } else {
         const caseMap = {
           none: 0,
@@ -4418,13 +5041,14 @@ function spellbookDocumentOperation(request) {
       "set_shape_effects",
       "set_object_lock",
       "set_line_style",
+      "set_media_playback",
+      "set_fontwork",
+      "set_3d_material",
       "set_printable",
     ]);
     if (objectPropertyOperations.has(command.op)) {
       if (!patchedObjectPropertyEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_object_property_patch_required");
-      if (element.parentElementId !== null)
-        throw new Error("unsupported_nested_property_target");
       const finite = (value, min, max) =>
         typeof value === "number" &&
         Number.isFinite(value) &&
@@ -4537,7 +5161,8 @@ function spellbookDocumentOperation(request) {
           typeof command.shapeFill !== "object" ||
           Array.isArray(command.shapeFill) ||
           Object.keys(command.shapeFill).some(
-            (name) => !["type", "color", "opacity", "catalogName"].includes(name),
+            (name) =>
+              !["type", "color", "opacity", "catalogName"].includes(name),
           )
         )
           throw new Error("invalid_shape_fill");
@@ -4595,7 +5220,8 @@ function spellbookDocumentOperation(request) {
           ["glowOpacity", effects.glowOpacity, 0, 100],
         ]) {
           if (value === null || value === undefined) continue;
-          if (!finite(value, min, max)) throw new Error("invalid_shape_effects");
+          if (!finite(value, min, max))
+            throw new Error("invalid_shape_effects");
           properties[
             name === "glowRadius"
               ? "GlowEffectRadius"
@@ -4660,6 +5286,109 @@ function spellbookDocumentOperation(request) {
             throw new Error("line_style_name_not_in_document_catalog");
           properties[propertyByField[name]] = value;
         }
+      } else if (command.op === "set_media_playback") {
+        const playback = command.mediaPlayback;
+        const zoomValues = {
+          original: 1,
+          fit: 3,
+          zoom_1_to_4: 5,
+          zoom_1_to_2: 6,
+          zoom_2_to_1: 7,
+          zoom_4_to_1: 8,
+        };
+        if (
+          !element.media ||
+          !playback ||
+          typeof playback !== "object" ||
+          Array.isArray(playback) ||
+          Object.keys(playback).some(
+            (name) => !["loop", "muted", "volumeDb", "zoom"].includes(name),
+          ) ||
+          !optionalBoolean(playback.loop) ||
+          !optionalBoolean(playback.muted) ||
+          (playback.volumeDb !== null &&
+            playback.volumeDb !== undefined &&
+            (!Number.isInteger(playback.volumeDb) ||
+              !finite(playback.volumeDb, -10000, 0))) ||
+          (playback.zoom !== null &&
+            playback.zoom !== undefined &&
+            !Object.hasOwn(zoomValues, playback.zoom))
+        )
+          throw new Error("invalid_media_playback");
+        if (playback.loop !== null && playback.loop !== undefined)
+          properties.Loop = playback.loop;
+        if (playback.muted !== null && playback.muted !== undefined)
+          properties.Mute = playback.muted;
+        if (playback.volumeDb !== null && playback.volumeDb !== undefined)
+          properties.VolumeDB = playback.volumeDb;
+        if (playback.zoom !== null && playback.zoom !== undefined)
+          properties.Zoom = zoomValues[playback.zoom];
+      } else if (command.op === "set_fontwork") {
+        const fontwork = command.fontwork;
+        const definitions = {
+          style: ["FontWorkStyle", 0, 6, "integer"],
+          adjust: ["FontWorkAdjust", 0, 3, "integer"],
+          distance: ["FontWorkDistance", -100000, 100000, "integer"],
+          start: ["FontWorkStart", -100000, 100000, "integer"],
+          mirror: ["FontWorkMirror", null, null, "boolean"],
+          outline: ["FontWorkOutline", null, null, "boolean"],
+        };
+        if (
+          !element.fontwork ||
+          !fontwork ||
+          typeof fontwork !== "object" ||
+          Array.isArray(fontwork) ||
+          Object.keys(fontwork).some(
+            (name) => !Object.hasOwn(definitions, name),
+          )
+        )
+          throw new Error("invalid_fontwork");
+        for (const [name, value] of Object.entries(fontwork)) {
+          if (value === null || value === undefined) continue;
+          const [propertyName, minimum, maximum, type] = definitions[name];
+          if (
+            (type === "boolean" && typeof value !== "boolean") ||
+            (type === "integer" &&
+              (!Number.isInteger(value) || !finite(value, minimum, maximum)))
+          )
+            throw new Error("invalid_fontwork");
+          properties[propertyName] = value;
+        }
+      } else if (command.op === "set_3d_material") {
+        const material = command.material3d;
+        const definitions = {
+          color: ["D3DMaterialColor", 0, 16777215, "integer"],
+          emission: ["D3DMaterialEmission", 0, 16777215, "integer"],
+          specular: ["D3DMaterialSpecular", 0, 16777215, "integer"],
+          specularIntensity: [
+            "D3DMaterialSpecularIntensity",
+            0,
+            100,
+            "integer",
+          ],
+          doubleSided: ["D3DDoubleSided", null, null, "boolean"],
+        };
+        if (
+          !element.material3d ||
+          !material ||
+          typeof material !== "object" ||
+          Array.isArray(material) ||
+          Object.keys(material).some(
+            (name) => !Object.hasOwn(definitions, name),
+          )
+        )
+          throw new Error("invalid_3d_material");
+        for (const [name, value] of Object.entries(material)) {
+          if (value === null || value === undefined) continue;
+          const [propertyName, minimum, maximum, type] = definitions[name];
+          if (
+            (type === "boolean" && typeof value !== "boolean") ||
+            (type === "integer" &&
+              (!Number.isInteger(value) || !finite(value, minimum, maximum)))
+          )
+            throw new Error("invalid_3d_material");
+          properties[propertyName] = value;
+        }
       } else if (command.op === "set_printable") {
         if (typeof command.printable !== "boolean")
           throw new Error("invalid_printable");
@@ -4688,7 +5417,8 @@ function spellbookDocumentOperation(request) {
         FillGradientName: "fillGradientName",
         FillHatchName: "fillHatchName",
         FillColor: "fill",
-        FillTransparence: (value) => 100 - Number(value),
+        FillTransparence: (value, target) =>
+          100 - Number(value) === target.fillOpacity,
         GlowEffectRadius: ["effects", "glowRadius"],
         GlowEffectColor: ["effects", "glowColor"],
         GlowEffectTransparency: ["effects", "glowTransparency"],
@@ -4698,6 +5428,29 @@ function spellbookDocumentOperation(request) {
         LineDashName: "lineDashName",
         LineStartName: "lineStartName",
         LineEndName: "lineEndName",
+        Loop: ["media", "loop"],
+        Mute: ["media", "muted"],
+        VolumeDB: ["media", "volumeDb"],
+        Zoom: (value, target) =>
+          ({
+            1: "original",
+            3: "fit",
+            5: "zoom_1_to_4",
+            6: "zoom_1_to_2",
+            7: "zoom_2_to_1",
+            8: "zoom_4_to_1",
+          })[value] === target.media?.zoom,
+        FontWorkStyle: ["fontwork", "style"],
+        FontWorkAdjust: ["fontwork", "adjust"],
+        FontWorkDistance: ["fontwork", "distance"],
+        FontWorkStart: ["fontwork", "start"],
+        FontWorkMirror: ["fontwork", "mirror"],
+        FontWorkOutline: ["fontwork", "outline"],
+        D3DMaterialColor: ["material3d", "color"],
+        D3DMaterialEmission: ["material3d", "emission"],
+        D3DMaterialSpecular: ["material3d", "specular"],
+        D3DMaterialSpecularIntensity: ["material3d", "specularIntensity"],
+        D3DDoubleSided: ["material3d", "doubleSided"],
         Printable: "printable",
       };
       const readPath = (value, path) =>
@@ -4713,7 +5466,7 @@ function spellbookDocumentOperation(request) {
             ] === value
           );
         const path = expected[name];
-        if (typeof path === "function") return path(value) === target.fillOpacity;
+        if (typeof path === "function") return path(value, target);
         return readPath(target, path) === value;
       };
       const unchanged = Object.entries(properties).every(([name, value]) =>
@@ -5319,9 +6072,7 @@ function spellbookDocumentOperation(request) {
               showCategoryNames: false,
               showSeriesNames: false,
             }),
-            ...(present("showValues")
-              ? { showValues: format.showValues }
-              : {}),
+            ...(present("showValues") ? { showValues: format.showValues } : {}),
             ...(present("showCategoryNames")
               ? { showCategoryNames: format.showCategoryNames }
               : {}),
@@ -5390,7 +6141,8 @@ function spellbookDocumentOperation(request) {
         if (!workingShape || !workingChart)
           throw new Error("chart_copy_not_found");
         const diagram = workingChart.getFirstDiagram();
-        if (present("title")) setTitle(workingChart, workingChart, format.title);
+        if (present("title"))
+          setTitle(workingChart, workingChart, format.title);
         if (present("legendVisible")) {
           if (!format.legendVisible) diagram.setLegend(null);
           else if (!diagram.getLegend())
@@ -5461,9 +6213,7 @@ function spellbookDocumentOperation(request) {
               ShowLegendSymbol: Boolean(
                 safeMember(previous, "ShowLegendSymbol"),
               ),
-              ShowCustomLabel: Boolean(
-                safeMember(previous, "ShowCustomLabel"),
-              ),
+              ShowCustomLabel: Boolean(safeMember(previous, "ShowCustomLabel")),
               ShowSeriesName: present("showSeriesNames")
                 ? format.showSeriesNames
                 : Boolean(safeMember(previous, "ShowSeriesName")),
@@ -5526,20 +6276,35 @@ function spellbookDocumentOperation(request) {
         const target = after.slides[slideIndex].elements.find(
           (candidate) => candidate.elementId === command.elementId,
         );
-        const applied =
-          target &&
-          stableJson(target.chart?.format) === stableJson(requestedFormat) &&
-          target.x === element.x &&
-          target.y === element.y &&
-          target.width === element.width &&
-          target.height === element.height;
+        const expectedTarget = {
+          ...element,
+          chart: { ...element.chart, format: requestedFormat },
+        };
+        const expectedSlides = before.slides.map((slide, index) => ({
+          ...slide,
+          elements: slide.elements.map((candidate) =>
+            index === slideIndex && candidate.elementId === command.elementId
+              ? expectedTarget
+              : candidate,
+          ),
+        }));
+        const applied = stableJson(target) === stableJson(expectedTarget);
+        const unrelatedChanged =
+          documentStateJson(after.masters) !==
+            documentStateJson(before.masters) ||
+          documentStateJson(after.slides) !== documentStateJson(expectedSlides);
         if (
           !applied ||
+          unrelatedChanged ||
           (!request.transactionActive &&
             undo.getAllUndoActionTitles().length - undoCount !== 1)
         )
           throw new Error(
-            !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+            unrelatedChanged
+              ? "unexpected_edit_scope"
+              : !applied
+                ? "native_command_not_applied"
+                : "native_undo_not_recorded",
           );
         return result(after, slideIndex);
       } catch (error) {

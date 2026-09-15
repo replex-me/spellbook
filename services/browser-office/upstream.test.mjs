@@ -25,7 +25,7 @@ const candidateBuilder = readFileSync(
 );
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v9");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v11");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
@@ -71,6 +71,19 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "slide-metadata-property-native-undo",
     "line-style-property-native-undo",
     "paragraph-format-property-native-undo",
+    "document-slide-size-native-undo",
+    "master-theme-native-undo",
+    "complete-theme-copy-roundtrip",
+    "animation-lifecycle-native-undo",
+    "advanced-shape-style-native-undo",
+    "connector-geometry-native-undo",
+    "semantic-diagram-native-undo",
+    "equation-source-native-undo",
+    "asset-replacement-native-undo",
+    "media-content-preserves-playback-native-undo",
+    "media-playback-native-undo",
+    "reading-order-native-undo",
+    "semantic-asset-native-regression-tests",
   ]);
   assert.match(manifest.toolchain.emscripten.commit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.toolchain.emsdk.commit, /^[0-9a-f]{40}$/u);

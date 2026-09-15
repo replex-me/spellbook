@@ -8,6 +8,7 @@ import {
 import {
   nativeEditContract,
   nativeEditOperationCount,
+  nativePlatformAssetOperations,
 } from "./native-edit-contract.js";
 
 const state: NativeObservation = {
@@ -19,6 +20,24 @@ const state: NativeObservation = {
   revision: "v2-test",
   activeSlide: 0,
   selectedElementIds: ["0/0"],
+  assets: [
+    {
+      assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
+      fileName: "diagram.png",
+      contentType: "image/png",
+      kind: "image",
+      width: 1280,
+      height: 720,
+    },
+    {
+      assetId: "e20e579c-61a9-46b5-9e31-d00f28a10656",
+      fileName: "clip.mp4",
+      contentType: "video/mp4",
+      kind: "media",
+      width: 0,
+      height: 0,
+    },
+  ],
   slides: [
     {
       slideIndex: 0,
@@ -200,7 +219,7 @@ describe("shared open document agent", () => {
     await f.run();
   });
 
-  it("authorizes every bounded operation on undo-v18 plus live browser capabilities", async () => {
+  it("authorizes every bounded operation through the live engine capabilities", async () => {
     const f = fixture(async (o) => {
       await o.onTool(
         "native_observe",
@@ -210,17 +229,22 @@ describe("shared open document agent", () => {
       );
       for (const operation of nativeEditContract.toolInputSchema.properties.op
         .enum) {
-        const command = nativeEditContract.operationGroups.slide.includes(
-          operation,
-        )
-          ? { op: operation, slideIndex: 0 }
-          : nativeEditContract.operationGroups.create.includes(operation)
-            ? { op: operation, slideIndex: 0 }
-            : nativeEditContract.operationGroups.multiElement.includes(
-                  operation,
-                )
-              ? { op: operation, elementIds: ["0/0", "0/1"] }
-              : { op: operation, elementId: "0/0" };
+        const command: Record<string, unknown> =
+          nativeEditContract.operationGroups.document.includes(operation)
+            ? { op: operation }
+            : nativeEditContract.operationGroups.slide.includes(operation)
+              ? { op: operation, slideIndex: 0 }
+              : nativeEditContract.operationGroups.create.includes(operation)
+                ? { op: operation, slideIndex: 0 }
+                : nativeEditContract.operationGroups.multiElement.includes(
+                      operation,
+                    )
+                  ? { op: operation, elementIds: ["0/0", "0/1"] }
+                  : { op: operation, elementId: "0/0" };
+        if (nativePlatformAssetOperations.has(operation))
+          command.assetId = operation.endsWith("_image")
+            ? "38c76733-fbed-40cc-98b0-5237aaec6387"
+            : "e20e579c-61a9-46b5-9e31-d00f28a10656";
         expect(
           (
             await o.onTool(
@@ -785,6 +809,150 @@ describe("shared open document agent", () => {
       expect(f.call).toHaveBeenCalledTimes(2);
     });
     expect(await f.run()).toMatchObject({ changed: false, reviewed: false });
+  });
+
+  it.each([
+    ["insert_image", "image", { slideIndex: 0 }],
+    ["replace_image", "image", { elementId: "0/0" }],
+    ["insert_media", "media", { slideIndex: 0 }],
+    ["replace_media", "media", { elementId: "0/0" }],
+  ] as const)(
+    "routes %s through the trusted top-level asset boundary",
+    async (operation, kind, target) => {
+      const command = {
+        op: operation,
+        assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
+        ...target,
+      };
+      const f = fixture(
+        async (options) => {
+          await options.onTool(
+            "native_observe",
+            { detailSlideIndex: null },
+            "observe",
+            f.signal,
+          );
+          expect(
+            (
+              await options.onTool(
+                "native_edit",
+                command,
+                "asset-edit",
+                f.signal,
+              )
+            ).success,
+          ).toBe(true);
+        },
+        permission,
+        changedState,
+        {
+          ...state,
+          assets: [
+            {
+              assetId: command.assetId,
+              fileName: kind === "image" ? "diagram.png" : "clip.mp4",
+              contentType: kind === "image" ? "image/png" : "video/mp4",
+              kind,
+              width: kind === "image" ? 1280 : 0,
+              height: kind === "image" ? 720 : 0,
+            },
+          ],
+        },
+      );
+      await f.run();
+      expect(f.call).toHaveBeenLastCalledWith(
+        {
+          ...command,
+          operation,
+          slideIndex: 0,
+          expectedRevision: "v2-test",
+          expectedSlides: JSON.stringify(state.slides),
+          permission,
+        },
+        f.signal,
+      );
+    },
+  );
+
+  it("rejects an unobserved or wrong-kind platform asset", async () => {
+    const f = fixture(
+      async (options) => {
+        await options.onTool(
+          "native_observe",
+          { detailSlideIndex: null },
+          "observe",
+          f.signal,
+        );
+        const unobserved = await options.onTool(
+          "native_edit",
+          {
+            op: "insert_image",
+            assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
+            slideIndex: 0,
+          },
+          "unobserved",
+          f.signal,
+        );
+        expect(unobserved.success).toBe(false);
+        const wrongKind = await options.onTool(
+          "native_edit",
+          {
+            op: "insert_media",
+            assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
+            slideIndex: 0,
+          },
+          "wrong-kind",
+          f.signal,
+        );
+        expect(wrongKind.success).toBe(false);
+      },
+      permission,
+      changedState,
+      {
+        ...state,
+        assets: [
+          {
+            assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
+            fileName: "diagram.png",
+            contentType: "image/png",
+            kind: "image",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    );
+    await f.run();
+    expect(f.call).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects platform asset delivery inside an atomic command batch", async () => {
+    const f = fixture(async (options) => {
+      await options.onTool(
+        "native_observe",
+        { detailSlideIndex: null },
+        "observe",
+        f.signal,
+      );
+      const result = await options.onTool(
+        "native_batch_edit",
+        {
+          commands: [
+            {
+              op: "insert_media",
+              assetId: "38c76733-fbed-40cc-98b0-5237aaec6387",
+              slideIndex: 0,
+            },
+          ],
+          dryRun: false,
+        },
+        "asset-batch",
+        f.signal,
+      );
+      expect(result.success).toBe(false);
+    });
+    await f.run();
+    expect(f.call).toHaveBeenCalledTimes(1);
   });
 
   it("stores a generated image, inserts it as a native object, then starts a visual review turn", async () => {

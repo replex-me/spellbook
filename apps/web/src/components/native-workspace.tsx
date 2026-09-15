@@ -14,6 +14,7 @@ import type { AvailableModel, ModelSettings } from "@/lib/ai-models";
 import { normalizeQuotedStrongMarkdown } from "@/lib/markdown";
 import { compactNativeTaskResultForTransport } from "@/lib/native-image-transport";
 import { CHATGPT_SECURITY_URL, useAiAccount } from "@/lib/use-ai-account";
+import { uploadImageAsset, uploadMediaAsset } from "@/lib/upload-image";
 import type { AiConnectorConfig } from "@/lib/ai-connector-config";
 import "./native-workspace.css";
 
@@ -61,7 +62,8 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     bridgeSession = useRef<string | null>(null),
     submitted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null),
-    bottom = useRef<HTMLDivElement>(null);
+    bottom = useRef<HTMLDivElement>(null),
+    assetInput = useRef<HTMLInputElement>(null);
   const turnRequested = useRef(false),
     saveRevision = useRef(0),
     pendingSaveRevision = useRef<number | null>(null),
@@ -77,13 +79,13 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       revision: string | null;
     } | null>(null);
   const dispatchedLocalJobs = useRef(new Set<string>());
-  const imagePayloads = useRef(
+  const assetPayloads = useRef(
     new Map<
       string,
-      { mediaType: "image/png" | "image/jpeg"; bytes: ArrayBuffer }
+      { mediaType: string; bytes: ArrayBuffer; fileName: string }
     >(),
   );
-  const loadingImages = useRef(new Set<string>());
+  const loadingAssets = useRef(new Set<string>());
   const [engineReady, setEngineReady] = useState(false),
     [bridgeReady, setBridgeReady] = useState(false),
     [sessionObserved, setSessionObserved] = useState(false);
@@ -93,6 +95,8 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     [busy, setBusy] = useState(false);
   const [error, setError] = useState(""),
     [saveState, setSaveState] = useState("저장됨");
+  const [uploadingAsset, setUploadingAsset] = useState(false),
+    [assetNotice, setAssetNotice] = useState("");
   const [permission, setPermission] = useState<
     "read_only" | "selection" | "slides" | "document"
   >("selection");
@@ -188,6 +192,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       request?: {
         operation?: string;
         assetId?: string;
+        elementId?: string;
         slideIndex?: number;
         expectedRevision?: string;
         expectedSlides?: string;
@@ -198,24 +203,33 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
         };
       };
     }) => {
-      if (
-        task.request?.operation !== "insert_image" ||
-        typeof task.id !== "string"
-      ) {
+      const operation = task.request?.operation ?? "";
+      const assetOperations = new Set([
+        "insert_image",
+        "replace_image",
+        "insert_media",
+        "replace_media",
+      ]);
+      if (!assetOperations.has(operation) || typeof task.id !== "string") {
         port.current?.postMessage(task);
         return;
       }
       const assetId = task.request.assetId ?? "";
-      if (!/^[0-9a-f-]{36}$/i.test(assetId)) {
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          assetId,
+        )
+      ) {
         void api("result", {
           id: task.id,
-          error: "invalid_generated_image_asset",
+          error: "invalid_document_asset",
         }).catch((cause) => setError(cause.message));
         return;
       }
       const deliver = (payload: {
-        mediaType: "image/png" | "image/jpeg";
+        mediaType: string;
         bytes: ArrayBuffer;
+        fileName: string;
       }) => {
         // Transfer a fresh copy because MessagePort detaches transferred buffers.
         // Task redelivery is safe: the extension caches the result by task id.
@@ -224,64 +238,118 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           {
             id: task.id,
             request: {
-              operation: "insert_image",
+              ...task.request,
               mediaType: payload.mediaType,
-              imageBytes: bytes,
-              slideIndex: task.request?.slideIndex,
-              expectedRevision: task.request?.expectedRevision,
-              expectedSlides: task.request?.expectedSlides,
-              permission: task.request?.permission,
+              fileName: payload.fileName,
+              assetBytes: bytes,
             },
           },
           [bytes],
         );
       };
-      const cached = imagePayloads.current.get(task.id);
+      const cached = assetPayloads.current.get(task.id);
       if (cached) {
         deliver(cached);
         return;
       }
-      if (loadingImages.current.has(task.id)) return;
-      loadingImages.current.add(task.id);
+      if (loadingAssets.current.has(task.id)) return;
+      loadingAssets.current.add(task.id);
       const imageUrl = new URL(
         `/api/documents/${launch.documentId}/assets/${assetId}`,
         window.location.origin,
       );
       void fetch(imageUrl, { cache: "no-store" })
         .then(async (response) => {
-          if (!response.ok) throw new Error("generated_image_download_failed");
+          if (!response.ok) throw new Error("asset_download_failed");
           const mediaType = response.headers
             .get("content-type")
             ?.split(";", 1)[0];
-          if (mediaType !== "image/png" && mediaType !== "image/jpeg")
-            throw new Error("invalid_generated_image_type");
+          const allowedTypes = [
+            "image/png",
+            "image/jpeg",
+            "audio/mpeg",
+            "audio/wav",
+            "audio/ogg",
+            "audio/mp4",
+            "video/mp4",
+            "video/webm",
+          ];
+          if (!mediaType || !allowedTypes.includes(mediaType))
+            throw new Error("invalid_asset_type");
           const bytes = await response.arrayBuffer();
-          if (!bytes.byteLength || bytes.byteLength > 5_000_000)
-            throw new Error("invalid_generated_image_size");
+          const maximumBytes = mediaType.startsWith("image/")
+            ? 5_000_000
+            : 25_000_000;
+          if (!bytes.byteLength || bytes.byteLength > maximumBytes)
+            throw new Error("invalid_asset_size");
           const signature = new Uint8Array(
             bytes,
             0,
-            Math.min(8, bytes.byteLength),
+            Math.min(16, bytes.byteLength),
           );
           const png =
-            signature.length === 8 &&
+            signature.length >= 8 &&
             [137, 80, 78, 71, 13, 10, 26, 10].every(
               (value, index) => signature[index] === value,
             );
           const jpeg = signature[0] === 0xff && signature[1] === 0xd8;
+          const textAt = (start: number, end: number) =>
+            String.fromCharCode(...signature.slice(start, end));
+          const mediaSignature =
+            (mediaType === "audio/mpeg" &&
+              (textAt(0, 3) === "ID3" ||
+                (signature[0] === 0xff && (signature[1]! & 0xe0) === 0xe0))) ||
+            (mediaType === "audio/wav" &&
+              textAt(0, 4) === "RIFF" &&
+              textAt(8, 12) === "WAVE") ||
+            (mediaType === "audio/ogg" && textAt(0, 4) === "OggS") ||
+            (mediaType === "video/webm" &&
+              signature[0] === 0x1a &&
+              signature[1] === 0x45 &&
+              signature[2] === 0xdf &&
+              signature[3] === 0xa3) ||
+            (["audio/mp4", "video/mp4"].includes(mediaType) &&
+              textAt(4, 8) === "ftyp");
           if (
             (mediaType === "image/png" && !png) ||
-            (mediaType === "image/jpeg" && !jpeg)
+            (mediaType === "image/jpeg" && !jpeg) ||
+            (!mediaType.startsWith("image/") && !mediaSignature)
           )
-            throw new Error("invalid_generated_image_bytes");
+            throw new Error("invalid_asset_bytes");
           const payload: {
-            mediaType: "image/png" | "image/jpeg";
+            mediaType: string;
             bytes: ArrayBuffer;
-          } = { mediaType, bytes };
-          imagePayloads.current.set(task.id!, payload);
-          if (imagePayloads.current.size > 100)
-            imagePayloads.current.delete(
-              imagePayloads.current.keys().next().value!,
+            fileName: string;
+          } = {
+            mediaType,
+            bytes,
+            fileName: `${assetId}.${
+              mediaType === "image/png"
+                ? "png"
+                : mediaType === "image/jpeg"
+                  ? "jpg"
+                  : mediaType === "audio/mpeg"
+                    ? "mp3"
+                    : mediaType === "audio/wav"
+                      ? "wav"
+                      : mediaType === "audio/ogg"
+                        ? "ogg"
+                        : mediaType === "audio/mp4"
+                          ? "m4a"
+                          : mediaType === "video/webm"
+                            ? "webm"
+                            : "mp4"
+            }`,
+          };
+          assetPayloads.current.set(task.id!, payload);
+          const cachedBytes = () =>
+            [...assetPayloads.current.values()].reduce(
+              (total, candidate) => total + candidate.bytes.byteLength,
+              0,
+            );
+          while (assetPayloads.current.size > 4 || cachedBytes() > 50_000_000)
+            assetPayloads.current.delete(
+              assetPayloads.current.keys().next().value!,
             );
           deliver(payload);
         })
@@ -289,12 +357,10 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           api("result", {
             id: task.id,
             error:
-              cause instanceof Error
-                ? cause.message
-                : "generated_image_download_failed",
+              cause instanceof Error ? cause.message : "asset_download_failed",
           }).catch((error) => setError(error.message)),
         )
-        .finally(() => loadingImages.current.delete(task.id!));
+        .finally(() => loadingAssets.current.delete(task.id!));
     },
     [api, launch.documentId],
   );
@@ -847,6 +913,32 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     }
     await dispatchTurn(pending);
   }
+  async function uploadConversationAsset(file: File) {
+    setUploadingAsset(true);
+    setAssetNotice("");
+    setError("");
+    try {
+      const uploaded = file.type.startsWith("image/")
+        ? await uploadImageAsset(launch.documentId, file)
+        : await uploadMediaAsset(launch.documentId, file);
+      setAssetNotice(`${uploaded.fileName} 업로드됨`);
+      setText((current) =>
+        current.trim()
+          ? current
+          : `업로드한 ${uploaded.fileName} 파일을 현재 슬라이드에 넣어줘`,
+      );
+      input.current?.focus();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "파일을 업로드하지 못했습니다.",
+      );
+    } finally {
+      setUploadingAsset(false);
+      if (assetInput.current) assetInput.current.value = "";
+    }
+  }
   // Collabora runs in an iframe, so these bridge values mirror the semantic
   // tokens in design-system.css rather than relying on inherited CSS vars.
   const theme =
@@ -1192,6 +1284,17 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                 </div>
               ) : null}
               <div className="native-composer">
+                <input
+                  ref={assetInput}
+                  className="native-asset-input"
+                  type="file"
+                  accept="image/png,image/jpeg,audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/mp4,video/mp4,video/webm"
+                  disabled={busy || uploadingAsset}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    if (file) void uploadConversationAsset(file);
+                  }}
+                />
                 <textarea
                   ref={input}
                   aria-label="AI에게 요청"
@@ -1210,12 +1313,28 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                   }}
                 />
                 <div className="native-composer-controls">
-                  <ModelControl
-                    value={model}
-                    onChange={setModel}
-                    disabled={busy}
-                    loadModels={loadModels}
-                  />
+                  <div className="native-composer-left">
+                    <button
+                      className="ds-icon-button native-asset-button"
+                      type="button"
+                      aria-label="이미지 또는 미디어 첨부"
+                      title="이미지 또는 미디어 첨부"
+                      disabled={busy || uploadingAsset}
+                      onClick={() => assetInput.current?.click()}
+                    >
+                      {uploadingAsset ? (
+                        <span className="native-spinner" />
+                      ) : (
+                        <SpellbookIcon name="paperclip" size={16} />
+                      )}
+                    </button>
+                    <ModelControl
+                      value={model}
+                      onChange={setModel}
+                      disabled={busy}
+                      loadModels={loadModels}
+                    />
+                  </div>
                   {busy ? (
                     <button
                       className="native-send"
@@ -1249,6 +1368,11 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
                   )}
                 </div>
               </div>
+              {assetNotice ? (
+                <p className="native-asset-notice" role="status">
+                  <SpellbookIcon name="check" size={13} /> {assetNotice}
+                </p>
+              ) : null}
               <div className="native-context-controls">
                 <label className="native-permission">
                   <span>

@@ -9,10 +9,9 @@ a slide, save, undo the insertion, save again, and reopen both outputs in
 Microsoft PowerPoint. The probed binary identifies itself as ZetaOffice 24.2 at
 LibreOffice commit `efaf0670b4d055f838a2849becb10f08aa06a257`; it is not the
 same source line as Spellbook's current server-side Collabora engine. The
-browser source candidate is now pinned separately at
-`dced3bc711d18407a2cc2400eb46e8261b663d95`; the only upstream change after the
-probed binary moves browser execution to the browser main thread and does not
-fix whole-file OOXML rewriting.
+current cumulative browser source candidate is pinned separately in
+`upstream.json`; the stock proof identity remains distinct from that patched
+source and does not make whole-file OOXML rewriting acceptable.
 
 [`upstream.json`](./upstream.json) pins that exact source identity, ZetaJS
 identity, wire bytes, and browser isolation headers. The upstream URL contains
@@ -74,7 +73,7 @@ shadows, locks, crop and click interactions. It preflights the complete command
 list, follows slide navigation without mutating during validation, groups the
 write into one native Undo context and rolls the context back on failure. These
 operations are advertised to the shared program only when the pinned runtime's
-build commit equals the candidate source commit, the exact `browser-undo-v9`
+build commit equals the candidate source commit, the exact `browser-undo-v11`
 patch level is present and `buildReady` has been promoted. The current stock
 binary therefore advertises none of these candidate-only operations.
 
@@ -98,10 +97,13 @@ generation. The conformance run reloads the page after all six mutations,
 recovers the candidate and Undo history from OPFS, and only then performs the
 six-step Undo and reopen checks.
 
-Promotion still requires the rest of the shared edit-command contract,
-Korean IME and accessibility checks, product-integrated OPFS recovery, a
-current patched browser LibreOffice build, public-corpus render comparison and
-a PowerPoint platform matrix. Until those gates pass, `status` stays
+The cumulative candidate implements the complete 97-operation source contract,
+including semantic diagrams, equations, image/media insertion and
+identity-preserving replacement, media playback, Fontwork, 3D materials,
+reading order and animation lifecycle. Promotion still requires Korean IME and
+accessibility checks, product-integrated OPFS recovery, the final patched
+browser LibreOffice build, public-corpus render comparison and a PowerPoint
+platform matrix. Until those checks pass, `status` stays
 `viability_probe_only` and the server editor remains the runtime fallback.
 
 The Spellbook-owned conformance shell is available at

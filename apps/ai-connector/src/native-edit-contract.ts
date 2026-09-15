@@ -124,6 +124,16 @@ export const nativeIdentityReplacingOperations = new Set(
     .map(([operation]) => operation),
 );
 
+export const nativePlatformAssetOperations = new Set(
+  Object.entries(mutationOperations)
+    .filter(
+      ([, contract]) =>
+        contract.availability !== "format_excluded" &&
+        contract.execution === "platform_asset",
+    )
+    .map(([operation]) => operation),
+);
+
 export const nativeEditOperationCount = executable.length;
 
 export const nativeMutationOperations = mutationOperations;

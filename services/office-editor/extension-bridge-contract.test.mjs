@@ -104,3 +104,24 @@ test("extension repeats its ready handshake until the host transfers a port", as
   repeat();
   assert.equal(messages.length, 2);
 });
+
+test("extension keeps binary presentation assets behind one typed native transaction", () => {
+  const source = fs.readFileSync(
+    "services/office-editor/extension/bridge.js",
+    "utf8",
+  );
+  for (const operation of [
+    "insert_image",
+    "replace_image",
+    "insert_media",
+    "replace_media",
+  ])
+    assert.match(source, new RegExp(`"${operation}"`, "u"));
+  assert.match(source, /assetSignatureIsValid/u);
+  assert.match(source, /operation: "asset_begin"/u);
+  assert.match(source, /operation: "asset_finish"/u);
+  assert.match(source, /operation: "asset_abort"/u);
+  assert.match(source, /insertgraphic/u);
+  assert.match(source, /insertmultimedia/u);
+  assert.match(source, /asset_insert_readback_failed/u);
+});

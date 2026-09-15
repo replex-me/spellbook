@@ -9,11 +9,11 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v23",
+  "patchLevel": "undo-v24",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "aca01cac396d7153e65e44e1964dff9f82782433b8f11b02f4570b287915f580",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v23-r10-candidate",
+  "patchSeriesSha256": "d89b15af0d6f06aaa58eec391616b5ce546b62236af42d3e09d744ee4971a36d",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v24-r11-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -56,7 +56,8 @@
     "patches/0039-slide-sections-undo-roundtrip.patch",
     "patches/0040-animation-lifecycle-undo-roundtrip.patch",
     "patches/0041-document-design-theme-size.patch",
-    "patches/0042-advanced-shape-text-connectors.patch"
+    "patches/0042-advanced-shape-text-connectors.patch",
+    "patches/0043-semantic-assets-accessibility.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
@@ -68,6 +69,9 @@
     "CppunitTest_sd_uiimpress:testDocumentStructureInsertSlidePreservesSparseMaster",
     "CppunitTest_sd_uiimpress:testDocumentStructureMultiMovePreservesObjectNames",
     "CppunitTest_sd_uiimpress:testDocumentStructureObjectPropertiesUndoRedo",
+    "CppunitTest_sd_uiimpress:testDocumentStructureAssetReplacementUndoRedo",
+    "CppunitTest_sd_uiimpress:testDocumentStructureMediaReplacementUndoRedo",
+    "CppunitTest_sd_uiimpress:testDocumentStructureMediaPlaybackUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureObjectInteractionUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureMetadataLineAndParagraphUndoRedo",
     "CppunitTest_sd_uiimpress:testDocumentStructureSectionsUndoRedoRoundtrip",

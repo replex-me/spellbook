@@ -48,7 +48,7 @@ test("execution plan assigns a real PPTX and bounded operation routes to every s
   const plan = buildConformancePlan(capabilities, conformance);
   const scenarios = buildScenarioExecutionPlan(capabilities, conformance, plan);
 
-  assert.equal(scenarios.length, 10);
+  assert.equal(scenarios.length, 15);
   assert.equal(scenarios[0].name, "table-structure");
   assert.equal(scenarios.at(-1).name, "general-native-surface");
   scenarios.forEach(assertPinnedPublicSource);
@@ -56,18 +56,35 @@ test("execution plan assigns a real PPTX and bounded operation routes to every s
     scenarios.every((scenario) => /^[0-9a-f]{64}$/.test(scenario.sourceSha256)),
   );
   assert.ok(
-    scenarios.every((scenario) => scenario.expectedPatchLevel === "undo-v19"),
+    scenarios.every((scenario) => scenario.expectedPatchLevel === "undo-v24"),
   );
   assert.ok(scenarios.every((scenario) => scenario.allowedOperations.length));
   assert.deepEqual(
     scenarios.find((scenario) => scenario.name === "animation-timing")
       .allowedOperations,
-    ["set_animation_timing"],
+    [
+      "add_animation_effect",
+      "move_animation_effect",
+      "remove_animation_effect",
+      "replace_animation_effect",
+      "set_animation_timing",
+    ],
   );
   assert.deepEqual(
     scenarios.find((scenario) => scenario.name === "object-interaction")
       .allowedOperations,
     ["set_object_interaction"],
+  );
+  assert.deepEqual(
+    scenarios.find((scenario) => scenario.name === "semantic-assets")
+      .allowedOperations,
+    [
+      "insert_image",
+      "insert_media",
+      "replace_image",
+      "replace_media",
+      "set_media_playback",
+    ],
   );
 });
 

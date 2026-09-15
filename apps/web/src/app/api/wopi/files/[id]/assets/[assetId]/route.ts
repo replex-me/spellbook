@@ -1,5 +1,5 @@
 import { routeError } from "@/lib/http";
-import { wopiGetImageAsset } from "@/lib/native-session";
+import { wopiGetAsset } from "@/lib/native-session";
 
 export async function GET(
   request: Request,
@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { id, assetId } = await context.params;
-    const asset = await wopiGetImageAsset(request, id, assetId);
+    const asset = await wopiGetAsset(request, id, assetId);
     return new Response(new Uint8Array(asset.data), {
       headers: {
         "content-type": asset.contentType,

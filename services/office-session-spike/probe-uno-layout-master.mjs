@@ -130,7 +130,77 @@ try {
   await history("undo");
   await waitForState(before, "Slide layout Undo");
   await history("redo");
-  const redone = await waitForState(after, "Slide layout Redo");
+  let redone = await waitForState(after, "Slide layout Redo");
+  const operations = ["set_slide_layout"];
+  const editWithHistory = async (command) => {
+    const prior = structuredClone(redone);
+    const priorHistory = await history();
+    const next = await call({
+      operation: "edit_batch",
+      expectedRevision: redone.revision,
+      expectedSlides: stable(redone.slides),
+      commands: [command],
+      dryRun: false,
+      permission: { mode: "document", slideIndexes: [], elementIds: [] },
+    });
+    const nextHistory = await history();
+    if (
+      next.revision === prior.revision ||
+      next.transaction?.status !== "applied" ||
+      next.transaction?.undoActionsAdded !== 1 ||
+      nextHistory.undo.length !== priorHistory.undo.length + 1
+    )
+      throw new Error(`${command.op} did not apply as one native Undo action.`);
+    await history("undo");
+    await waitForState(prior, `${command.op} Undo`);
+    await history("redo");
+    redone = await waitForState(next, `${command.op} Redo`);
+    operations.push(command.op);
+  };
+  if (Number(patchLevelMatch[1]) >= 22) {
+    const currentWidth = redone.slides[0].width;
+    const nextWidth =
+      currentWidth < 99900 ? currentWidth + 100 : currentWidth - 100;
+    await editWithHistory({
+      op: "set_slide_size",
+      width: nextWidth,
+      height: redone.slides[0].height,
+      scaleContent: false,
+    });
+    const currentTheme = redone.masters[masterIndex]?.theme;
+    const colors =
+      Array.isArray(currentTheme?.colors) && currentTheme.colors.length === 12
+        ? [...currentTheme.colors]
+        : [
+            0x000000, 0xffffff, 0x222222, 0xeeeeee, 0x4472c4, 0xed7d31,
+            0xa5a5a5, 0xffc000, 0x5b9bd5, 0x70ad47, 0x0563c1, 0x954f72,
+          ];
+    colors[4] = colors[4] === 0x4f46e5 ? 0x2563eb : 0x4f46e5;
+    const text = (value, fallback) =>
+      typeof value === "string" && value ? value : fallback;
+    await editWithHistory({
+      op: "set_master_theme",
+      masterIndex,
+      theme: {
+        name:
+          currentTheme?.name === "Spellbook verified theme"
+            ? "Spellbook verified theme 2"
+            : "Spellbook verified theme",
+        colorSchemeName: text(
+          currentTheme?.colorSchemeName,
+          "Spellbook colors",
+        ),
+        colors,
+        fontSchemeName: text(currentTheme?.fontSchemeName, "Spellbook fonts"),
+        majorLatin: text(currentTheme?.majorLatin, "Liberation Sans"),
+        majorAsian: text(currentTheme?.majorAsian, "Noto Sans CJK KR"),
+        majorComplex: text(currentTheme?.majorComplex, "Noto Sans Arabic"),
+        minorLatin: text(currentTheme?.minorLatin, "Liberation Sans"),
+        minorAsian: text(currentTheme?.minorAsian, "Noto Sans CJK KR"),
+        minorComplex: text(currentTheme?.minorComplex, "Noto Sans Arabic"),
+      },
+    });
+  }
 
   if (process.env.SPELLBOOK_PROBE_SCREENSHOT) {
     const image = redone.images?.[0];
@@ -148,7 +218,7 @@ try {
 
   const report = {
     enginePatchLevel: redone.engine.patchLevel,
-    operation: "set_slide_layout",
+    commands: operations,
     atomic: true,
     undoExact: true,
     redoExact: true,

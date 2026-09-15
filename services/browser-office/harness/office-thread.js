@@ -28,7 +28,7 @@ function slideCount() {
   return model?.getDrawPages().getCount() ?? 0;
 }
 
-function dispatch(command) {
+function dispatch(command, args = []) {
   const url = {
     val: new css.util.URL({ Complete: `.uno:${command}` }),
   };
@@ -36,7 +36,7 @@ function dispatch(command) {
   const controller = model.getCurrentController();
   const dispatcher = controller.queryDispatch(url.val, "_self", 0);
   if (!dispatcher) throw new Error(`UNO command is unavailable: ${command}`);
-  dispatcher.dispatch(url.val, []);
+  dispatcher.dispatch(url.val, args);
 }
 
 function property(Name, type, value) {
@@ -46,15 +46,31 @@ function property(Name, type, value) {
   });
 }
 
-function imageSignatureIsValid(bytes, mediaType) {
-  const view = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 8));
+function assetSignatureIsValid(bytes, mediaType) {
+  const view = new Uint8Array(bytes, 0, Math.min(bytes.byteLength, 16));
   const png =
-    view.length === 8 &&
+    view.length >= 8 &&
     [137, 80, 78, 71, 13, 10, 26, 10].every(
       (value, index) => view[index] === value,
     );
   const jpeg = view[0] === 0xff && view[1] === 0xd8;
-  return mediaType === "image/png" ? png : mediaType === "image/jpeg" && jpeg;
+  const text = (start, end) => String.fromCharCode(...view.slice(start, end));
+  const signatures = {
+    "image/png": png,
+    "image/jpeg": jpeg,
+    "audio/mpeg":
+      text(0, 3) === "ID3" || (view[0] === 0xff && (view[1] & 0xe0) === 0xe0),
+    "audio/wav": text(0, 4) === "RIFF" && text(8, 12) === "WAVE",
+    "audio/ogg": text(0, 4) === "OggS",
+    "audio/mp4": text(4, 8) === "ftyp",
+    "video/mp4": text(4, 8) === "ftyp",
+    "video/webm":
+      view[0] === 0x1a &&
+      view[1] === 0x45 &&
+      view[2] === 0xdf &&
+      view[3] === 0xa3,
+  };
+  return signatures[mediaType] === true;
 }
 
 function observeDocument(request = {}) {
@@ -66,16 +82,40 @@ function observeDocument(request = {}) {
   });
 }
 
-function insertImage(request) {
-  const { imageBytes, mediaType, slideIndex, expectedRevision, permission } =
-    request;
+function mutateAsset(request) {
+  const {
+    assetBytes,
+    mediaType,
+    slideIndex,
+    expectedRevision,
+    permission,
+    operation,
+    elementId,
+  } = request;
+  const isImage = operation.endsWith("_image");
+  const expectedSlides = (() => {
+    try {
+      const value = JSON.parse(request.expectedSlides);
+      if (!Array.isArray(value) || value.length < 1 || value.length > 500)
+        throw new Error("invalid_expected_document");
+      return value;
+    } catch {
+      throw new Error("invalid_expected_document");
+    }
+  })();
   if (
-    !(imageBytes instanceof ArrayBuffer) ||
-    !imageBytes.byteLength ||
-    imageBytes.byteLength > 5_000_000 ||
-    !imageSignatureIsValid(imageBytes, mediaType)
+    ![
+      "insert_image",
+      "replace_image",
+      "insert_media",
+      "replace_media",
+    ].includes(operation) ||
+    !(assetBytes instanceof ArrayBuffer) ||
+    !assetBytes.byteLength ||
+    assetBytes.byteLength > (isImage ? 5_000_000 : 25_000_000) ||
+    !assetSignatureIsValid(assetBytes, mediaType)
   )
-    throw new Error("invalid_generated_image");
+    throw new Error("invalid_asset");
   const before = observeDocument();
   if (
     typeof expectedRevision !== "string" ||
@@ -88,56 +128,124 @@ function insertImage(request) {
     slideIndex >= before.slides.length ||
     before.activeSlide !== slideIndex
   )
-    throw new Error("generated_image_slide_changed");
+    throw new Error("asset_slide_changed");
   if (
     !permission ||
-    !["slides", "document"].includes(permission.mode) ||
+    !["selection", "slides", "document"].includes(permission.mode) ||
+    (operation.startsWith("insert_") && permission.mode === "selection") ||
     (permission.mode === "slides" &&
-      !permission.slideIndexes?.includes(slideIndex))
+      !permission.slideIndexes?.includes(slideIndex)) ||
+    (permission.mode === "selection" &&
+      !permission.elementIds?.includes(elementId))
   )
     throw new Error("outside_edit_permission");
 
-  const extension = mediaType === "image/png" ? "png" : "jpg";
-  const path = `/tmp/spellbook/generated-${Date.now()}.${extension}`;
+  const extension = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/mp4": "m4a",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+  }[mediaType];
+  if (!extension) throw new Error("unsupported_asset_type");
+  const path = `/tmp/spellbook/asset-${Date.now()}.${extension}`;
   const undo = model.getUndoManager();
   const undoCount = undo.getAllUndoActionTitles().length;
   let contextOpen = false;
   try {
-    FS.writeFile(path, new Uint8Array(imageBytes));
-    const provider = css.graphic.GraphicProvider.create(context);
-    const graphic = provider.queryGraphic([
-      property("URL", zetajs.type.string, `file://${path}`),
-    ]);
-    if (!graphic) throw new Error("generated_image_decode_failed");
+    FS.writeFile(path, new Uint8Array(assetBytes));
     const page = model.getDrawPages().getByIndex(slideIndex);
-    const shape = model.createInstance(
-      "com.sun.star.drawing.GraphicObjectShape",
-    );
     const pageWidth = Number(page.getPropertyValue("Width")) || 28_000;
     const pageHeight = Number(page.getPropertyValue("Height")) || 15_750;
-    const sourceSize = graphic.Size100thMM ?? { Width: 4, Height: 3 };
-    const sourceWidth = Math.max(1, Number(sourceSize.Width) || 4);
-    const sourceHeight = Math.max(1, Number(sourceSize.Height) || 3);
-    const scale = Math.min(
-      (pageWidth * 0.7) / sourceWidth,
-      (pageHeight * 0.7) / sourceHeight,
-    );
-    const width = Math.max(1, Math.round(sourceWidth * scale));
-    const height = Math.max(1, Math.round(sourceHeight * scale));
-    shape.setPosition(
-      new css.awt.Point({
-        X: Math.round((pageWidth - width) / 2),
-        Y: Math.round((pageHeight - height) / 2),
-      }),
-    );
-    shape.setSize(new css.awt.Size({ Width: width, Height: height }));
-    shape.setPropertyValue(
-      "Graphic",
-      new zetajs.Any(zetajs.type.interface(css.graphic.XGraphic), graphic),
-    );
-    undo.enterUndoContext("AI generated image");
+    undo.enterUndoContext(isImage ? "AI image edit" : "AI media edit");
     contextOpen = true;
-    page.add(shape);
+    if (isImage) {
+      const provider = css.graphic.GraphicProvider.create(context);
+      const graphic = provider.queryGraphic([
+        property("URL", zetajs.type.string, `file://${path}`),
+      ]);
+      if (!graphic) throw new Error("asset_decode_failed");
+      const shape = model.createInstance(
+        "com.sun.star.drawing.GraphicObjectShape",
+      );
+      const sourceSize = graphic.Size100thMM ?? { Width: 4, Height: 3 };
+      const sourceWidth = Math.max(1, Number(sourceSize.Width) || 4);
+      const sourceHeight = Math.max(1, Number(sourceSize.Height) || 3);
+      const scale = Math.min(
+        (pageWidth * 0.7) / sourceWidth,
+        (pageHeight * 0.7) / sourceHeight,
+      );
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+      shape.setPosition(
+        new css.awt.Point({
+          X: Math.round((pageWidth - width) / 2),
+          Y: Math.round((pageHeight - height) / 2),
+        }),
+      );
+      shape.setSize(new css.awt.Size({ Width: width, Height: height }));
+      shape.setPropertyValue(
+        "Graphic",
+        new zetajs.Any(zetajs.type.interface(css.graphic.XGraphic), graphic),
+      );
+      page.add(shape);
+    } else {
+      dispatch("InsertAVMedia", [
+        property("URL", zetajs.type.string, `file://${path}`),
+        property("Size.Width", zetajs.type.long, Math.round(pageWidth * 0.7)),
+        property("Size.Height", zetajs.type.long, Math.round(pageHeight * 0.7)),
+        property("IsLink", zetajs.type.boolean, false),
+      ]);
+    }
+    const insertedState = observeDocument();
+    const beforeStableIds = new Set(
+      before.slides[slideIndex].elements.map((element) => element.stableId),
+    );
+    const inserted = insertedState.slides[slideIndex].elements.filter(
+      (element) =>
+        element.parentElementId === null &&
+        !beforeStableIds.has(element.stableId),
+    );
+    const expectedKind = isImage ? "GraphicObjectShape" : "MediaShape";
+    const otherSlidesUnchanged = before.slides.every(
+      (slide, index) =>
+        index === slideIndex ||
+        JSON.stringify(slide) === JSON.stringify(insertedState.slides[index]),
+    );
+    if (
+      inserted.length !== 1 ||
+      insertedState.slides[slideIndex].elements.length !==
+        before.slides[slideIndex].elements.length + 1 ||
+      !otherSlidesUnchanged ||
+      !String(inserted[0].kind).endsWith(expectedKind)
+    )
+      throw new Error("asset_insert_readback_failed");
+    const replacementTarget = operation.startsWith("replace_")
+      ? before.slides[slideIndex].elements.find(
+          (element) => element.elementId === elementId,
+        )
+      : null;
+    if (operation.startsWith("replace_")) {
+      if (!replacementTarget)
+        throw new Error("invalid_asset_replacement_target");
+      const oldIndex = Number(String(elementId).split("/")[1]);
+      const newIndex = Number(inserted[0].elementId.split("/")[1]);
+      if (
+        !Number.isSafeInteger(oldIndex) ||
+        !Number.isSafeInteger(newIndex) ||
+        String(elementId).split("/").length !== 2
+      )
+        throw new Error("invalid_asset_replacement_target");
+      page
+        .getByIndex(newIndex)
+        .setPropertyValue(
+          "SpellbookReplaceObject",
+          new zetajs.Any(zetajs.type.long, oldIndex),
+        );
+    }
     undo.leaveUndoContext();
     contextOpen = false;
     const after = observeDocument({
@@ -152,13 +260,24 @@ function insertImage(request) {
       (total, slide) => total + slide.elements.length,
       0,
     );
+    const replacementPreserved =
+      !replacementTarget ||
+      (after.slides[slideIndex].elements.some(
+        (element) => element.stableId === replacementTarget.stableId,
+      ) &&
+        !after.slides[slideIndex].elements.some(
+          (element) => element.stableId === inserted[0].stableId,
+        ));
     if (
-      afterCount !== beforeCount + 1 ||
+      afterCount !== beforeCount + (operation.startsWith("replace_") ? 0 : 1) ||
+      !replacementPreserved ||
       undo.getAllUndoActionTitles().length !== undoCount + 1
     )
       throw new Error(
-        afterCount !== beforeCount + 1
-          ? "generated_image_was_not_inserted"
+        afterCount !==
+          beforeCount + (operation.startsWith("replace_") ? 0 : 1) ||
+        !replacementPreserved
+          ? "asset_mutation_not_applied"
           : "native_undo_not_recorded",
       );
     const issueKey = (issue) =>
@@ -189,6 +308,11 @@ function insertImage(request) {
   } catch (error) {
     if (contextOpen) undo.leaveUndoContext();
     while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+    const rolledBack = observeDocument();
+    if (JSON.stringify(rolledBack.slides) !== JSON.stringify(expectedSlides))
+      throw new Error(
+        `asset_rollback_failed:${error instanceof Error ? error.message : String(error)}`,
+      );
     throw error;
   } finally {
     try {
@@ -271,14 +395,18 @@ function start() {
             );
           post("native-complete", {
             requestId,
-            value:
-              event.data.nativeRequest?.operation === "insert_image"
-                ? insertImage(event.data.nativeRequest)
-                : spellbookDocumentOperation({
-                    ...event.data.nativeRequest,
-                    mutationContracts: spellbookMutationContracts,
-                    nativeAdapter,
-                  }),
+            value: [
+              "insert_image",
+              "replace_image",
+              "insert_media",
+              "replace_media",
+            ].includes(event.data.nativeRequest?.operation)
+              ? mutateAsset(event.data.nativeRequest)
+              : spellbookDocumentOperation({
+                  ...event.data.nativeRequest,
+                  mutationContracts: spellbookMutationContracts,
+                  nativeAdapter,
+                }),
           });
           break;
         case "status":

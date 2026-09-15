@@ -372,6 +372,28 @@ try {
     elementId: currentGraphic().elementId,
     opacity: 57,
   });
+  if (engineOperationAvailable("set_shape_fill"))
+    await editWithUndoRoundTrip({
+      op: "set_shape_fill",
+      elementId: currentGraphic().elementId,
+      shapeFill: {
+        type: "solid",
+        color: 0x4f46e5,
+        opacity: 82,
+        catalogName: null,
+      },
+    });
+  if (engineOperationAvailable("set_shape_effects"))
+    await editWithUndoRoundTrip({
+      op: "set_shape_effects",
+      elementId: currentGraphic().elementId,
+      shapeEffects: {
+        glowRadius: 120,
+        glowColor: 0x6366f1,
+        glowOpacity: 74,
+        softEdgeRadius: 60,
+      },
+    });
   await edit({
     op: "paragraph_alignment",
     elementId: currentText().elementId,
@@ -478,6 +500,9 @@ try {
     height: 1800,
     text: "새 텍스트 상자",
   });
+  const advancedObjectIds = new Set(
+    observed.slides[0].elements.map((element) => element.stableId),
+  );
   await edit({
     op: "add_shape",
     slideIndex: 0,
@@ -508,6 +533,77 @@ try {
     geometry: "line",
     color: 16711680,
   });
+  if (engineOperationAvailable("add_connector")) {
+    await editWithUndoRoundTrip({
+      op: "add_connector",
+      slideIndex: 0,
+      x: 9000,
+      y: 7600,
+      width: 5500,
+      height: 1200,
+      connectorKind: "standard",
+    });
+    const connector = observed.slides[0].elements.find(
+      (element) =>
+        !advancedObjectIds.has(element.stableId) && element.connector,
+    );
+    if (!connector) throw new Error("Native connector was not identified.");
+    if (engineOperationAvailable("set_connector"))
+      await editWithUndoRoundTrip({
+        op: "set_connector",
+        elementId: connector.elementId,
+        connector: {
+          kind: "curve",
+          start: {
+            x: Number(connector.connector.start?.x ?? connector.x) + 50,
+            y: Number(connector.connector.start?.y ?? connector.y) + 50,
+          },
+          end: {
+            x:
+              Number(
+                connector.connector.end?.x ?? connector.x + connector.width,
+              ) + 100,
+            y:
+              Number(
+                connector.connector.end?.y ?? connector.y + connector.height,
+              ) + 100,
+          },
+          startElementId: null,
+          endElementId: null,
+          startGluePoint: null,
+          endGluePoint: null,
+        },
+      });
+  }
+  if (engineOperationAvailable("add_freeform"))
+    await editWithUndoRoundTrip({
+      op: "add_freeform",
+      slideIndex: 0,
+      x: 15000,
+      y: 7200,
+      width: 2600,
+      height: 1800,
+      points: [
+        { x: 0, y: 1700 },
+        { x: 1200, y: 0 },
+        { x: 2500, y: 1700 },
+      ],
+      closed: true,
+      color: 0x14b8a6,
+    });
+  if (engineOperationAvailable("set_reading_order")) {
+    const readingOrder = observed.slides[0].elements
+      .filter((element) => element.parentElementId === null)
+      .sort((left, right) => left.readingOrder - right.readingOrder)
+      .map((element) => element.elementId)
+      .reverse();
+    if (readingOrder.length < 2)
+      throw new Error("Not enough objects for reading-order verification.");
+    await editWithUndoRoundTrip({
+      op: "set_reading_order",
+      elementIds: readingOrder,
+    });
+  }
   await editWithUndoRoundTrip({
     op: "add_table",
     slideIndex: 0,
@@ -743,6 +839,38 @@ try {
     text: "AI와 사용자가 함께 확인하는 발표자 노트",
   });
   assertReusableMastersUnchanged("set_speaker_notes");
+  if (engineOperationAvailable("add_comment")) {
+    await editWithUndoRoundTrip({
+      op: "add_comment",
+      slideIndex: 0,
+      text: "Spellbook comment",
+      author: "Spellbook AI",
+      initials: "AI",
+      x: 800,
+      y: 800,
+    });
+    let comment = observed.slides[0].comments.at(-1);
+    if (!comment) throw new Error("Native comment was not identified.");
+    await editWithUndoRoundTrip({
+      op: "edit_comment",
+      slideIndex: 0,
+      commentIndex: comment.commentIndex,
+      expectedText: comment.text,
+      text: "Spellbook reviewed comment",
+      author: "Spellbook AI",
+      initials: "AI",
+    });
+    comment = observed.slides[0].comments.find(
+      (candidate) => candidate.commentIndex === comment.commentIndex,
+    );
+    if (!comment) throw new Error("Edited native comment was not identified.");
+    await editWithUndoRoundTrip({
+      op: "delete_comment",
+      slideIndex: 0,
+      commentIndex: comment.commentIndex,
+      expectedText: comment.text,
+    });
+  }
   await edit({ op: "insert_slide", slideIndex: 0 });
   assertReusableMastersUnchanged("insert_slide");
   await edit({ op: "duplicate_slide", slideIndex: 0 });
@@ -928,6 +1056,28 @@ try {
   if (!nonActiveSlide)
     throw new Error("No non-active slide for exact deletion probe.");
   await edit({ op: "delete_slide", slideIndex: nonActiveSlide.slideIndex });
+  if (engineOperationAvailable("set_sections")) {
+    const splitIndex = observed.slides.length > 1 ? 1 : null;
+    await editWithUndoRoundTrip({
+      op: "set_sections",
+      sections: [
+        {
+          id: "{00000000-0000-4000-8000-000000000101}",
+          name: "Spellbook opening",
+          startSlideIndex: 0,
+        },
+        ...(splitIndex === null
+          ? []
+          : [
+              {
+                id: "{00000000-0000-4000-8000-000000000102}",
+                name: "Spellbook detail",
+                startSlideIndex: splitIndex,
+              },
+            ]),
+      ],
+    });
+  }
 
   const transactionTarget = observed.slides[0].elements.find(
     (element) =>
@@ -1124,9 +1274,7 @@ try {
           dateTimeText: "2026-09-16",
           dateTimeFormat: 18,
           duration:
-            metadataSlide.timing?.highResolutionDuration === 12.5
-              ? 7.25
-              : 12.5,
+            metadataSlide.timing?.highResolutionDuration === 12.5 ? 7.25 : 12.5,
           backgroundObjectsVisible:
             metadataSlide.backgroundObjectsVisible === false,
         },
@@ -1174,6 +1322,43 @@ try {
             paragraph.writingMode === "right-to-left"
               ? "left-to-right"
               : "right-to-left",
+        },
+      });
+    }
+    if (engineOperationAvailable("set_text_language"))
+      await editWithUndoRoundTrip({
+        op: "set_text_language",
+        elementId: propertyTarget.elementId,
+        languageTag:
+          propertyTarget.wholeTextFormatting?.locale?.language === "ko"
+            ? "en-US"
+            : "ko-KR",
+      });
+    if (engineOperationAvailable("set_text_case"))
+      await editWithUndoRoundTrip({
+        op: "set_text_case",
+        elementId: propertyTarget.elementId,
+        textCase:
+          Number(propertyTarget.wholeTextFormatting?.caseMap ?? 0) === 1
+            ? "lowercase"
+            : "uppercase",
+      });
+    if (engineOperationAvailable("set_paragraph_list")) {
+      const paragraph = propertyTarget.paragraphFormats?.[0];
+      if (!paragraph)
+        throw new Error("No observed paragraph for list-format probe.");
+      const listType = paragraph.list ? "none" : "bullet";
+      await editWithUndoRoundTrip({
+        op: "set_paragraph_list",
+        elementId: propertyTarget.elementId,
+        paragraphId: paragraph.paragraphId,
+        paragraphList: {
+          type: listType,
+          level: 0,
+          prefix: "",
+          suffix: "",
+          startWith: 1,
+          bulletCharacter: listType === "bullet" ? "•" : null,
         },
       });
     }

@@ -443,13 +443,17 @@ export async function wopiGetFile(request: Request, documentId: string) {
   return getObject(context.documentObject);
 }
 
-export async function wopiGetImageAsset(
+export async function wopiGetAsset(
   request: Request,
   documentId: string,
   assetId: string,
 ) {
   await requireWopi(request, documentId);
-  if (!/^[0-9a-f-]{36}$/i.test(assetId))
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      assetId,
+    )
+  )
     throw new HttpError(404, "asset_not_found");
   const [asset] = await db()`
     select object_name, content_type from spellbook_assets

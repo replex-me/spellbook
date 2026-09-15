@@ -603,6 +603,33 @@
   gap: 8px;
 }
 
+.native-asset-input {
+  display: none;
+}
+
+.native-composer-left {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.native-asset-button {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  color: var(--ds-text-secondary);
+}
+
+.native-asset-notice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 7px 2px 0;
+  color: var(--ds-success);
+  font-size: 10px;
+}
+
 .native-send {
   display: grid;
   width: 32px;

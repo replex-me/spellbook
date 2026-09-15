@@ -144,6 +144,41 @@ test("native command probe is enabled explicitly per conformance session", async
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
   };
+  const image = await fetch(
+    `${origin}/api/documents/probe/assets/00000000-0000-4000-8000-000000000001`,
+  );
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get("content-type"), "image/png");
+  assert.deepEqual(
+    [...Buffer.from(await image.arrayBuffer()).subarray(0, 8)],
+    [137, 80, 78, 71, 13, 10, 26, 10],
+  );
+  const media = await fetch(
+    `${origin}/api/documents/probe/assets/00000000-0000-4000-8000-000000000002`,
+  );
+  assert.equal(media.status, 200);
+  assert.equal(media.headers.get("content-type"), "audio/wav");
+  const mediaBytes = Buffer.from(await media.arrayBuffer());
+  assert.equal(mediaBytes.subarray(0, 4).toString("ascii"), "RIFF");
+  assert.equal(mediaBytes.subarray(8, 12).toString("ascii"), "WAVE");
+  const replacementImage = await fetch(
+    `${origin}/api/documents/probe/assets/00000000-0000-4000-8000-000000000003`,
+  );
+  assert.equal(replacementImage.status, 200);
+  assert.equal(replacementImage.headers.get("content-type"), "image/png");
+  const replacementMedia = await fetch(
+    `${origin}/api/documents/probe/assets/00000000-0000-4000-8000-000000000004`,
+  );
+  assert.equal(replacementMedia.status, 200);
+  assert.equal(replacementMedia.headers.get("content-type"), "audio/wav");
+  assert.equal(
+    (
+      await fetch(
+        `${origin}/api/documents/probe/assets/00000000-0000-4000-8000-000000000005`,
+      )
+    ).status,
+    404,
+  );
   const pendingProbe = fetch(`${origin}/native/probe`, {
     method: "POST",
     headers,
