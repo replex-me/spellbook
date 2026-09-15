@@ -7,6 +7,7 @@ import type { ModelSettings } from "../../../contracts/ai-models.js";
 import {
   nativeBatchEditSchema,
   nativeCreateOperations,
+  nativeDocumentOperations,
   nativeEditContract,
   nativeEditOperationCount,
   nativeElementOperations,
@@ -204,7 +205,8 @@ export async function runNativeTurn(
     if (
       !operationContract ||
       operationContract.availability === "format_excluded" ||
-      (!nativeSlideOperations.has(operation) &&
+      (!nativeDocumentOperations.has(operation) &&
+        !nativeSlideOperations.has(operation) &&
         !nativeCreateOperations.has(operation) &&
         !nativeMultiElementOperations.has(operation) &&
         !nativeElementOperations.has(operation))
@@ -226,10 +228,16 @@ export async function runNativeTurn(
       throw new Error(
         `${operation}에는 undo-v${operationContract.minEnginePatch} 이상의 편집 엔진이 필요합니다.`,
       );
+    const documentOperation = nativeDocumentOperations.has(operation);
     const slideOperation = nativeSlideOperations.has(operation);
     const createOperation = nativeCreateOperations.has(operation);
     const multiElementOperation = nativeMultiElementOperations.has(operation);
     let slideIndex: number;
+    if (documentOperation) {
+      if (input.permission.mode !== "document")
+        throw new Error("문서 전체 변경 권한이 필요합니다.");
+      return state.activeSlide;
+    }
     if (slideOperation || createOperation) {
       if (
         !Number.isInteger(command.slideIndex) ||

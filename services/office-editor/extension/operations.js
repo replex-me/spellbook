@@ -77,6 +77,8 @@ function spellbookDocumentOperation(request) {
   const styleCatalog = {
     lineDashNames: documentStyleNames("com.sun.star.drawing.DashTable"),
     lineMarkerNames: documentStyleNames("com.sun.star.drawing.MarkerTable"),
+    fillGradientNames: documentStyleNames("com.sun.star.drawing.GradientTable"),
+    fillHatchNames: documentStyleNames("com.sun.star.drawing.HatchTable"),
   };
   const prop = (Name, type, value) =>
     new uno.idl.com.sun.star.beans.PropertyValue({
@@ -259,6 +261,8 @@ function spellbookDocumentOperation(request) {
     const states = collectPropertyStates(shape, [
       ["fillStyle", "FillStyle"],
       ["fill", "FillColor"],
+      ["fillGradientName", "FillGradientName"],
+      ["fillHatchName", "FillHatchName"],
       ["lineColor", "LineColor"],
       ["lineWidth", "LineWidth"],
       ["textVerticalAlignment", "TextVerticalAdjust"],
@@ -285,6 +289,10 @@ function spellbookDocumentOperation(request) {
       ["shadow.offsetX", "ShadowXDistance"],
       ["shadow.offsetY", "ShadowYDistance"],
       ["shadow.blur", "ShadowBlur"],
+      ["effects.glowRadius", "GlowEffectRadius"],
+      ["effects.glowColor", "GlowEffectColor"],
+      ["effects.glowTransparency", "GlowEffectTransparency"],
+      ["effects.softEdgeRadius", "SoftEdgeRadius"],
       ["lineStyle", "LineStyle"],
       ["lineDashName", "LineDashName"],
       ["lineStartName", "LineStartName"],
@@ -350,6 +358,12 @@ function spellbookDocumentOperation(request) {
         fontStyleAsian: enumName(cursor.getPropertyValue("CharPostureAsian")),
         fontStyleComplex: enumName(
           cursor.getPropertyValue("CharPostureComplex"),
+        ),
+        caseMap: cursor.getPropertyValue("CharCaseMap"),
+        locale: localeDetails(cursor.getPropertyValue("CharLocale")),
+        localeAsian: localeDetails(cursor.getPropertyValue("CharLocaleAsian")),
+        localeComplex: localeDetails(
+          cursor.getPropertyValue("CharLocaleComplex"),
         ),
       };
     } catch (_) {
@@ -577,6 +591,36 @@ function spellbookDocumentOperation(request) {
       return null;
     }
   };
+  const localeDetails = (value) =>
+    value && typeof value === "object"
+      ? {
+          language: String(value.Language ?? ""),
+          country: String(value.Country ?? ""),
+          variant: String(value.Variant ?? ""),
+        }
+      : null;
+  const paragraphListDetails = (paragraph) => {
+    const level = Number(safeProperty(paragraph, "NumberingLevel"));
+    const rules = safeProperty(paragraph, "NumberingRules");
+    if (!Number.isInteger(level) || level < 0 || !rules) return null;
+    try {
+      const values = Array.from(rules.getByIndex(level));
+      const byName = Object.fromEntries(
+        values.map((entry) => [entry.Name, normalizeUnoValue(entry.Value)]),
+      );
+      return {
+        level,
+        numberingType: Number(byName.NumberingType ?? 0),
+        prefix: String(byName.Prefix ?? ""),
+        suffix: String(byName.Suffix ?? ""),
+        startWith: Number(byName.StartWith ?? 1),
+        bulletCharacter:
+          typeof byName.BulletChar === "string" ? byName.BulletChar : null,
+      };
+    } catch (_) {
+      return null;
+    }
+  };
   const textDetails = (shape, elementId) => {
     try {
       const paragraphs = [];
@@ -626,9 +670,14 @@ function spellbookDocumentOperation(request) {
               ),
               escapement: safeProperty(portion, "CharEscapement"),
               escapementHeight: safeProperty(portion, "CharEscapementHeight"),
-              locale: safeProperty(portion, "CharLocale"),
-              localeAsian: safeProperty(portion, "CharLocaleAsian"),
-              localeComplex: safeProperty(portion, "CharLocaleComplex"),
+              caseMap: safeProperty(portion, "CharCaseMap"),
+              locale: localeDetails(safeProperty(portion, "CharLocale")),
+              localeAsian: localeDetails(
+                safeProperty(portion, "CharLocaleAsian"),
+              ),
+              localeComplex: localeDetails(
+                safeProperty(portion, "CharLocaleComplex"),
+              ),
             });
             paragraphOffset += text.length;
             portionIndex++;
@@ -651,6 +700,7 @@ function spellbookDocumentOperation(request) {
           bottomMargin: safeProperty(paragraph, "ParaBottomMargin"),
           lineSpacing: safeProperty(paragraph, "ParaLineSpacing"),
           writingMode: writingModeName(safeProperty(paragraph, "WritingMode")),
+          list: paragraphListDetails(paragraph),
           portions,
         });
         // UNO paragraph enumeration omits the paragraph separator from each
@@ -683,6 +733,7 @@ function spellbookDocumentOperation(request) {
           topMargin: safeProperty(paragraph, "ParaTopMargin"),
           bottomMargin: safeProperty(paragraph, "ParaBottomMargin"),
           writingMode: writingModeName(safeProperty(paragraph, "WritingMode")),
+          list: paragraphListDetails(paragraph),
         });
         paragraphIndex++;
       }
@@ -1232,6 +1283,76 @@ function spellbookDocumentOperation(request) {
       childCount: childCount(shape),
     };
   };
+  const connectorDetails = (shape, shapeKind) => {
+    if (!String(shapeKind).endsWith("ConnectorShape")) return null;
+    const point = (value) =>
+      value && Number.isFinite(Number(value.X)) && Number.isFinite(Number(value.Y))
+        ? { x: Number(value.X), y: Number(value.Y) }
+        : null;
+    return {
+      kind: enumName(safeProperty(shape, "EdgeKind")),
+      start: point(safeProperty(shape, "StartPosition")),
+      end: point(safeProperty(shape, "EndPosition")),
+      startConnected: Boolean(safeProperty(shape, "EdgeStartConnection")),
+      endConnected: Boolean(safeProperty(shape, "EdgeEndConnection")),
+      startGluePoint: safeProperty(shape, "EdgeStartGluePointIndex"),
+      endGluePoint: safeProperty(shape, "EdgeEndGluePointIndex"),
+    };
+  };
+  const freeformDetails = (shape, shapeKind) => {
+    if (!/(?:PolyPolygon|PolyLine|OpenBezier|ClosedBezier)/u.test(shapeKind))
+      return null;
+    const polygons = safeProperty(shape, "PolyPolygon");
+    if (!polygons || typeof polygons[Symbol.iterator] !== "function") return null;
+    try {
+      return Array.from(polygons, (polygon) =>
+        Array.from(polygon, (point) => ({ x: Number(point.X), y: Number(point.Y) })),
+      );
+    } catch (_) {
+      return null;
+    }
+  };
+  const mediaDetails = (shape, shapeKind) => {
+    const mediaUrl = safeProperty(shape, "MediaURL");
+    if (!mediaUrl && !String(shapeKind).endsWith("MediaShape")) return null;
+    return {
+      urlKind:
+        typeof mediaUrl !== "string" || !mediaUrl
+          ? null
+          : mediaUrl.startsWith("vnd.sun.star.Package:")
+            ? "embedded"
+            : mediaUrl.startsWith("file:")
+              ? "local-linked"
+              : "external-linked",
+      mimeType: safeProperty(shape, "MediaMimeType"),
+      loop: safeProperty(shape, "Loop"),
+      muted: safeProperty(shape, "Mute"),
+      volumeDb: safeProperty(shape, "VolumeDB"),
+      zoom: enumName(safeProperty(shape, "Zoom")),
+    };
+  };
+  const slideComments = (page) => {
+    const comments = [];
+    try {
+      const enumeration = page.createAnnotationEnumeration();
+      let index = 0;
+      while (enumeration.hasMoreElements()) {
+        const annotation = enumeration.nextElement();
+        const position = safeCall(annotation, "getPosition", null);
+        const textRange = safeCall(annotation, "getTextRange", null);
+        comments.push({
+          commentIndex: index,
+          author: safeCall(annotation, "getAuthor", ""),
+          initials: safeCall(annotation, "getInitials", ""),
+          text: safeCall(textRange, "getString", ""),
+          x: position ? Math.round(Number(position.X) * 100) : null,
+          y: position ? Math.round(Number(position.Y) * 100) : null,
+        });
+        index += 1;
+      }
+    } catch (_) {}
+    return comments;
+  };
   const resolveShape = (elementId) => {
     const path = elementId.split("/").map(Number);
     let container = pages.getByIndex(path.shift());
@@ -1323,6 +1444,8 @@ function spellbookDocumentOperation(request) {
             rotation: safeProperty(shape, "RotateAngle"),
             fillStyle: enumName(safeProperty(shape, "FillStyle")),
             fill: safeProperty(shape, "FillColor"),
+            fillGradientName: safeProperty(shape, "FillGradientName"),
+            fillHatchName: safeProperty(shape, "FillHatchName"),
             lineColor: safeProperty(shape, "LineColor"),
             lineWidth: safeProperty(shape, "LineWidth"),
             fontFamily: safeProperty(shape, "CharFontName"),
@@ -1372,6 +1495,12 @@ function spellbookDocumentOperation(request) {
               offsetY: safeProperty(shape, "ShadowYDistance"),
               blur: safeProperty(shape, "ShadowBlur"),
             },
+            effects: {
+              glowRadius: safeProperty(shape, "GlowEffectRadius"),
+              glowColor: safeProperty(shape, "GlowEffectColor"),
+              glowTransparency: safeProperty(shape, "GlowEffectTransparency"),
+              softEdgeRadius: safeProperty(shape, "SoftEdgeRadius"),
+            },
             lineStyle: enumName(safeProperty(shape, "LineStyle")),
             lineDashName: safeProperty(shape, "LineDashName"),
             lineStartName: safeProperty(shape, "LineStartName"),
@@ -1387,6 +1516,10 @@ function spellbookDocumentOperation(request) {
             table: tableDetails(shape),
             chart: chartDetails(shape),
             diagram: diagramDetails(shape, shapeName),
+            connector: connectorDetails(shape, shapeKind),
+            freeform: freeformDetails(shape, shapeKind),
+            media: mediaDetails(shape, shapeKind),
+            readingOrder: safeProperty(shape, "NavigationOrder"),
           });
           if (children) visit(shape, elementId, elementId, stableId);
         }
@@ -1397,6 +1530,31 @@ function spellbookDocumentOperation(request) {
         null,
         `slide:${encodeURIComponent(page.getName() || String(slideIndex))}`,
       );
+      for (const element of elements) {
+        if (!element.connector) continue;
+        const connectorShape = shapeReferences.find(
+          (entry) => entry.elementId === element.elementId,
+        )?.shape;
+        if (!connectorShape) continue;
+        for (const [propertyName, fieldName] of [
+          ["EdgeStartConnection", "startElementId"],
+          ["EdgeEndConnection", "endElementId"],
+        ]) {
+          const connected = safeProperty(connectorShape, propertyName);
+          if (!connected) {
+            element.connector[fieldName] = null;
+            continue;
+          }
+          element.connector[fieldName] =
+            shapeReferences.find((entry) => {
+              try {
+                return uno.sameUnoObject(entry.shape, connected);
+              } catch (_) {
+                return false;
+              }
+            })?.elementId ?? null;
+        }
+      }
       const background = safeProperty(page, "Background");
       const layoutIssues = [];
       const pageWidth = page.getPropertyValue("Width");
@@ -1534,6 +1692,7 @@ function spellbookDocumentOperation(request) {
           }
         })(),
         speakerNotes: notesDetails(page),
+        comments: slideComments(page),
         transition: {
           type: safeProperty(page, "TransitionType"),
           subtype: safeProperty(page, "TransitionSubtype"),
@@ -2413,9 +2572,172 @@ function spellbookDocumentOperation(request) {
         Math.min(after.activeSlide, after.slides.length - 1),
       );
     }
-    const createOperation = ["add_text_box", "add_shape", "add_table"].includes(
-      command.op,
-    );
+    const commentOperation = [
+      "add_comment",
+      "edit_comment",
+      "delete_comment",
+    ].includes(command.op);
+    if (commentOperation) {
+      const slideIndex = command.slideIndex;
+      if (
+        !Number.isInteger(slideIndex) ||
+        slideIndex < 0 ||
+        slideIndex >= before.slides.length
+      )
+        throw new Error("invalid_slide_target");
+      if (
+        permission.mode !== "document" &&
+        !(
+          permission.mode === "slides" &&
+          permission.slideIndexes.includes(slideIndex)
+        )
+      )
+        throw new Error("outside_edit_permission");
+      const validText =
+        typeof command.text === "string" &&
+        command.text.length <= 10000 &&
+        !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(command.text);
+      const validAuthor =
+        typeof command.author === "string" &&
+        command.author.trim().length > 0 &&
+        command.author.length <= 255;
+      if (command.op !== "delete_comment" && (!validText || !validAuthor))
+        throw new Error("invalid_comment");
+      if (
+        command.op === "add_comment" &&
+        (!Number.isFinite(command.x) ||
+          command.x < 0 ||
+          command.x > before.slides[slideIndex].width ||
+          !Number.isFinite(command.y) ||
+          command.y < 0 ||
+          command.y > before.slides[slideIndex].height)
+      )
+        throw new Error("invalid_comment_position");
+      const comments = before.slides[slideIndex].comments ?? [];
+      let observedComment = null;
+      if (command.op !== "add_comment") {
+        if (
+          !Number.isInteger(command.commentIndex) ||
+          command.commentIndex < 0 ||
+          command.commentIndex >= comments.length
+        )
+          throw new Error("invalid_comment_target");
+        observedComment = comments[command.commentIndex];
+        if (
+          typeof command.expectedText !== "string" ||
+          observedComment.text !== command.expectedText
+        )
+          throw new Error("observed_comment_changed");
+      }
+      if (
+        command.op === "edit_comment" &&
+        observedComment.text === command.text &&
+        observedComment.author === command.author.trim()
+      )
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, before.activeSlide);
+      const page = pages.getByIndex(slideIndex);
+      const enumerate = () => {
+        const values = [];
+        const enumeration = page.createAnnotationEnumeration();
+        while (enumeration.hasMoreElements())
+          values.push(enumeration.nextElement());
+        return values;
+      };
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      const ownsUndoContext = !request.transactionActive;
+      let undoContextOpen = false;
+      try {
+        if (ownsUndoContext) {
+          undo.enterUndoContext(
+            command.op === "add_comment"
+              ? "AI add comment"
+              : command.op === "edit_comment"
+                ? "AI edit comment"
+                : "AI delete comment",
+          );
+          undoContextOpen = true;
+        }
+        if (command.op === "add_comment") {
+          const annotation = page.createAndInsertAnnotation();
+          annotation.setAuthor(command.author.trim());
+          annotation.setInitials(
+            typeof command.initials === "string"
+              ? command.initials.slice(0, 16)
+              : "AI",
+          );
+          annotation.setPosition(
+            new uno.idl.com.sun.star.geometry.RealPoint2D({
+              X: command.x / 100,
+              Y: command.y / 100,
+            }),
+          );
+          annotation.getTextRange().setString(command.text);
+        } else {
+          const annotations = enumerate();
+          const annotation = annotations[command.commentIndex];
+          if (
+            !annotation ||
+            annotation.getTextRange().getString() !== command.expectedText
+          )
+            throw new Error("observed_comment_changed");
+          if (command.op === "delete_comment") page.removeAnnotation(annotation);
+          else {
+            annotation.setAuthor(command.author.trim());
+            if (typeof command.initials === "string")
+              annotation.setInitials(command.initials.slice(0, 16));
+            annotation.getTextRange().setString(command.text);
+          }
+        }
+        if (undoContextOpen) {
+          undo.leaveUndoContext();
+          undoContextOpen = false;
+        }
+        const after = read(slideIndex);
+        const afterComments = after.slides[slideIndex].comments ?? [];
+        const applied =
+          command.op === "add_comment"
+            ? afterComments.length === comments.length + 1 &&
+              afterComments.at(-1)?.text === command.text &&
+              afterComments.at(-1)?.author === command.author.trim()
+            : command.op === "delete_comment"
+              ? afterComments.length === comments.length - 1 &&
+                !afterComments.some(
+                  (comment) =>
+                    comment.text === command.expectedText &&
+                    comment.commentIndex === command.commentIndex,
+                )
+              : afterComments[command.commentIndex]?.text === command.text &&
+                afterComments[command.commentIndex]?.author ===
+                  command.author.trim();
+        if (
+          !applied ||
+          (!request.transactionActive &&
+            undo.getAllUndoActionTitles().length - undoCount !== 1)
+        )
+          throw new Error(
+            !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+          );
+        return result(after, slideIndex);
+      } catch (error) {
+        if (undoContextOpen) {
+          try {
+            undo.leaveUndoContext();
+          } catch (_) {}
+        }
+        if (!request.transactionActive)
+          while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw error;
+      }
+    }
+    const createOperation = [
+      "add_text_box",
+      "add_shape",
+      "add_table",
+      "add_connector",
+      "add_freeform",
+    ].includes(command.op);
     if (createOperation) {
       const slideIndex = command.slideIndex;
       const finite = (value, min, max) =>
@@ -2458,6 +2780,34 @@ function spellbookDocumentOperation(request) {
       )
         throw new Error("invalid_shape");
       if (
+        command.op === "add_connector" &&
+        !["standard", "curve", "straight"].includes(command.connectorKind)
+      )
+        throw new Error("invalid_connector");
+      if (
+        command.op === "add_freeform" &&
+        (!Array.isArray(command.points) ||
+          command.points.length < 2 ||
+          command.points.length > 200 ||
+          command.points.some(
+            (point) =>
+              !point ||
+              typeof point !== "object" ||
+              Array.isArray(point) ||
+              !Number.isFinite(point.x) ||
+              !Number.isFinite(point.y) ||
+              point.x < 0 ||
+              point.x > command.width ||
+              point.y < 0 ||
+              point.y > command.height,
+          ) ||
+          typeof command.closed !== "boolean" ||
+          !Number.isInteger(command.color) ||
+          command.color < 0 ||
+          command.color > 16777215)
+      )
+        throw new Error("invalid_freeform");
+      if (
         command.op === "add_table" &&
         (!Array.isArray(command.cells) ||
           command.cells.length < 1 ||
@@ -2483,6 +2833,10 @@ function spellbookDocumentOperation(request) {
           ? "Text Box"
           : command.op === "add_table"
             ? "Table"
+            : command.op === "add_connector"
+              ? "Connector"
+              : command.op === "add_freeform"
+                ? "Freeform"
             : {
                 rectangle: "Rectangle",
                 ellipse: "Oval",
@@ -2640,6 +2994,12 @@ function spellbookDocumentOperation(request) {
       const service =
         command.op === "add_text_box"
           ? "com.sun.star.drawing.TextShape"
+          : command.op === "add_connector"
+            ? "com.sun.star.drawing.ConnectorShape"
+            : command.op === "add_freeform"
+              ? command.closed
+                ? "com.sun.star.drawing.PolyPolygonShape"
+                : "com.sun.star.drawing.PolyLineShape"
           : {
               rectangle: "com.sun.star.drawing.RectangleShape",
               ellipse: "com.sun.star.drawing.EllipseShape",
@@ -2658,7 +3018,39 @@ function spellbookDocumentOperation(request) {
           Height: Math.round(command.height),
         }),
       );
-      if (command.op !== "add_text_box" && command.geometry === "line")
+      if (command.op === "add_connector") {
+        const css = uno.idl.com.sun.star;
+        const connectorType = {
+          standard: css.drawing.ConnectorType.STANDARD,
+          curve: css.drawing.ConnectorType.CURVE,
+          straight: css.drawing.ConnectorType.LINE,
+        }[command.connectorKind];
+        shape.setPropertyValue(
+          "EdgeKind",
+          new uno.Any(uno.type.enum(css.drawing.ConnectorType), connectorType),
+        );
+      } else if (command.op === "add_freeform") {
+        const pointType = uno.type.struct(uno.idl.com.sun.star.awt.Point);
+        shape.setPropertyValue(
+          "PolyPolygon",
+          new uno.Any(
+            uno.type.sequence(uno.type.sequence(pointType)),
+            [
+              command.points.map(
+                (point) =>
+                  new uno.idl.com.sun.star.awt.Point({
+                    X: Math.round(point.x),
+                    Y: Math.round(point.y),
+                  }),
+              ),
+            ],
+          ),
+        );
+        shape.setPropertyValue(
+          command.closed ? "FillColor" : "LineColor",
+          new uno.Any(uno.type.long, command.color),
+        );
+      } else if (command.op !== "add_text_box" && command.geometry === "line")
         shape.setPropertyValue(
           "LineColor",
           new uno.Any(uno.type.long, command.color),
@@ -2681,7 +3073,13 @@ function spellbookDocumentOperation(request) {
       try {
         if (ownsUndoContext) {
           undo.enterUndoContext(
-            command.op === "add_text_box" ? "AI add text box" : "AI add shape",
+            command.op === "add_text_box"
+              ? "AI add text box"
+              : command.op === "add_connector"
+                ? "AI add connector"
+                : command.op === "add_freeform"
+                  ? "AI add freeform"
+                  : "AI add shape",
           );
           undoContextOpen = true;
         }
@@ -2746,6 +3144,10 @@ function spellbookDocumentOperation(request) {
       const contentApplied =
         command.op === "add_text_box"
           ? created?.text === command.text
+          : command.op === "add_connector"
+            ? created?.connector !== null
+          : command.op === "add_freeform"
+            ? created?.freeform !== null
           : command.geometry === "line"
             ? created?.lineColor === Math.round(command.color)
             : created?.fill === Math.round(command.color);
@@ -3391,6 +3793,107 @@ function spellbookDocumentOperation(request) {
       return result(after, slideIndex);
     }
 
+    if (command.op === "set_paragraph_list") {
+      if (!runtimeSupports(command.op) && !hasEnginePatch(23))
+        throw new Error("native_engine_paragraph_list_patch_required");
+      const list = command.paragraphList;
+      if (
+        !element.text ||
+        typeof command.paragraphId !== "string" ||
+        !list ||
+        typeof list !== "object" ||
+        Array.isArray(list) ||
+        Object.keys(list).some(
+          (name) =>
+            ![
+              "type",
+              "level",
+              "prefix",
+              "suffix",
+              "startWith",
+              "bulletCharacter",
+            ].includes(name),
+        ) ||
+        !["none", "bullet", "number"].includes(list.type) ||
+        !Number.isInteger(list.level) ||
+        list.level < 0 ||
+        list.level > 9 ||
+        typeof list.prefix !== "string" ||
+        list.prefix.length > 32 ||
+        typeof list.suffix !== "string" ||
+        list.suffix.length > 32 ||
+        !Number.isInteger(list.startWith) ||
+        list.startWith < 1 ||
+        list.startWith > 32767 ||
+        (list.type === "bullet" &&
+          (typeof list.bulletCharacter !== "string" ||
+            [...list.bulletCharacter].length !== 1))
+      )
+        throw new Error("invalid_paragraph_list");
+      const paragraph = element.paragraphFormats?.find(
+        (candidate) => candidate.paragraphId === command.paragraphId,
+      );
+      if (!paragraph) throw new Error("observed_paragraph_not_found");
+      const beforeList = paragraph.list;
+      const unchanged =
+        list.type === "none"
+          ? beforeList === null
+          : beforeList?.level === list.level &&
+            beforeList.prefix === list.prefix &&
+            beforeList.suffix === list.suffix &&
+            beforeList.startWith === list.startWith &&
+            (list.type !== "bullet" ||
+              beforeList.bulletCharacter === list.bulletCharacter);
+      if (unchanged) return result(before, slideIndex);
+      if (request.dryRun) return result(before, slideIndex);
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      const objectPath = command.elementId.split("/").slice(1).join("/");
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        {
+          [`SetParagraphProperties.${objectPath}`]: {
+            Paragraph: paragraph.paragraphIndex,
+            ListType: list.type,
+            Level: list.level,
+            Prefix: list.prefix,
+            Suffix: list.suffix,
+            StartWith: list.startWith,
+            ...(list.type === "bullet"
+              ? { BulletCharacter: list.bulletCharacter }
+              : {}),
+          },
+        },
+      ]);
+      const after = read(slideIndex);
+      const afterParagraph = after.slides[slideIndex]?.elements
+        .find((candidate) => candidate.elementId === command.elementId)
+        ?.paragraphFormats?.find(
+          (candidate) => candidate.paragraphIndex === paragraph.paragraphIndex,
+        );
+      const afterList = afterParagraph?.list ?? null;
+      const applied =
+        list.type === "none"
+          ? afterList === null
+          : afterList?.level === list.level &&
+            afterList.prefix === list.prefix &&
+            afterList.suffix === list.suffix &&
+            afterList.startWith === list.startWith &&
+            (list.type !== "bullet" ||
+              afterList.bulletCharacter === list.bulletCharacter);
+      if (
+        !applied ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length <= undoCount)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        );
+      }
+      return result(after, slideIndex);
+    }
+
     if (command.op === "replace_text_range") {
       if (!patchedTextRangeEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_text_range_patch_required");
@@ -3658,11 +4161,261 @@ function spellbookDocumentOperation(request) {
       return result(after, slideIndex);
     }
 
+    if (["set_text_language", "set_text_case"].includes(command.op)) {
+      if (!runtimeSupports(command.op) && !hasEnginePatch(23))
+        throw new Error("native_engine_text_semantics_patch_required");
+      if (element.text === null)
+        throw new Error("unsupported_text_target");
+      let payload;
+      let matches;
+      if (command.op === "set_text_language") {
+        if (
+          typeof command.languageTag !== "string" ||
+          !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/u.test(
+            command.languageTag,
+          )
+        )
+          throw new Error("invalid_text_language");
+        const parts = command.languageTag.split("-");
+        const locale = {
+          language: parts[0].toLowerCase(),
+          country:
+            parts.length > 1 && /^[A-Za-z]{2}$/u.test(parts.at(-1))
+              ? parts.at(-1).toUpperCase()
+              : "",
+          variant:
+            parts.length > 1 && !/^[A-Za-z]{2}$/u.test(parts.at(-1))
+              ? parts.slice(1).join("-")
+              : parts.length > 2
+                ? parts.slice(1, -1).join("-")
+                : "",
+        };
+        payload = { LanguageTag: command.languageTag };
+        matches = (formatting) =>
+          [formatting?.locale, formatting?.localeAsian, formatting?.localeComplex].every(
+            (value) => stableJson(value) === stableJson(locale),
+          );
+      } else {
+        const caseMap = {
+          none: 0,
+          uppercase: 1,
+          lowercase: 2,
+          title: 3,
+          small_caps: 4,
+        }[command.textCase];
+        if (caseMap === undefined) throw new Error("invalid_text_case");
+        payload = { CaseMap: command.textCase };
+        matches = (formatting) => Number(formatting?.caseMap) === caseMap;
+      }
+      if (matches(element.wholeTextFormatting))
+        return result(before, slideIndex);
+      if (request.dryRun) return result(before, slideIndex);
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      const objectPath = command.elementId.split("/").slice(1).join("/");
+      transformSlides([
+        { JumpToSlide: slideIndex },
+        { [`SetTextProperties.${objectPath}`]: payload },
+      ]);
+      const after = read(slideIndex);
+      const target = after.slides[slideIndex]?.elements.find(
+        (candidate) => candidate.elementId === command.elementId,
+      );
+      const applied = matches(target?.wholeTextFormatting);
+      if (
+        !applied ||
+        (!request.transactionActive &&
+          undo.getAllUndoActionTitles().length <= undoCount)
+      ) {
+        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw new Error(
+          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
+        );
+      }
+      return result(after, slideIndex);
+    }
+
+    if (command.op === "set_connector") {
+      if (!runtimeSupports(command.op) && !hasEnginePatch(23))
+        throw new Error("native_engine_connector_patch_required");
+      const connector = command.connector;
+      if (
+        !element.connector ||
+        !connector ||
+        typeof connector !== "object" ||
+        Array.isArray(connector) ||
+        Object.keys(connector).some(
+          (name) =>
+            ![
+              "kind",
+              "start",
+              "end",
+              "startElementId",
+              "endElementId",
+              "startGluePoint",
+              "endGluePoint",
+            ].includes(name),
+        ) ||
+        !["standard", "curve", "straight"].includes(connector.kind) ||
+        !connector.start ||
+        !connector.end ||
+        ![connector.start, connector.end].every(
+          (point) =>
+            typeof point === "object" &&
+            !Array.isArray(point) &&
+            Number.isFinite(point.x) &&
+            point.x >= -100000 &&
+            point.x <= 100000 &&
+            Number.isFinite(point.y) &&
+            point.y >= -100000 &&
+            point.y <= 100000,
+        )
+      )
+        throw new Error("invalid_connector");
+      const pageElementIds = new Set(
+        before.slides[slideIndex].elements
+          .filter((candidate) => candidate.parentElementId === null)
+          .map((candidate) => candidate.elementId),
+      );
+      for (const name of ["startElementId", "endElementId"])
+        if (
+          connector[name] !== null &&
+          connector[name] !== undefined &&
+          (!pageElementIds.has(connector[name]) ||
+            connector[name] === command.elementId)
+        )
+          throw new Error("invalid_connector_target");
+      for (const name of ["startGluePoint", "endGluePoint"])
+        if (
+          connector[name] !== null &&
+          connector[name] !== undefined &&
+          (!Number.isInteger(connector[name]) ||
+            connector[name] < -1 ||
+            connector[name] > 65535)
+        )
+          throw new Error("invalid_connector_glue_point");
+      const kindToken = {
+        standard: "STANDARD",
+        curve: "CURVE",
+        straight: "LINE",
+      }[connector.kind];
+      const pointMatches = (actual, expected) =>
+        actual?.x === Math.round(expected.x) &&
+        actual?.y === Math.round(expected.y);
+      const matches = (actual) =>
+        enumToken(actual?.kind) === kindToken &&
+        pointMatches(actual?.start, connector.start) &&
+        pointMatches(actual?.end, connector.end) &&
+        (connector.startElementId === null ||
+          connector.startElementId === undefined ||
+          actual?.startElementId === connector.startElementId) &&
+        (connector.endElementId === null ||
+          connector.endElementId === undefined ||
+          actual?.endElementId === connector.endElementId) &&
+        (connector.startGluePoint === null ||
+          connector.startGluePoint === undefined ||
+          actual?.startGluePoint === connector.startGluePoint) &&
+        (connector.endGluePoint === null ||
+          connector.endGluePoint === undefined ||
+          actual?.endGluePoint === connector.endGluePoint);
+      if (matches(element.connector)) return result(before, slideIndex);
+      if (request.dryRun) return result(before, slideIndex);
+      const shape = resolveShape(command.elementId);
+      const css = uno.idl.com.sun.star;
+      const undo = model.getUndoManager();
+      const undoCount = undo.getAllUndoActionTitles().length;
+      const ownsUndoContext = !request.transactionActive;
+      let undoContextOpen = false;
+      try {
+        if (ownsUndoContext) {
+          undo.enterUndoContext("AI set connector");
+          undoContextOpen = true;
+        }
+        shape.setPropertyValue(
+          "EdgeKind",
+          new uno.Any(
+            uno.type.enum(css.drawing.ConnectorType),
+            {
+              standard: css.drawing.ConnectorType.STANDARD,
+              curve: css.drawing.ConnectorType.CURVE,
+              straight: css.drawing.ConnectorType.LINE,
+            }[connector.kind],
+          ),
+        );
+        for (const [name, point] of [
+          ["StartPosition", connector.start],
+          ["EndPosition", connector.end],
+        ])
+          shape.setPropertyValue(
+            name,
+            new uno.Any(
+              uno.type.struct(css.awt.Point),
+              new css.awt.Point({
+                X: Math.round(point.x),
+                Y: Math.round(point.y),
+              }),
+            ),
+          );
+        for (const [inputName, propertyName] of [
+          ["startElementId", "EdgeStartConnection"],
+          ["endElementId", "EdgeEndConnection"],
+        ]) {
+          if (typeof connector[inputName] !== "string") continue;
+          shape.setPropertyValue(
+            propertyName,
+            new uno.Any(
+              uno.type.interface(css.drawing.XShape),
+              resolveShape(connector[inputName]),
+            ),
+          );
+        }
+        for (const [inputName, propertyName] of [
+          ["startGluePoint", "EdgeStartGluePointIndex"],
+          ["endGluePoint", "EdgeEndGluePointIndex"],
+        ])
+          if (Number.isInteger(connector[inputName]))
+            shape.setPropertyValue(
+              propertyName,
+              new uno.Any(uno.type.long, connector[inputName]),
+            );
+        if (undoContextOpen) {
+          undo.leaveUndoContext();
+          undoContextOpen = false;
+        }
+        const after = read(slideIndex);
+        const target = after.slides[slideIndex].elements.find(
+          (candidate) => candidate.elementId === command.elementId,
+        );
+        if (
+          !matches(target?.connector) ||
+          (!request.transactionActive &&
+            undo.getAllUndoActionTitles().length - undoCount !== 1)
+        )
+          throw new Error(
+            !matches(target?.connector)
+              ? "native_command_not_applied"
+              : "native_undo_not_recorded",
+          );
+        return result(after, slideIndex);
+      } catch (error) {
+        if (undoContextOpen) {
+          try {
+            undo.leaveUndoContext();
+          } catch (_) {}
+        }
+        if (!request.transactionActive)
+          while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw error;
+      }
+    }
+
     const objectPropertyOperations = new Set([
       "set_alt_text",
       "set_shape_name",
       "set_text_box",
       "set_shape_shadow",
+      "set_shape_fill",
+      "set_shape_effects",
       "set_object_lock",
       "set_line_style",
       "set_printable",
@@ -3773,6 +4526,98 @@ function spellbookDocumentOperation(request) {
           properties.ShadowYDistance = Math.round(command.shadowOffsetY);
         if (command.shadowBlur !== null && command.shadowBlur !== undefined)
           properties.ShadowBlur = Math.round(command.shadowBlur);
+      } else if (command.op === "set_shape_fill") {
+        const fillType = command.shapeFill?.type;
+        const fillStyle = { none: 0, solid: 1, gradient: 2, hatch: 3 }[
+          fillType
+        ];
+        if (
+          fillStyle === undefined ||
+          !command.shapeFill ||
+          typeof command.shapeFill !== "object" ||
+          Array.isArray(command.shapeFill) ||
+          Object.keys(command.shapeFill).some(
+            (name) => !["type", "color", "opacity", "catalogName"].includes(name),
+          )
+        )
+          throw new Error("invalid_shape_fill");
+        const { color, opacity, catalogName } = command.shapeFill;
+        if (
+          fillType === "solid" &&
+          (!Number.isInteger(color) || color < 0 || color > 16777215)
+        )
+          throw new Error("invalid_shape_fill");
+        if (
+          opacity !== null &&
+          opacity !== undefined &&
+          !finite(opacity, 0, 100)
+        )
+          throw new Error("invalid_shape_fill");
+        if (["gradient", "hatch"].includes(fillType)) {
+          const names =
+            fillType === "gradient"
+              ? styleCatalog.fillGradientNames
+              : styleCatalog.fillHatchNames;
+          if (
+            typeof catalogName !== "string" ||
+            !catalogName ||
+            !names.includes(catalogName)
+          )
+            throw new Error("fill_style_name_not_in_document_catalog");
+          properties[
+            fillType === "gradient" ? "FillGradientName" : "FillHatchName"
+          ] = catalogName;
+        }
+        properties.FillStyle = fillStyle;
+        if (fillType === "solid") properties.FillColor = color;
+        if (opacity !== null && opacity !== undefined)
+          properties.FillTransparence = 100 - Math.round(opacity);
+      } else if (command.op === "set_shape_effects") {
+        const effects = command.shapeEffects;
+        if (
+          !effects ||
+          typeof effects !== "object" ||
+          Array.isArray(effects) ||
+          Object.keys(effects).some(
+            (name) =>
+              ![
+                "glowRadius",
+                "glowColor",
+                "glowOpacity",
+                "softEdgeRadius",
+              ].includes(name),
+          )
+        )
+          throw new Error("invalid_shape_effects");
+        for (const [name, value, min, max] of [
+          ["glowRadius", effects.glowRadius, 0, 100000],
+          ["softEdgeRadius", effects.softEdgeRadius, 0, 100000],
+          ["glowOpacity", effects.glowOpacity, 0, 100],
+        ]) {
+          if (value === null || value === undefined) continue;
+          if (!finite(value, min, max)) throw new Error("invalid_shape_effects");
+          properties[
+            name === "glowRadius"
+              ? "GlowEffectRadius"
+              : name === "softEdgeRadius"
+                ? "SoftEdgeRadius"
+                : "GlowEffectTransparency"
+          ] =
+            name === "glowOpacity"
+              ? 100 - Math.round(value)
+              : Math.round(value);
+        }
+        if (effects.glowColor !== null && effects.glowColor !== undefined) {
+          if (
+            !Number.isInteger(effects.glowColor) ||
+            effects.glowColor < 0 ||
+            effects.glowColor > 16777215
+          )
+            throw new Error("invalid_shape_effects");
+          properties.GlowEffectColor = effects.glowColor;
+        }
+        if (!Object.keys(properties).length)
+          throw new Error("no_shape_effects_supplied");
       } else if (command.op === "set_object_lock") {
         if (
           !optionalBoolean(command.lockPosition) ||
@@ -3840,6 +4685,14 @@ function spellbookDocumentOperation(request) {
         ShadowXDistance: ["shadow", "offsetX"],
         ShadowYDistance: ["shadow", "offsetY"],
         ShadowBlur: ["shadow", "blur"],
+        FillGradientName: "fillGradientName",
+        FillHatchName: "fillHatchName",
+        FillColor: "fill",
+        FillTransparence: (value) => 100 - Number(value),
+        GlowEffectRadius: ["effects", "glowRadius"],
+        GlowEffectColor: ["effects", "glowColor"],
+        GlowEffectTransparency: ["effects", "glowTransparency"],
+        SoftEdgeRadius: ["effects", "softEdgeRadius"],
         MoveProtect: "moveProtected",
         SizeProtect: "sizeProtected",
         LineDashName: "lineDashName",
@@ -3852,8 +4705,19 @@ function spellbookDocumentOperation(request) {
           (candidate, key) => candidate?.[key],
           value,
         );
-      const unchanged = Object.entries(properties).every(
-        ([name, value]) => readPath(element, expected[name]) === value,
+      const propertyMatches = (target, name, value) => {
+        if (name === "FillStyle")
+          return (
+            { NONE: 0, SOLID: 1, GRADIENT: 2, HATCH: 3, BITMAP: 4 }[
+              enumToken(target.fillStyle)
+            ] === value
+          );
+        const path = expected[name];
+        if (typeof path === "function") return path(value) === target.fillOpacity;
+        return readPath(target, path) === value;
+      };
+      const unchanged = Object.entries(properties).every(([name, value]) =>
+        propertyMatches(element, name, value),
       );
       if (unchanged) return result(before, slideIndex);
       if (request.dryRun) return result(before, before.activeSlide);
@@ -3870,8 +4734,8 @@ function spellbookDocumentOperation(request) {
       );
       const applied =
         target &&
-        Object.entries(properties).every(
-          ([name, value]) => readPath(target, expected[name]) === value,
+        Object.entries(properties).every(([name, value]) =>
+          propertyMatches(target, name, value),
         );
       if (
         !applied ||

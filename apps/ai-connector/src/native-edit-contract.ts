@@ -19,6 +19,7 @@ interface NativeEditContract {
     ordering: string;
   };
   operationGroups: {
+    document: string[];
     slide: string[];
     create: string[];
     multiElement: string[];
@@ -100,6 +101,9 @@ if (
 
 export const nativeSlideOperations = new Set(
   nativeEditContract.operationGroups.slide,
+);
+export const nativeDocumentOperations = new Set(
+  nativeEditContract.operationGroups.document,
 );
 export const nativeCreateOperations = new Set(
   nativeEditContract.operationGroups.create,

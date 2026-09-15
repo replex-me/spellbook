@@ -9,11 +9,11 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v22",
+  "patchLevel": "undo-v23",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "2b1d66f99786f96d9faef8008498a31f293c131fde0cb6b78ef2f0d21e58653b",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v22-r9-candidate",
+  "patchSeriesSha256": "aca01cac396d7153e65e44e1964dff9f82782433b8f11b02f4570b287915f580",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v23-r10-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -55,7 +55,8 @@
     "patches/0038-slide-metadata-line-paragraph-undo.patch",
     "patches/0039-slide-sections-undo-roundtrip.patch",
     "patches/0040-animation-lifecycle-undo-roundtrip.patch",
-    "patches/0041-document-design-theme-size.patch"
+    "patches/0041-document-design-theme-size.patch",
+    "patches/0042-advanced-shape-text-connectors.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",

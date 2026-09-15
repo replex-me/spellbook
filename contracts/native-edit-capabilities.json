@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "2.12.0",
+  "version": "2.13.0",
   "coordinateUnit": "1/100mm",
   "nativeUndoRequired": true,
   "verifiedWith": {
@@ -15,7 +15,7 @@
     }
   },
   "aiExposure": {
-    "operationCount": 74,
+    "operationCount": 85,
     "policy": "Expose every bounded operation except format-excluded mutations. Before execution, authorize against the current document permission and the live editor engine patch level. Availability records release-evidence maturity; it does not silently remove an implemented operation from the model schema."
   },
   "transaction": {
@@ -243,6 +243,19 @@
           "playback"
         ],
         "changeBudget": ["slide_parts"]
+      },
+      "comments": {
+        "domain": "editor",
+        "undoProvider": "annotation_model_action",
+        "fixture": "comments",
+        "verification": ["structure", "save_reopen", "change_budget", "visual"],
+        "allowPartCreationOrDeletion": true,
+        "changeBudget": [
+          "package_manifest",
+          "presentation_relationships",
+          "slide_relationships",
+          "comments"
+        ]
       }
     },
     "operations": {
@@ -326,6 +339,22 @@
         "availability": "runtime_verified",
         "minEnginePatch": 14
       },
+      "add_connector": {
+        "family": "object_creation",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "create",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 23
+      },
+      "add_freeform": {
+        "family": "object_creation",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "create",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 23
+      },
       "add_table": {
         "family": "object_creation",
         "target": "slide",
@@ -349,6 +378,14 @@
         "identityEffect": "preserve",
         "availability": "runtime_verified",
         "minEnginePatch": 0
+      },
+      "set_connector": {
+        "family": "object_geometry",
+        "target": "element",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 23
       },
       "group": {
         "family": "object_topology",
@@ -453,6 +490,22 @@
         "identityEffect": "preserve",
         "availability": "runtime_verified",
         "minEnginePatch": 0
+      },
+      "set_shape_fill": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 23
+      },
+      "set_shape_effects": {
+        "family": "object_style",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 23
       },
       "line_color": {
         "family": "object_style",
@@ -645,6 +698,22 @@
         "identityEffect": "preserve",
         "availability": "runtime_verified",
         "minEnginePatch": 5
+      },
+      "set_text_language": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 23
+      },
+      "set_text_case": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 23
       },
       "set_script_position": {
         "family": "object_text",
@@ -845,6 +914,38 @@
         "identityEffect": "preserve",
         "availability": "runtime_validation_required",
         "minEnginePatch": 19
+      },
+      "set_paragraph_list": {
+        "family": "object_text",
+        "target": "element",
+        "execution": "native_transform",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 23
+      },
+      "add_comment": {
+        "family": "comments",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "create",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 0
+      },
+      "edit_comment": {
+        "family": "comments",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "preserve",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 0
+      },
+      "delete_comment": {
+        "family": "comments",
+        "target": "slide",
+        "execution": "editor_dispatch",
+        "identityEffect": "delete",
+        "availability": "runtime_validation_required",
+        "minEnginePatch": 0
       }
     }
   },
@@ -862,9 +963,18 @@
       "rename_slide",
       "set_slide_hidden",
       "set_slide_transition",
-      "set_slide_metadata"
+      "set_slide_metadata",
+      "add_comment",
+      "edit_comment",
+      "delete_comment"
     ],
-    "create": ["add_text_box", "add_shape", "add_table"],
+    "create": [
+      "add_text_box",
+      "add_shape",
+      "add_connector",
+      "add_freeform",
+      "add_table"
+    ],
     "multiElement": ["align", "distribute", "group"],
     "element": [
       "replace_text",
@@ -879,6 +989,8 @@
       "font_family",
       "font_color",
       "fill_color",
+      "set_shape_fill",
+      "set_shape_effects",
       "line_color",
       "line_width",
       "fill_opacity",
@@ -899,6 +1011,8 @@
       "set_shape_name",
       "set_text_box",
       "set_character_spacing",
+      "set_text_language",
+      "set_text_case",
       "set_script_position",
       "set_shape_shadow",
       "set_object_lock",
@@ -920,7 +1034,9 @@
       "replace_animation_effect",
       "move_animation_effect",
       "crop_image",
-      "set_paragraph_format"
+      "set_paragraph_format",
+      "set_paragraph_list",
+      "set_connector"
     ]
   },
   "candidateOperations": [
@@ -931,6 +1047,17 @@
     "set_chart_format",
     "set_slide_size",
     "set_master_theme",
+    "add_connector",
+    "add_freeform",
+    "set_connector",
+    "set_shape_fill",
+    "set_shape_effects",
+    "set_text_language",
+    "set_text_case",
+    "set_paragraph_list",
+    "add_comment",
+    "edit_comment",
+    "delete_comment",
     "add_animation_effect",
     "remove_animation_effect",
     "replace_animation_effect",
@@ -972,6 +1099,8 @@
           "set_speaker_notes",
           "add_text_box",
           "add_shape",
+          "add_connector",
+          "add_freeform",
           "add_table",
           "align",
           "distribute",
@@ -988,6 +1117,8 @@
           "font_family",
           "font_color",
           "fill_color",
+          "set_shape_fill",
+          "set_shape_effects",
           "line_color",
           "line_width",
           "fill_opacity",
@@ -1012,6 +1143,8 @@
           "set_shape_name",
           "set_text_box",
           "set_character_spacing",
+          "set_text_language",
+          "set_text_case",
           "set_script_position",
           "set_shape_shadow",
           "set_object_lock",
@@ -1035,7 +1168,12 @@
           "replace_animation_effect",
           "move_animation_effect",
           "crop_image",
-          "set_paragraph_format"
+          "set_paragraph_format",
+          "set_paragraph_list",
+          "set_connector",
+          "add_comment",
+          "edit_comment",
+          "delete_comment"
         ]
       },
       "elementId": { "type": ["string", "null"] },
@@ -1233,6 +1371,9 @@
       "title": { "type": ["string", "null"] },
       "description": { "type": ["string", "null"] },
       "decorative": { "type": ["boolean", "null"] },
+      "author": { "type": ["string", "null"], "maxLength": 255 },
+      "initials": { "type": ["string", "null"], "maxLength": 16 },
+      "commentIndex": { "type": ["integer", "null"], "minimum": 0 },
       "x": { "type": ["number", "null"] },
       "y": { "type": ["number", "null"] },
       "width": { "type": ["number", "null"] },
@@ -1267,6 +1408,15 @@
         "type": ["string", "null"],
         "enum": ["normal", "superscript", "subscript", null]
       },
+      "languageTag": {
+        "type": ["string", "null"],
+        "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$",
+        "description": "BCP 47 language tag applied to Latin, East Asian and complex-script text runs."
+      },
+      "textCase": {
+        "type": ["string", "null"],
+        "enum": ["none", "uppercase", "lowercase", "title", "small_caps", null]
+      },
       "shadowOffsetX": { "type": ["number", "null"] },
       "shadowOffsetY": { "type": ["number", "null"] },
       "shadowBlur": { "type": ["number", "null"] },
@@ -1288,6 +1438,32 @@
           }
         },
         "required": ["dashName", "startArrowName", "endArrowName"]
+      },
+      "shapeFill": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["none", "solid", "gradient", "hatch"]
+          },
+          "color": { "type": ["integer", "null"], "minimum": 0, "maximum": 16777215 },
+          "opacity": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+          "catalogName": { "type": ["string", "null"], "maxLength": 255 }
+        },
+        "required": ["type", "color", "opacity", "catalogName"],
+        "description": "No fill, a solid color, or an existing gradient/hatch from the observed document catalog. Arbitrary unobserved style names are rejected."
+      },
+      "shapeEffects": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "glowRadius": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 },
+          "glowColor": { "type": ["integer", "null"], "minimum": 0, "maximum": 16777215 },
+          "glowOpacity": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+          "softEdgeRadius": { "type": ["number", "null"], "minimum": 0, "maximum": 100000 }
+        },
+        "required": ["glowRadius", "glowColor", "glowOpacity", "softEdgeRadius"]
       },
       "paragraphFormat": {
         "type": ["object", "null"],
@@ -1317,6 +1493,26 @@
           "direction"
         ]
       },
+      "paragraphList": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": "string", "enum": ["none", "bullet", "number"] },
+          "level": { "type": "integer", "minimum": 0, "maximum": 9 },
+          "prefix": { "type": "string", "maxLength": 32 },
+          "suffix": { "type": "string", "maxLength": 32 },
+          "startWith": { "type": "integer", "minimum": 1, "maximum": 32767 },
+          "bulletCharacter": { "type": ["string", "null"], "maxLength": 2 }
+        },
+        "required": [
+          "type",
+          "level",
+          "prefix",
+          "suffix",
+          "startWith",
+          "bulletCharacter"
+        ]
+      },
       "alignment": {
         "type": ["string", "null"],
         "enum": [
@@ -1341,6 +1537,57 @@
       "geometry": {
         "type": ["string", "null"],
         "enum": ["rectangle", "ellipse", "line", null]
+      },
+      "connectorKind": {
+        "type": ["string", "null"],
+        "enum": ["standard", "curve", "straight", null]
+      },
+      "points": {
+        "type": ["array", "null"],
+        "minItems": 2,
+        "maxItems": 200,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" }
+          },
+          "required": ["x", "y"]
+        }
+      },
+      "closed": { "type": ["boolean", "null"] },
+      "connector": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "type": "string", "enum": ["standard", "curve", "straight"] },
+          "start": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+            "required": ["x", "y"]
+          },
+          "end": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+            "required": ["x", "y"]
+          },
+          "startElementId": { "type": ["string", "null"] },
+          "endElementId": { "type": ["string", "null"] },
+          "startGluePoint": { "type": ["integer", "null"], "minimum": -1, "maximum": 65535 },
+          "endGluePoint": { "type": ["integer", "null"], "minimum": -1, "maximum": 65535 }
+        },
+        "required": [
+          "kind",
+          "start",
+          "end",
+          "startElementId",
+          "endElementId",
+          "startGluePoint",
+          "endGluePoint"
+        ]
       },
       "cells": {
         "type": ["array", "null"],
@@ -1611,6 +1858,9 @@
       "title",
       "description",
       "decorative",
+      "author",
+      "initials",
+      "commentIndex",
       "x",
       "y",
       "width",
@@ -1639,6 +1889,8 @@
       "wordWrap",
       "spacing",
       "script",
+      "languageTag",
+      "textCase",
       "shadowOffsetX",
       "shadowOffsetY",
       "shadowBlur",
@@ -1646,11 +1898,18 @@
       "lockSize",
       "printable",
       "lineStyle",
+      "shapeFill",
+      "shapeEffects",
       "paragraphFormat",
+      "paragraphList",
       "alignment",
       "axis",
       "position",
       "geometry",
+      "connectorKind",
+      "points",
+      "closed",
+      "connector",
       "cells",
       "data",
       "rowDescriptions",

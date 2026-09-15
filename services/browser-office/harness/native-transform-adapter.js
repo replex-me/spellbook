@@ -40,6 +40,14 @@
     LineDashName: "string",
     LineStartName: "string",
     LineEndName: "string",
+    FillColor: "long",
+    FillGradientName: "string",
+    FillHatchName: "string",
+    FillStyle: "fill-style",
+    GlowEffectRadius: "long",
+    GlowEffectColor: "long",
+    GlowEffectTransparency: "short",
+    SoftEdgeRadius: "long",
   });
 
   function createSpellbookBrowserNativeAdapter({ uno, runtimeIdentity }) {
@@ -48,7 +56,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v9";
+      runtimeIdentity.patchLevel === "browser-undo-v10";
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(
@@ -815,6 +823,8 @@
               "FontFamily",
               "FontHeightPoints",
               "Italic",
+              "LanguageTag",
+              "CaseMap",
               "ParagraphAlignment",
               "Strikethrough",
               "Underline",
@@ -959,6 +969,52 @@
               Math.round((properties.Kerning * 72 * 20) / 2540),
             );
           }
+          if (Object.hasOwn(properties, "LanguageTag")) {
+            if (
+              typeof properties.LanguageTag !== "string" ||
+              !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/u.test(
+                properties.LanguageTag,
+              )
+            )
+              throw new Error("Browser text language is invalid.");
+            const parts = properties.LanguageTag.split("-");
+            const locale = new css.lang.Locale({
+              Language: parts[0].toLowerCase(),
+              Country:
+                parts.length > 1 && /^[A-Za-z]{2}$/u.test(parts.at(-1))
+                  ? parts.at(-1).toUpperCase()
+                  : "",
+              Variant:
+                parts.length > 1 && !/^[A-Za-z]{2}$/u.test(parts.at(-1))
+                  ? parts.slice(1).join("-")
+                  : parts.length > 2
+                    ? parts.slice(1, -1).join("-")
+                    : "",
+            });
+            for (const name of [
+              "CharLocale",
+              "CharLocaleAsian",
+              "CharLocaleComplex",
+            ])
+              writes.push(() =>
+                cursor.setPropertyValue(
+                  name,
+                  new uno.Any(uno.type.struct(css.lang.Locale), locale),
+                ),
+              );
+          }
+          if (Object.hasOwn(properties, "CaseMap")) {
+            const caseMap = {
+              none: 0,
+              uppercase: 1,
+              lowercase: 2,
+              title: 3,
+              small_caps: 4,
+            }[properties.CaseMap];
+            if (caseMap === undefined)
+              throw new Error("Browser text case is invalid.");
+            addWrite("CharCaseMap", "short", caseMap);
+          }
           const hasEscapement = Object.hasOwn(properties, "Escapement");
           const hasEscapementHeight = Object.hasOwn(
             properties,
@@ -1004,6 +1060,12 @@
               "TopMargin",
               "BottomMargin",
               "Direction",
+              "ListType",
+              "Level",
+              "Prefix",
+              "Suffix",
+              "StartWith",
+              "BulletCharacter",
             ],
             "Browser paragraph properties",
           );
@@ -1083,6 +1145,73 @@
               throw new Error("Browser paragraph direction is invalid.");
             addWrite("WritingMode", "short", valueByName[payload.Direction]);
           }
+          if (Object.hasOwn(payload, "ListType")) {
+            if (
+              !["none", "bullet", "number"].includes(payload.ListType) ||
+              !Number.isSafeInteger(payload.Level) ||
+              payload.Level < 0 ||
+              payload.Level > 9 ||
+              typeof payload.Prefix !== "string" ||
+              typeof payload.Suffix !== "string" ||
+              !Number.isSafeInteger(payload.StartWith) ||
+              payload.StartWith < 1 ||
+              payload.StartWith > 32767 ||
+              (payload.ListType === "bullet" &&
+                (typeof payload.BulletCharacter !== "string" ||
+                  [...payload.BulletCharacter].length !== 1))
+            )
+              throw new Error("Browser paragraph list is invalid.");
+            if (payload.ListType === "none") {
+              addWrite("NumberingLevel", "short", -1);
+            } else {
+              const rules = paragraph.getPropertyValue("NumberingRules");
+              const entries = Array.from(rules.getByIndex(payload.Level));
+              const values = new Map(entries.map((entry) => [entry.Name, entry]));
+              const numberingType =
+                payload.ListType === "bullet"
+                  ? css.style.NumberingType.CHAR_SPECIAL
+                  : css.style.NumberingType.ARABIC;
+              values.set(
+                "NumberingType",
+                propertyValue("NumberingType", "short", numberingType),
+              );
+              values.set(
+                "Prefix",
+                propertyValue("Prefix", "string", payload.Prefix),
+              );
+              values.set(
+                "Suffix",
+                propertyValue("Suffix", "string", payload.Suffix),
+              );
+              values.set(
+                "StartWith",
+                propertyValue("StartWith", "short", payload.StartWith),
+              );
+              if (payload.ListType === "bullet")
+                values.set(
+                  "BulletChar",
+                  propertyValue(
+                    "BulletChar",
+                    "string",
+                    payload.BulletCharacter,
+                  ),
+                );
+              writes.push(() => {
+                rules.replaceByIndex(
+                  payload.Level,
+                  propertySequence([...values.values()]),
+                );
+                paragraph.setPropertyValue(
+                  "NumberingRules",
+                  new uno.Any(uno.type.interface(css.container.XIndexReplace), rules),
+                );
+                paragraph.setPropertyValue(
+                  "NumberingLevel",
+                  new uno.Any(uno.type.short, payload.Level),
+                );
+              });
+            }
+          }
           return {
             mutates: true,
             apply: () => writes.forEach((write) => write()),
@@ -1109,18 +1238,38 @@
             path,
             "Browser object target",
           );
+          const css = uno.idl.com.sun.star;
           const writes = names.map((name) => {
             const typeName = objectPropertyTypes[name];
             const propertyValue = properties[name];
             if (
               (typeName === "string" && typeof propertyValue !== "string") ||
               (typeName === "boolean" && typeof propertyValue !== "boolean") ||
+              (typeName === "fill-style" &&
+                (!Number.isSafeInteger(propertyValue) ||
+                  propertyValue < 0 ||
+                  propertyValue > 4)) ||
               (["short", "long"].includes(typeName) &&
                 !Number.isSafeInteger(propertyValue))
             )
               throw new Error(
                 `Browser object property ${name} has the wrong type.`,
               );
+            if (typeName === "fill-style")
+              return () =>
+                shape.setPropertyValue(
+                  name,
+                  new uno.Any(
+                    uno.type.enum(css.drawing.FillStyle),
+                    [
+                      css.drawing.FillStyle.NONE,
+                      css.drawing.FillStyle.SOLID,
+                      css.drawing.FillStyle.GRADIENT,
+                      css.drawing.FillStyle.HATCH,
+                      css.drawing.FillStyle.BITMAP,
+                    ][propertyValue],
+                  ),
+                );
             return propertyWrite(shape, name, typeName, propertyValue);
           });
           return {
