@@ -125,6 +125,8 @@ test("browser Office runtime is reproducible and remains unapproved by default",
       toolchainDockerfile.includes(identity),
       `Toolchain image omits ${identity}.`,
     );
+  assert.match(toolchainDockerfile, /\.\/bootstrap/u);
+  assert.match(toolchainDockerfile, /em\+\+ --version/u);
   assert.match(candidateBuilder, /native-tests\.\$expected_patch_sha/u);
   assert.match(candidateBuilder, /wasm\.\$expected_patch_sha/u);
   assert.match(candidateBuilder, /use a new build root/u);

@@ -31,6 +31,11 @@ RUN git clone --quiet https://github.com/emscripten-core/emsdk.git /opt/emsdk \
     && git -C /opt/emsdk/upstream/emscripten checkout --quiet "$EMSCRIPTEN_COMMIT" \
     && test "$(git -C /opt/emsdk/upstream/emscripten rev-parse HEAD)" = "$EMSCRIPTEN_COMMIT"
 
+RUN cd /opt/emsdk/upstream/emscripten \
+    && ./bootstrap \
+    && source /opt/emsdk/emsdk_env.sh >/dev/null \
+    && em++ --version
+
 RUN test "$(id -u node)" = "1000" \
     && mkdir -p /opt/qt5 /opt/qt5-install \
     && chown -R node:node /opt/emsdk /opt/qt5 /opt/qt5-install
