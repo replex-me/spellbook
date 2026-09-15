@@ -129,7 +129,7 @@ if [[ ! -f "$native_marker" ]]; then
         --disable-scripting \
         --disable-skia \
         --enable-release-build \
-        --with-lang="en-US ko" \
+        --with-lang="en-US" \
         --with-theme=colibre
     )
   fi
@@ -147,6 +147,24 @@ wasm_build="$SPELLBOOK_BROWSER_BUILD_ROOT/wasm"
 wasm_marker="$SPELLBOOK_BROWSER_BUILD_ROOT/wasm.$expected_patch_sha"
 mkdir -p "$wasm_build"
 if [[ ! -f "$wasm_build/Makefile" ]]; then
+  # The Korean browser package needs the translations submodule, but a normal
+  # `git submodule update` downloads the complete multi-gigabyte history. Fetch
+  # only the exact gitlink commit before configure. LibreOffice's `./g clone`
+  # then sees an initialized submodule and reuses it without changing the
+  # source tree or weakening the pinned-commit receipt.
+  git -C "$source_root" submodule sync -- translations
+  git -C "$source_root" submodule update \
+    --init \
+    --depth=1 \
+    --recommend-shallow \
+    --progress \
+    translations
+  translations_commit="$(git -C "$source_root/translations" rev-parse HEAD)"
+  translations_gitlink="$(git -C "$source_root" rev-parse HEAD:translations)"
+  if [[ "$translations_commit" != "$translations_gitlink" ]]; then
+    echo "The shallow translations checkout differs from the pinned gitlink." >&2
+    exit 1
+  fi
   (
     cd "$wasm_build"
     "$source_root/autogen.sh" \

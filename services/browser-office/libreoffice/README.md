@@ -25,9 +25,10 @@ paragraph alignment likewise share one bounded text-property transaction
 instead of mixing property writes with UI dispatch commands. The page/object
 tests cover one-step Undo/Redo and PPTX save/reopen for slide names, visibility,
 transition state, text margins, shadows and object locks. Browser-source CppUnit regressions are part of the
-series but have not run yet. The remaining build-admission work is the
-browser-native command adapter plus a clean native test run; only then is a
-single integrated WASM build justified. `nativeSlideStructureReady` is
+series but have not run yet. The browser-native adapter now accepts the complete
+63-operation typed mutation contract and persists both its commands and direct
+human edits as native PPTX snapshots; the clean native and integrated browser
+runs remain the admission evidence. `nativeSlideStructureReady` is
 independent of `buildReady`: a compiled runtime must also survive the product
 bridge's full slide lifecycle, observation, Undo/Redo, recovery and exact-save
 checks before it can claim safe native structure editing. Collabora transport
@@ -66,8 +67,11 @@ of restarting the preceding hour-long work. A root belonging to another source
 or patch identity is rejected rather than cleaned implicitly. The output holds
 the four raw runtime assets, Brotli serving variants and a receipt binding their
 hashes to the exact public source, LibreOffice, patch-series, Emscripten and Qt
-identities. Building does not set `buildReady`; promotion still requires the
-integrated product, endurance, fidelity and PowerPoint gates.
+identities. Native tests use the source language only; the Korean translations
+needed by the browser build are fetched at the exact superproject gitlink with
+depth one, avoiding a full translation-repository history on every clean build.
+Building does not set `buildReady`; promotion still requires the integrated
+product, endurance, fidelity and PowerPoint gates.
 
 Run the candidate through the real product bridge without changing the tracked
 promotion manifest:
@@ -94,9 +98,11 @@ SHA-256 digests match `build-receipt.json`. It also requires the receipt's
 LibreOffice commit, patch-series digest and complete toolchain identity to
 match `upstream.json`. The resulting in-memory `buildReady` identity exists
 only in that verification server; the tracked manifest remains fail-closed
-until all promotion evidence passes. The endurance run keeps one browser and
-document session alive while rotating through all 17 admitted element
-operations. Every cycle performs edit, observation, Undo, restored-state
+until all promotion evidence passes. The promotion run must keep one browser
+and document session alive while exercising the complete admitted operation
+matrix; the product bridge's endurance loop currently covers the shared
+element subset and must not be treated as full-contract evidence. Every cycle
+performs edit, observation, Undo, restored-state
 observation, Redo, observation, final Undo and save acknowledgement; periodic
 exact-byte checks prove that the final Undo restored the original package.
 The PowerPoint follow-up refuses a partial browser report, re-hashes the saved
