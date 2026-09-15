@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 
+import { admitCandidateRuntime } from "./candidate-runtime.mjs";
 import { createHarnessServer } from "./server.mjs";
 import { applyOoxmlCommand } from "./ooxml-worker-source.mjs";
 
@@ -26,8 +27,21 @@ const outputRoot = path.resolve(
     : "artifacts/browser-office/product-bridge",
 );
 await mkdir(outputRoot, { recursive: true });
+const candidateRuntimePath = optionalFlagValue("--candidate-runtime");
+const enduranceCycles = integerFlagValue("--endurance-cycles", 0);
+const candidateRuntime = candidateRuntimePath
+  ? await admitCandidateRuntime({ runtimeDirectory: candidateRuntimePath })
+  : null;
 
-const server = createHarnessServer();
+const server = createHarnessServer(
+  candidateRuntime
+    ? {
+        runtimeRoot: candidateRuntime.runtimeDirectory,
+        runtimeIdentity: candidateRuntime.runtimeIdentity,
+        upstream: candidateRuntime.upstream,
+      }
+    : {},
+);
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const address = server.address();
 const origin = `http://127.0.0.1:${address.port}`;
@@ -71,6 +85,10 @@ try {
       runtime.patchLevel === "browser-undo-v7"
     );
   });
+  if (enduranceCycles > 0 && !patchedBrowserRuntime)
+    throw new Error(
+      "Browser product endurance requires an admitted browser-undo-v7 candidate runtime.",
+    );
   const target = before.slides
     .flatMap((slide) => slide.elements)
     .find((element) => typeof element.text === "string" && element.text);
@@ -399,6 +417,22 @@ try {
         /browser_native_runtime_patch_required/u,
       );
   }
+  const endurance =
+    enduranceCycles > 0
+      ? await runProductEndurance({
+          page,
+          cycles: enduranceCycles,
+          baseline: before,
+          textTarget: target,
+          geometryTarget,
+          pageErrors,
+          requestFailures,
+        })
+      : {
+          status: "not-requested",
+          cycles: 0,
+          operations: [],
+        };
   const replacement = `${target.text} · product bridge`;
   const edited = await nativeTask(page, "edit-1", {
     operation: "edit",
@@ -493,34 +527,15 @@ try {
     suppressCapture: true,
   });
   assert.notEqual(editedForSave.revision, before.revision);
-  await page.evaluate(() => {
-    const saveCommand = {
-      type: "command",
-      messageId: "Action_Save",
-      values: { Notify: true },
-    };
-    globalThis.__spellbookProductHost.port.postMessage(saveCommand);
-    globalThis.__spellbookProductHost.port.postMessage(saveCommand);
-  });
-  const save = await waitForEvent(page, { type: "save" });
+  const save = await requestProductSave(page, { duplicate: true });
   await page.waitForTimeout(100);
   assert.equal(
-    await page.evaluate(
-      () =>
-        globalThis.__spellbookProductHost.events.filter(
-          (event) => event.type === "save",
-        ).length,
-    ),
+    (await hostEventCount(page, "save")) - save.previousCount,
     1,
     "Concurrent host save commands must share one export request.",
   );
-  const savedBytes = await page.evaluate((requestId) => {
-    const event = globalThis.__spellbookProductHost.events.find(
-      (candidate) =>
-        candidate.type === "save" && candidate.requestId === requestId,
-    );
-    return Array.from(new Uint8Array(event.bytes));
-  }, save.requestId);
+  const savedPayload = await consumeSavedBytes(page, save.requestId);
+  const savedBytes = savedPayload.bytes;
   assert.equal(savedBytes[0], 0x50);
   assert.equal(savedBytes[1], 0x4b);
   const savedPackage = unzipSync(Uint8Array.from(savedBytes));
@@ -536,18 +551,7 @@ try {
   );
   const savedRevision =
     '"saved:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"';
-  await page.evaluate(
-    ({ requestId, revision }) =>
-      globalThis.__spellbookProductHost.port.postMessage({
-        type: "save-result",
-        requestId,
-        ok: true,
-        revision,
-      }),
-    { requestId: save.requestId, revision: savedRevision },
-  );
-  await waitForEvent(page, { type: "save-response", success: true });
-  await waitForEvent(page, { type: "modified", modified: false });
+  await acknowledgeProductSave(page, save.requestId, savedRevision);
 
   const slideStructure = await verifyProductSlideStructure(browser, origin);
 
@@ -564,10 +568,23 @@ try {
       "move",
       "resize",
       ...appearanceEdits.map(({ op }) => op),
+      ...(patchedBrowserRuntime
+        ? [
+            "font_size",
+            "bold",
+            "italic",
+            "underline",
+            "strikethrough",
+            "font_family",
+            "font_color",
+            "paragraph_alignment",
+          ]
+        : []),
     ],
     savedRevision,
     savedBytes: savedBytes.length,
     changedParts,
+    endurance,
     slideStructure,
     pageErrors,
     requestFailures,
@@ -809,6 +826,466 @@ async function verifyProductSlideStructure(browser, origin) {
   }
 }
 
+async function runProductEndurance({
+  page,
+  cycles,
+  baseline,
+  textTarget,
+  geometryTarget,
+  pageErrors,
+  requestFailures,
+}) {
+  const operations = enduranceOperations(textTarget, geometryTarget);
+  const expectedSlides = JSON.stringify(baseline.slides);
+  const exactPackageCheckInterval = Math.max(1, Math.floor(cycles / 10));
+  let exactPackageChecks = 0;
+  for (let cycle = 0; cycle < cycles; cycle += 1) {
+    const operation = operations[cycle % operations.length];
+    const taskPrefix = `endurance-${cycle + 1}-${operation.op}`;
+    const edited = await nativeTask(page, `${taskPrefix}-edit`, {
+      operation: "edit",
+      expectedRevision: baseline.revision,
+      expectedSlides,
+      command: operation.command,
+      permission: {
+        mode: "selection",
+        elementIds: [operation.command.elementId],
+        slideIndexes: [],
+      },
+      suppressCapture: true,
+    });
+    assert.notEqual(
+      edited.revision,
+      baseline.revision,
+      `${taskPrefix} did not change the document revision.`,
+    );
+    assert.equal(
+      operation.matches(elementForOperation(edited, operation)),
+      true,
+      `${taskPrefix} did not reach its requested value.`,
+    );
+    const observed = await nativeTask(page, `${taskPrefix}-observe`, {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.equal(observed.revision, edited.revision);
+
+    const undone = await sendHostCommand(page, "Send_UNO_Command", {
+      Command: ".uno:Undo",
+    });
+    assert.equal(
+      undone.revision,
+      baseline.revision,
+      `${taskPrefix} Undo did not restore the baseline revision.`,
+    );
+    const restored = await nativeTask(page, `${taskPrefix}-restored`, {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.equal(
+      restored.revision,
+      baseline.revision,
+      `${taskPrefix} restored state differs at ${firstDifference(
+        { slides: baseline.slides, masters: baseline.masters },
+        { slides: restored.slides, masters: restored.masters },
+        "document",
+      )}`,
+    );
+
+    const redone = await sendHostCommand(page, "Send_UNO_Command", {
+      Command: ".uno:Redo",
+    });
+    assert.equal(
+      redone.revision,
+      edited.revision,
+      `${taskPrefix} Redo did not restore the edited revision.`,
+    );
+    const observedRedo = await nativeTask(page, `${taskPrefix}-redone`, {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.equal(
+      operation.matches(elementForOperation(observedRedo, operation)),
+      true,
+      `${taskPrefix} Redo did not restore the requested value.`,
+    );
+
+    const reset = await sendHostCommand(page, "Send_UNO_Command", {
+      Command: ".uno:Undo",
+    });
+    assert.equal(reset.revision, baseline.revision);
+
+    const save = await requestProductSave(page);
+    const verifyExactPackage =
+      cycle === 0 ||
+      cycle === cycles - 1 ||
+      (cycle + 1) % exactPackageCheckInterval === 0;
+    const saved = await consumeSavedBytes(
+      page,
+      save.requestId,
+      verifyExactPackage,
+    );
+    assert.equal(saved.byteLength, fixture.byteLength);
+    assert.equal(saved.magic, "PK");
+    if (verifyExactPackage) {
+      exactPackageChecks += 1;
+      assert.deepEqual(
+        saved.bytes,
+        fixture,
+        `${taskPrefix} save changed the baseline package after Undo.`,
+      );
+    }
+    await acknowledgeProductSave(
+      page,
+      save.requestId,
+      `"endurance:${String(cycle + 1).padStart(3, "0")}"`,
+    );
+    assert.deepEqual(
+      pageErrors,
+      [],
+      `${taskPrefix} emitted a browser page error.`,
+    );
+    assert.deepEqual(
+      requestFailures,
+      [],
+      `${taskPrefix} emitted a browser request failure.`,
+    );
+  }
+  const final = await nativeTask(page, "endurance-final-observe", {
+    operation: "observe",
+    captureSlideIndexes: [],
+  });
+  assert.equal(final.revision, baseline.revision);
+  return {
+    status: "browser-product-endurance-verified",
+    cycles,
+    nativeTasksPerCycle: 4,
+    undoRedoCommandsPerCycle: 3,
+    savesPerCycle: 1,
+    exactPackageChecks,
+    operations: operations.map(({ op }) => op),
+    finalRevision: final.revision,
+  };
+}
+
+function enduranceOperations(textTarget, geometryTarget) {
+  const formatting = textTarget.wholeTextFormatting;
+  assert.ok(formatting, "The endurance fixture needs uniform text.");
+  const alternate = (value, first, second) =>
+    Number(value) === first ? second : first;
+  const alternateColor = (value) => alternate(value, 0x0f766e, 0xd97706);
+  return [
+    {
+      op: "replace_text",
+      command: {
+        op: "replace_text",
+        elementId: textTarget.elementId,
+        text: `${textTarget.text} · endurance`,
+      },
+      target: "text",
+      matches: (element) => element.text === `${textTarget.text} · endurance`,
+    },
+    {
+      op: "move",
+      command: {
+        op: "move",
+        elementId: geometryTarget.elementId,
+        x: geometryTarget.x + 100,
+        y: geometryTarget.y + 100,
+      },
+      target: "geometry",
+      matches: (element) =>
+        element.x === geometryTarget.x + 100 &&
+        element.y === geometryTarget.y + 100,
+    },
+    {
+      op: "resize",
+      command: {
+        op: "resize",
+        elementId: geometryTarget.elementId,
+        width: geometryTarget.width + 100,
+        height: geometryTarget.height + 100,
+      },
+      target: "geometry",
+      matches: (element) =>
+        element.width === geometryTarget.width + 100 &&
+        element.height === geometryTarget.height + 100,
+    },
+    {
+      op: "fill_color",
+      command: {
+        op: "fill_color",
+        elementId: geometryTarget.elementId,
+        color: alternateColor(geometryTarget.fill),
+      },
+      target: "geometry",
+      matches: (element) =>
+        element.fill === alternateColor(geometryTarget.fill),
+    },
+    {
+      op: "rotate",
+      command: {
+        op: "rotate",
+        elementId: geometryTarget.elementId,
+        degrees: Number(geometryTarget.rotation ?? 0) / 100 + 15,
+      },
+      target: "geometry",
+      matches: (element) =>
+        element.rotation === Number(geometryTarget.rotation ?? 0) + 1_500,
+    },
+    {
+      op: "line_color",
+      command: {
+        op: "line_color",
+        elementId: geometryTarget.elementId,
+        color: alternateColor(geometryTarget.lineColor),
+      },
+      target: "geometry",
+      matches: (element) =>
+        element.lineColor === alternateColor(geometryTarget.lineColor),
+    },
+    {
+      op: "line_width",
+      command: {
+        op: "line_width",
+        elementId: geometryTarget.elementId,
+        size: alternate(geometryTarget.lineWidth, 200, 300) / 100,
+      },
+      target: "geometry",
+      matches: (element) =>
+        element.lineWidth === alternate(geometryTarget.lineWidth, 200, 300),
+    },
+    {
+      op: "fill_opacity",
+      command: {
+        op: "fill_opacity",
+        elementId: geometryTarget.elementId,
+        opacity: alternate(geometryTarget.fillOpacity, 63, 57),
+      },
+      target: "geometry",
+      matches: (element) =>
+        element.fillOpacity === alternate(geometryTarget.fillOpacity, 63, 57),
+    },
+    {
+      op: "line_opacity",
+      command: {
+        op: "line_opacity",
+        elementId: geometryTarget.elementId,
+        opacity: alternate(geometryTarget.lineOpacity, 57, 63),
+      },
+      target: "geometry",
+      matches: (element) =>
+        element.lineOpacity === alternate(geometryTarget.lineOpacity, 57, 63),
+    },
+    {
+      op: "font_size",
+      command: {
+        op: "font_size",
+        elementId: textTarget.elementId,
+        size: Number(formatting.fontSize) + 1,
+      },
+      target: "text",
+      matches: (element) =>
+        Number(element.wholeTextFormatting?.fontSize) ===
+        Number(formatting.fontSize) + 1,
+    },
+    {
+      op: "bold",
+      command: {
+        op: "bold",
+        elementId: textTarget.elementId,
+        bold: Number(formatting.fontWeight) < 150,
+      },
+      target: "text",
+      matches: (element) =>
+        Number(element.wholeTextFormatting?.fontWeight) ===
+        (Number(formatting.fontWeight) < 150 ? 150 : 100),
+    },
+    {
+      op: "italic",
+      command: {
+        op: "italic",
+        elementId: textTarget.elementId,
+        italic: String(formatting.fontStyle).toUpperCase().includes("NONE"),
+      },
+      target: "text",
+      matches: (element) =>
+        String(element.wholeTextFormatting?.fontStyle)
+          .toUpperCase()
+          .includes("NONE") !==
+        String(formatting.fontStyle).toUpperCase().includes("NONE"),
+    },
+    {
+      op: "underline",
+      command: {
+        op: "underline",
+        elementId: textTarget.elementId,
+        underline: Number(textTarget.underline ?? 0) === 0,
+      },
+      target: "text",
+      matches: (element) =>
+        (Number(element.underline ?? 0) !== 0) ===
+        (Number(textTarget.underline ?? 0) === 0),
+    },
+    {
+      op: "strikethrough",
+      command: {
+        op: "strikethrough",
+        elementId: textTarget.elementId,
+        strikethrough: Number(textTarget.strikethrough ?? 0) === 0,
+      },
+      target: "text",
+      matches: (element) =>
+        (Number(element.strikethrough ?? 0) !== 0) ===
+        (Number(textTarget.strikethrough ?? 0) === 0),
+    },
+    {
+      op: "font_family",
+      command: {
+        op: "font_family",
+        elementId: textTarget.elementId,
+        family: formatting.fontFamily === "Carlito" ? "Aptos" : "Carlito",
+      },
+      target: "text",
+      matches: (element) =>
+        element.wholeTextFormatting?.fontFamily ===
+        (formatting.fontFamily === "Carlito" ? "Aptos" : "Carlito"),
+    },
+    {
+      op: "font_color",
+      command: {
+        op: "font_color",
+        elementId: textTarget.elementId,
+        color: alternateColor(textTarget.color),
+      },
+      target: "text",
+      matches: (element) => element.color === alternateColor(textTarget.color),
+    },
+    {
+      op: "paragraph_alignment",
+      command: {
+        op: "paragraph_alignment",
+        elementId: textTarget.elementId,
+        alignment:
+          Number(textTarget.paragraphAlignment) === 3 ? "left" : "center",
+      },
+      target: "text",
+      matches: (element) =>
+        Number(element.paragraphAlignment) ===
+        (Number(textTarget.paragraphAlignment) === 3 ? 0 : 3),
+    },
+  ];
+}
+
+function elementForOperation(observation, operation) {
+  return observation.slides
+    .flatMap((slide) => slide.elements)
+    .find((element) => element.elementId === operation.command.elementId);
+}
+
+async function requestProductSave(page, { duplicate = false } = {}) {
+  const previousCount = await hostEventCount(page, "save");
+  await page.evaluate((sendTwice) => {
+    const saveCommand = {
+      type: "command",
+      messageId: "Action_Save",
+      values: { Notify: true },
+    };
+    globalThis.__spellbookProductHost.port.postMessage(saveCommand);
+    if (sendTwice)
+      globalThis.__spellbookProductHost.port.postMessage(saveCommand);
+  }, duplicate);
+  const save = await waitForNewHostEvent(page, "save", previousCount);
+  return { ...save, previousCount };
+}
+
+async function acknowledgeProductSave(page, requestId, revision) {
+  const responseCount = await hostEventCount(page, "save-response");
+  const unmodifiedCount = await page.evaluate(
+    () =>
+      globalThis.__spellbookProductHost.events.filter(
+        (event) => event.type === "modified" && event.modified === false,
+      ).length,
+  );
+  await page.evaluate(
+    ({ id, savedRevision }) =>
+      globalThis.__spellbookProductHost.port.postMessage({
+        type: "save-result",
+        requestId: id,
+        ok: true,
+        revision: savedRevision,
+      }),
+    { id: requestId, savedRevision: revision },
+  );
+  const response = await waitForNewHostEvent(
+    page,
+    "save-response",
+    responseCount,
+  );
+  assert.equal(response.success, true);
+  await page.waitForFunction(
+    (previousCount) =>
+      globalThis.__spellbookProductHost.events.filter(
+        (event) => event.type === "modified" && event.modified === false,
+      ).length > previousCount,
+    unmodifiedCount,
+    { timeout: 30_000 },
+  );
+}
+
+async function consumeSavedBytes(page, requestId, includeBytes = true) {
+  const saved = await page.evaluate(
+    ({ id, returnBytes }) => {
+      const event = globalThis.__spellbookProductHost.events.find(
+        (candidate) => candidate.type === "save" && candidate.requestId === id,
+      );
+      if (!(event?.bytes instanceof ArrayBuffer))
+        throw new Error("Browser save event has no PPTX bytes.");
+      const bytes = new Uint8Array(event.bytes);
+      const result = {
+        byteLength: bytes.byteLength,
+        magic: String.fromCharCode(bytes[0], bytes[1]),
+        ...(returnBytes ? { bytes: Array.from(bytes) } : {}),
+      };
+      event.bytes = null;
+      return result;
+    },
+    { id: requestId, returnBytes: includeBytes },
+  );
+  return {
+    ...saved,
+    ...(includeBytes ? { bytes: Uint8Array.from(saved.bytes) } : {}),
+  };
+}
+
+async function hostEventCount(page, type) {
+  return page.evaluate(
+    (eventType) =>
+      globalThis.__spellbookProductHost.events.filter(
+        (event) => event.type === eventType,
+      ).length,
+    type,
+  );
+}
+
+async function waitForNewHostEvent(page, type, previousCount) {
+  await page.waitForFunction(
+    ({ eventType, count }) =>
+      globalThis.__spellbookProductHost?.events.filter(
+        (event) => event.type === eventType,
+      ).length > count,
+    { eventType: type, count: previousCount },
+    { timeout: 30_000 },
+  );
+  return page.evaluate(
+    ({ eventType, count }) =>
+      globalThis.__spellbookProductHost.events.filter(
+        (event) => event.type === eventType,
+      )[count],
+    { eventType: type, count: previousCount },
+  );
+}
+
 async function connectProductHost(page, origin) {
   await page.waitForFunction(
     () => document.body.dataset.state === "runtime-ready",
@@ -936,6 +1413,24 @@ async function sendHostCommand(page, messageId, values) {
     messageId,
     requestId,
   });
+}
+
+function optionalFlagValue(name, argv = process.argv) {
+  const index = argv.indexOf(name);
+  if (index < 0) return null;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--"))
+    throw new Error(`${name} requires a value.`);
+  return value;
+}
+
+function integerFlagValue(name, fallback, argv = process.argv) {
+  const value = optionalFlagValue(name, argv);
+  if (value === null) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0)
+    throw new Error(`${name} must be a non-negative integer.`);
+  return parsed;
 }
 
 function firstDifference(left, right, path = "slides") {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -34,6 +35,44 @@ test("browser Office routes preserve isolation, asset identity and encodings", (
   assert.equal(
     routes.get("/runtime/zeta.js").headers["Cache-Control"],
     "public, max-age=31536000, immutable",
+  );
+});
+
+test("candidate verification routes raw artifacts and an in-memory identity", () => {
+  const runtimeIdentity = {
+    buildCommit: "candidate",
+    candidateCommit: "candidate",
+    patchLevel: "browser-undo-v7",
+    buildReady: true,
+    nativeSlideStructureReady: false,
+  };
+  const candidate = {
+    ...upstream,
+    runtimeAssets: upstream.runtimeAssets.map((asset) => ({
+      ...asset,
+      storedPath: path.basename(asset.path),
+      contentEncoding: undefined,
+    })),
+  };
+  const routes = buildRoutes(import.meta.dirname, candidate, {
+    runtimeRoot: "/tmp/spellbook-candidate-runtime",
+    runtimeIdentity,
+  });
+  assert.equal(
+    routes.get("/runtime/soffice.wasm").file,
+    "/tmp/spellbook-candidate-runtime/soffice.wasm",
+  );
+  assert.equal(
+    routes.get("/runtime/soffice.wasm").headers["Content-Encoding"],
+    undefined,
+  );
+  assert.match(
+    routes.get("/runtime/browser-candidate.js").body,
+    /"buildReady":true/u,
+  );
+  assert.equal(
+    routes.get("/runtime/zeta.js").file,
+    path.join(import.meta.dirname, "runtime/zeta.js"),
   );
 });
 

@@ -69,6 +69,27 @@ hashes to the exact public source, LibreOffice, patch-series, Emscripten and Qt
 identities. Building does not set `buildReady`; promotion still requires the
 integrated product, endurance, fidelity and PowerPoint gates.
 
+Run the candidate through the real product bridge without changing the tracked
+promotion manifest:
+
+```sh
+node services/browser-office/verify-product-bridge.mjs \
+  --candidate-runtime /absolute/output \
+  --endurance-cycles 100 \
+  --output artifacts/browser-office/candidate-v7
+```
+
+This verifier accepts only the four raw artifacts whose byte lengths and
+SHA-256 digests match `build-receipt.json`. It also requires the receipt's
+LibreOffice commit, patch-series digest and complete toolchain identity to
+match `upstream.json`. The resulting in-memory `buildReady` identity exists
+only in that verification server; the tracked manifest remains fail-closed
+until all promotion evidence passes. The endurance run keeps one browser and
+document session alive while rotating through all 17 admitted element
+operations. Every cycle performs edit, observation, Undo, restored-state
+observation, Redo, observation, final Undo and save acknowledgement; periodic
+exact-byte checks prove that the final Undo restored the original package.
+
 General document fixes must be represented in both LibreOffice source lines or
 explicitly proven unnecessary on one line. Collabora-only transport commands
 are not copied into ZetaOffice: the browser calls the same bounded operation

@@ -1,0 +1,116 @@
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
+
+import { upstreamManifest } from "./libreoffice/upstream.mjs";
+
+const requiredArtifacts = Object.freeze([
+  ["soffice.js", "text/javascript; charset=utf-8"],
+  ["soffice.data.js.metadata", "application/json"],
+  ["soffice.wasm", "application/wasm"],
+  ["soffice.data", "application/octet-stream"],
+]);
+
+export async function admitCandidateRuntime({
+  runtimeDirectory,
+  receiptPath = path.join(runtimeDirectory, "build-receipt.json"),
+  manifest = upstreamManifest,
+}) {
+  const directory = path.resolve(runtimeDirectory);
+  const receipt = JSON.parse(await readFile(path.resolve(receiptPath), "utf8"));
+  assertReceiptIdentity(receipt, manifest);
+
+  const receiptArtifacts = new Map(
+    receipt.artifacts.map((artifact) => [artifact.name, artifact]),
+  );
+  if (receiptArtifacts.size !== requiredArtifacts.length)
+    throw new Error(
+      "Candidate runtime receipt has an unexpected artifact set.",
+    );
+
+  const runtimeAssets = [];
+  for (const [name, contentType] of requiredArtifacts) {
+    const expected = receiptArtifacts.get(name);
+    if (!expected) throw new Error(`Candidate runtime receipt omits ${name}.`);
+    const file = path.join(directory, name);
+    const [bytes, details] = await Promise.all([readFile(file), stat(file)]);
+    if (!details.isFile() || details.size !== expected.bytes)
+      throw new Error(`Candidate runtime size differs for ${name}.`);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    if (sha256 !== expected.sha256)
+      throw new Error(`Candidate runtime digest differs for ${name}.`);
+    if (
+      name === "soffice.wasm" &&
+      !bytes.subarray(0, 4).equals(Buffer.from([0x00, 0x61, 0x73, 0x6d]))
+    )
+      throw new Error("Candidate runtime artifact is not WebAssembly.");
+    if (name.endsWith(".metadata")) JSON.parse(bytes.toString("utf8"));
+    runtimeAssets.push({
+      path: name,
+      storedPath: name,
+      contentType,
+      bytes: details.size,
+      sha256,
+    });
+  }
+
+  const runtimeIdentity = Object.freeze({
+    buildCommit: manifest.source.candidateCommit,
+    candidateCommit: manifest.source.candidateCommit,
+    patchLevel: manifest.sourceCandidate.patchLevel,
+    patchSeriesSha256: manifest.sourceCandidate.patchSeriesSha256,
+    buildReady: true,
+    nativeSlideStructureReady: false,
+  });
+  return {
+    runtimeDirectory: directory,
+    receipt,
+    runtimeIdentity,
+    upstream: {
+      ...manifest,
+      source: {
+        ...manifest.source,
+        buildCommit: manifest.source.candidateCommit,
+      },
+      sourceCandidate: {
+        ...manifest.sourceCandidate,
+        buildReady: true,
+        nativeSlideStructureReady: false,
+      },
+      runtimeAssets,
+    },
+  };
+}
+
+function assertReceiptIdentity(receipt, manifest) {
+  if (
+    receipt?.schemaVersion !== 1 ||
+    receipt.status !== "built_unverified" ||
+    !/^[0-9a-f]{40}$/u.test(receipt.spellbookSourceRevision ?? "")
+  )
+    throw new Error("Candidate runtime receipt is not a built artifact.");
+  const expectedLibreOffice = {
+    repository: manifest.source.repository,
+    commit: manifest.source.candidateCommit,
+    patchLevel: manifest.sourceCandidate.patchLevel,
+    patchSeriesSha256: manifest.sourceCandidate.patchSeriesSha256,
+  };
+  if (
+    JSON.stringify(receipt.libreOffice) !== JSON.stringify(expectedLibreOffice)
+  )
+    throw new Error("Candidate runtime LibreOffice identity differs.");
+  if (JSON.stringify(receipt.toolchain) !== JSON.stringify(manifest.toolchain))
+    throw new Error("Candidate runtime toolchain identity differs.");
+  if (!Array.isArray(receipt.artifacts))
+    throw new Error("Candidate runtime receipt has no artifacts.");
+  for (const artifact of receipt.artifacts) {
+    if (
+      !artifact ||
+      typeof artifact.name !== "string" ||
+      !Number.isSafeInteger(artifact.bytes) ||
+      artifact.bytes <= 0 ||
+      !/^[0-9a-f]{64}$/u.test(artifact.sha256 ?? "")
+    )
+      throw new Error("Candidate runtime receipt has an invalid artifact.");
+  }
+}

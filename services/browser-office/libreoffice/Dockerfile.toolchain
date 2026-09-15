@@ -31,11 +31,11 @@ RUN git clone --quiet https://github.com/emscripten-core/emsdk.git /opt/emsdk \
     && git -C /opt/emsdk/upstream/emscripten checkout --quiet "$EMSCRIPTEN_COMMIT" \
     && test "$(git -C /opt/emsdk/upstream/emscripten rev-parse HEAD)" = "$EMSCRIPTEN_COMMIT"
 
-RUN useradd --create-home --uid 1000 --shell /bin/bash builder \
+RUN test "$(id -u node)" = "1000" \
     && mkdir -p /opt/qt5 /opt/qt5-install \
-    && chown -R builder:builder /opt/emsdk /opt/qt5 /opt/qt5-install
+    && chown -R node:node /opt/emsdk /opt/qt5 /opt/qt5-install
 
-USER builder
+USER node
 
 RUN git clone --quiet https://github.com/allotropia/qt5.git /opt/qt5 \
     && git -C /opt/qt5 checkout --quiet "$QT_COMMIT" \

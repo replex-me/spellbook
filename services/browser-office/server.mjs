@@ -9,7 +9,13 @@ const manifest = JSON.parse(
   readFileSync(path.join(serviceRoot, "upstream.json"), "utf8"),
 );
 
-export function buildRoutes(root = serviceRoot, upstream = manifest) {
+export function buildRoutes(
+  root = serviceRoot,
+  upstream = manifest,
+  options = {},
+) {
+  const runtimeRoot = options.runtimeRoot ?? path.join(root, "runtime");
+  const runtimeIdentity = options.runtimeIdentity;
   const routes = new Map([
     [
       "/",
@@ -90,22 +96,24 @@ export function buildRoutes(root = serviceRoot, upstream = manifest) {
     ],
     [
       "/runtime/browser-candidate.js",
-      route(
-        path.join(root, "runtime/browser-candidate.js"),
-        "text/javascript; charset=utf-8",
-      ),
+      runtimeIdentity
+        ? inlineRoute(
+            `globalThis.spellbookBrowserRuntimeCandidate = Object.freeze(${JSON.stringify(runtimeIdentity)});\n`,
+            "text/javascript; charset=utf-8",
+          )
+        : route(
+            path.join(root, "runtime/browser-candidate.js"),
+            "text/javascript; charset=utf-8",
+          ),
     ],
   ]);
 
-  for (const asset of [
-    ...upstream.runtimeAssets,
-    upstream.javascriptBridge.runtimeAsset,
-  ]) {
+  for (const asset of upstream.runtimeAssets) {
     const requestedPath =
       asset.path ?? path.basename(new URL(asset.url).pathname);
     routes.set(
       `/runtime/${requestedPath}`,
-      route(path.join(root, "runtime", asset.storedPath), asset.contentType, {
+      route(path.join(runtimeRoot, asset.storedPath), asset.contentType, {
         ...(asset.contentEncoding
           ? { "Content-Encoding": asset.contentEncoding }
           : {}),
@@ -113,18 +121,41 @@ export function buildRoutes(root = serviceRoot, upstream = manifest) {
       }),
     );
   }
+  const bridgeAsset = upstream.javascriptBridge.runtimeAsset;
+  const bridgeRequestedPath =
+    bridgeAsset.path ?? path.basename(new URL(bridgeAsset.url).pathname);
+  routes.set(
+    `/runtime/${bridgeRequestedPath}`,
+    route(
+      path.join(root, "runtime", bridgeAsset.storedPath),
+      bridgeAsset.contentType,
+      {
+        ...(bridgeAsset.contentEncoding
+          ? { "Content-Encoding": bridgeAsset.contentEncoding }
+          : {}),
+        ...upstream.requiredAssetHeaders,
+      },
+    ),
+  );
   return routes;
 }
 
 export function createHarnessServer(options = {}) {
-  const routes = options.routes ?? buildRoutes();
+  const upstream = options.upstream ?? manifest;
+  const root = options.root ?? serviceRoot;
+  const routes =
+    options.routes ??
+    buildRoutes(root, upstream, {
+      runtimeRoot: options.runtimeRoot,
+      runtimeIdentity: options.runtimeIdentity,
+    });
   const hostOrigin = validateHostOrigin(
     options.hostOrigin ?? process.env.SPELLBOOK_BROWSER_HOST_ORIGIN,
   );
   return createServer((request, response) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
     for (const [name, value] of Object.entries(
-      manifest.requiredDocumentHeaders,
+      upstream.requiredDocumentHeaders,
     ))
       response.setHeader(name, value);
     if (pathname === "/workspace" && hostOrigin)
@@ -141,21 +172,22 @@ export function createHarnessServer(options = {}) {
         JSON.stringify({
           status: "ok",
           protocolVersion: 1,
-          buildCommit: manifest.source.buildCommit,
-          candidateCommit: manifest.source.candidateCommit,
-          ...manifest.sourceCandidate,
+          buildCommit: upstream.source.buildCommit,
+          candidateCommit: upstream.source.candidateCommit,
+          ...upstream.sourceCandidate,
         }),
       );
       return;
     }
     const target = routes.get(pathname);
-    if (!target || !existsSync(target.file)) {
+    if (!target || (target.file && !existsSync(target.file))) {
       response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       response.end("Not found");
       return;
     }
     response.writeHead(200, target.headers);
     if (request.method === "HEAD") response.end();
+    else if (target.body !== undefined) response.end(target.body);
     else createReadStream(target.file).pipe(response);
   });
 }
@@ -184,6 +216,17 @@ export function configuredServerPort(
 function route(file, contentType, headers = {}) {
   return {
     file,
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "no-store",
+      ...headers,
+    },
+  };
+}
+
+function inlineRoute(body, contentType, headers = {}) {
+  return {
+    body,
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "no-store",
