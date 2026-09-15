@@ -168,6 +168,19 @@ function validateHostOrigin(value) {
   return parsed.origin;
 }
 
+export function configuredServerPort(
+  argv = process.argv,
+  environment = process.env,
+) {
+  const portFlag = argv.indexOf("--port");
+  const port = Number(
+    portFlag >= 0 ? argv[portFlag + 1] : (environment.PORT ?? 4173),
+  );
+  if (!Number.isSafeInteger(port) || port <= 0 || port > 65_535)
+    throw new Error("PORT must be an integer between 1 and 65535.");
+  return port;
+}
+
 function route(file, contentType, headers = {}) {
   return {
     file,
@@ -180,8 +193,7 @@ function route(file, contentType, headers = {}) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const portFlag = process.argv.indexOf("--port");
-  const port = Number(portFlag >= 0 ? process.argv[portFlag + 1] : 4173);
+  const port = configuredServerPort();
   const host = process.env.HOST ?? "127.0.0.1";
   const server = createHarnessServer();
   server.listen(port, host, () => {

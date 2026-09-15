@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { buildRoutes, createHarnessServer } from "./server.mjs";
+import {
+  buildRoutes,
+  configuredServerPort,
+  createHarnessServer,
+} from "./server.mjs";
 
 const upstream = JSON.parse(
   readFileSync(new URL("./upstream.json", import.meta.url), "utf8"),
@@ -30,6 +34,23 @@ test("browser Office routes preserve isolation, asset identity and encodings", (
   assert.equal(
     routes.get("/runtime/zeta.js").headers["Cache-Control"],
     "public, max-age=31536000, immutable",
+  );
+});
+
+test("browser Office container honors PORT while CLI remains authoritative", () => {
+  assert.equal(
+    configuredServerPort(["node", "server.mjs"], { PORT: "8080" }),
+    8080,
+  );
+  assert.equal(
+    configuredServerPort(["node", "server.mjs", "--port", "4174"], {
+      PORT: "8080",
+    }),
+    4174,
+  );
+  assert.throws(
+    () => configuredServerPort(["node", "server.mjs"], { PORT: "invalid" }),
+    /PORT must be an integer/u,
   );
 });
 

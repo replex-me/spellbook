@@ -140,6 +140,7 @@ function start() {
         case "mark-saved":
           if (!model) throw new Error("No browser Office document is open.");
           model.setModified(false);
+          model.getUndoManager().clear();
           post("mark-saved-complete", { requestId });
           break;
         case "close":

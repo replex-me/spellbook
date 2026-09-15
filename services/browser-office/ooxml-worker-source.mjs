@@ -5,6 +5,8 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 const presentationNamespace =
   "http://schemas.openxmlformats.org/presentationml/2006/main";
+const drawingNamespace =
+  "http://schemas.openxmlformats.org/drawingml/2006/main";
 const relationshipAttributeNamespace =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const packageRelationshipNamespace =
@@ -27,9 +29,11 @@ const topologyOperations = new Set([
   "move_slide",
 ]);
 const slideMetadataOperations = new Set(["rename_slide", "set_slide_hidden"]);
+const elementOperations = new Set(["replace_text"]);
 const browserOperations = new Set([
   ...topologyOperations,
   ...slideMetadataOperations,
+  ...elementOperations,
 ]);
 const sharedDependencyKinds = new Set([
   "slideLayout",
@@ -59,7 +63,9 @@ export function applyOoxmlCommand(input, command) {
         ? deleteSlide(context, command)
         : command.op === "move_slide"
           ? moveSlide(context, command)
-          : updateSlideMetadata(context, command);
+          : slideMetadataOperations.has(command.op)
+            ? updateSlideMetadata(context, command)
+            : updateElement(context, command);
   return {
     bytes: zipSync(context.entries, {
       level: 6,
@@ -168,6 +174,178 @@ function updateSlideMetadata(context, command) {
     value,
     changedParts,
   };
+}
+
+function updateElement(context, command) {
+  if (command.op !== "replace_text")
+    throw new Error(`Unsupported browser element operation: ${command.op}`);
+  if (
+    typeof command.elementId !== "string" ||
+    !/^\d+(?:\/\d+)+$/u.test(command.elementId)
+  )
+    throw new Error("elementId must be a browser Office object path.");
+  if (
+    typeof command.expectedText !== "string" ||
+    typeof command.text !== "string"
+  )
+    throw new TypeError("replace_text requires expectedText and text strings.");
+  const path = command.elementId.split("/").map(Number);
+  const slideIndex = integerInRange(
+    path.shift(),
+    0,
+    context.slideIds.length - 1,
+    "element slide index",
+  );
+  const target = slideInfo(context, slideIndex);
+  const slide = parseXml(context.entries, target.path);
+  const shapeTree = requiredElement(slide, presentationNamespace, "spTree");
+  let container = shapeTree;
+  let shape;
+  for (const [depth, index] of path.entries()) {
+    const shapes = directShapes(container);
+    shape =
+      shapes[
+        integerInRange(index, 0, shapes.length - 1, `element path ${depth}`)
+      ];
+    container = shape;
+  }
+  const previous = readShapeText(shape);
+  if (previous !== command.expectedText)
+    throw new Error("The browser package text changed after observation.");
+  if (previous === command.text)
+    return {
+      operation: command.op,
+      elementId: command.elementId,
+      slideIndex,
+      slideCount: context.slideIds.length,
+      previous,
+      value: command.text,
+      changedParts: [],
+    };
+  replaceShapeText(shape, command.text);
+  context.entries[target.path] = serializeXml(slide);
+  return {
+    operation: command.op,
+    elementId: command.elementId,
+    slideIndex,
+    slideCount: context.slideIds.length,
+    previous,
+    value: command.text,
+    changedParts: [target.path],
+  };
+}
+
+function directShapes(container) {
+  const names = new Set(["sp", "pic", "graphicFrame", "grpSp", "cxnSp"]);
+  return [...container.childNodes].filter(
+    (node) =>
+      node.nodeType === 1 &&
+      node.namespaceURI === presentationNamespace &&
+      names.has(node.localName),
+  );
+}
+
+function readShapeText(shape) {
+  const paragraphs = [...shape.getElementsByTagNameNS(drawingNamespace, "p")];
+  if (!paragraphs.length)
+    throw new Error("The browser package target has no editable text.");
+  return paragraphs.map(readParagraphText).join("\n");
+}
+
+function readParagraphText(paragraph) {
+  let value = "";
+  for (const child of [...paragraph.childNodes]) {
+    if (child.nodeType !== 1 || child.namespaceURI !== drawingNamespace)
+      continue;
+    if (child.localName === "br") value += "\v";
+    else if (child.localName === "r" || child.localName === "fld") {
+      const text = child.getElementsByTagNameNS(drawingNamespace, "t")[0];
+      if (text) value += text.textContent ?? "";
+    }
+  }
+  return value;
+}
+
+function replaceShapeText(shape, value) {
+  const paragraphs = [...shape.getElementsByTagNameNS(drawingNamespace, "p")];
+  const replacements = value.replace(/\r\n/gu, "\n").split("\n");
+  if (replacements.length !== paragraphs.length)
+    throw new Error(
+      "Browser package reconciliation cannot change paragraph count yet.",
+    );
+  for (let index = 0; index < paragraphs.length; index += 1)
+    replaceParagraphText(paragraphs[index], replacements[index]);
+}
+
+function replaceParagraphText(paragraph, value) {
+  if (value.includes("\v"))
+    throw new Error(
+      "Browser package reconciliation cannot change line-break structure yet.",
+    );
+  const fields = [...paragraph.getElementsByTagNameNS(drawingNamespace, "fld")];
+  if (fields.length)
+    throw new Error("Replacing dynamic fields as plain text is not supported.");
+  const textNodes = [
+    ...paragraph.getElementsByTagNameNS(drawingNamespace, "t"),
+  ];
+  if (!textNodes.length)
+    throw new Error("The browser package paragraph has no editable text run.");
+  const original = textNodes.map((node) => node.textContent ?? "").join("");
+  if (original === value) return;
+  let prefix = 0;
+  while (
+    prefix < original.length &&
+    prefix < value.length &&
+    original[prefix] === value[prefix]
+  )
+    prefix += 1;
+  if (
+    prefix > 0 &&
+    prefix < original.length &&
+    isLowSurrogate(original, prefix)
+  )
+    prefix -= 1;
+  let suffix = 0;
+  while (
+    suffix < original.length - prefix &&
+    suffix < value.length - prefix &&
+    original[original.length - suffix - 1] === value[value.length - suffix - 1]
+  )
+    suffix += 1;
+  if (suffix > 0 && isLowSurrogate(original, original.length - suffix))
+    suffix -= 1;
+  const end = original.length - suffix;
+  const inserted = value.slice(prefix, value.length - suffix);
+  let offset = 0;
+  let insertedOnce = false;
+  for (const [index, node] of textNodes.entries()) {
+    const text = node.textContent ?? "";
+    const runEnd = offset + text.length;
+    const before = text.slice(
+      0,
+      Math.max(0, Math.min(text.length, prefix - offset)),
+    );
+    const after = text.slice(Math.max(0, Math.min(text.length, end - offset)));
+    const anchor =
+      !insertedOnce && (prefix < runEnd || index === textNodes.length - 1);
+    const replacement = before + (anchor ? inserted : "") + after;
+    if (anchor) insertedOnce = true;
+    node.textContent = replacement;
+    if (/^\s|\s$/u.test(replacement))
+      node.setAttributeNS(
+        "http://www.w3.org/XML/1998/namespace",
+        "xml:space",
+        "preserve",
+      );
+    else
+      node.removeAttributeNS("http://www.w3.org/XML/1998/namespace", "space");
+    offset = runEnd;
+  }
+}
+
+function isLowSurrogate(value, index) {
+  const code = value.charCodeAt(index);
+  return code >= 0xdc00 && code <= 0xdfff;
 }
 
 function validSlideName(value) {

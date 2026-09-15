@@ -222,6 +222,37 @@ test("browser slide metadata validates values and treats identical values as a n
   );
 });
 
+test("browser OOXML worker replaces text without rewriting unrelated package parts", async () => {
+  const source = new Uint8Array(await readFile(fixtureUrl));
+  const original = unzipSync(source);
+  const replacement = "Spellbook 국소 저장 العربية";
+  const edited = applyOoxmlCommand(source, {
+    op: "replace_text",
+    elementId: "0/0",
+    expectedText: "Spellbook 검증 العربية",
+    text: replacement,
+  });
+  const entries = unzipSync(edited.bytes);
+  assert.deepEqual(edited.report.changedParts, ["ppt/slides/slide1.xml"]);
+  assert.deepEqual(changedLogicalParts(original, entries), [
+    "ppt/slides/slide1.xml",
+  ]);
+  assert.match(
+    strFromU8(entries["ppt/slides/slide1.xml"]),
+    new RegExp(replacement, "u"),
+  );
+  assert.throws(
+    () =>
+      applyOoxmlCommand(source, {
+        op: "replace_text",
+        elementId: "0/0",
+        expectedText: "stale text",
+        text: replacement,
+      }),
+    /changed after observation/iu,
+  );
+});
+
 test("browser metadata edits remain available when topology has sections", async () => {
   const source = new Uint8Array(await readFile(fixtureUrl));
   const entries = unzipSync(source);
@@ -321,7 +352,7 @@ test("browser OOXML worker rejects non-PPTX and unsupported commands", async () 
   assert.throws(
     () =>
       applyOoxmlCommand(source, {
-        op: "replace_text",
+        op: "unsupported_edit",
       }),
     /Unsupported browser OOXML operation/iu,
   );

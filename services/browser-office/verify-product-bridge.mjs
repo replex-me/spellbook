@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
+import { strFromU8, unzipSync } from "fflate";
 
 import { createHarnessServer } from "./server.mjs";
 
@@ -51,49 +52,8 @@ try {
     `${origin}/workspace?hostOrigin=${encodeURIComponent(origin)}`,
     { waitUntil: "domcontentloaded", timeout: 30_000 },
   );
-  await page.waitForFunction(
-    () => document.body.dataset.state === "runtime-ready",
-    null,
-    { timeout: 60_000 },
-  );
-  await page.evaluate((hostOrigin) => {
-    const events = [];
-    const channel = new MessageChannel();
-    channel.port1.onmessage = (event) => events.push(event.data);
-    channel.port1.start();
-    globalThis.__spellbookProductHost = {
-      events,
-      port: channel.port1,
-    };
-    window.postMessage(
-      {
-        type: "spellbook.browser-office-connect",
-        protocolVersion: 1,
-      },
-      hostOrigin,
-      [channel.port2],
-    );
-  }, origin);
-  await waitForEvent(page, { type: "ready" });
-
-  await page.evaluate(
-    ({ bytes }) => {
-      const value = Uint8Array.from(bytes);
-      globalThis.__spellbookProductHost.port.postMessage(
-        {
-          type: "open",
-          requestId: "open-1",
-          fileName: "product-bridge.pptx",
-          revision:
-            '"baseline:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
-          maxBytes: 64 * 1024 * 1024,
-          bytes: value.buffer,
-        },
-        [value.buffer],
-      );
-    },
-    { bytes: Array.from(fixture) },
-  );
+  await connectProductHost(page, origin);
+  await openProductFixture(page, fixture, "open-1");
   const opened = await waitForEvent(page, { type: "open-complete" });
   assert.equal(opened.slideCount > 0, true);
   assert.equal(opened.recovered, false);
@@ -106,6 +66,26 @@ try {
     .flatMap((slide) => slide.elements)
     .find((element) => typeof element.text === "string" && element.text);
   assert.ok(target, "The product bridge fixture needs editable text.");
+  await assert.rejects(
+    nativeTask(page, "unsupported-edit", {
+      operation: "edit",
+      expectedRevision: before.revision,
+      expectedSlides: JSON.stringify(before.slides),
+      command: {
+        op: "move",
+        elementId: target.elementId,
+        x: target.x + 100,
+        y: target.y + 100,
+      },
+      permission: {
+        mode: "selection",
+        elementIds: [target.elementId],
+        slideIndexes: [],
+      },
+      suppressCapture: true,
+    }),
+    /browser_ooxml_reconciliation_required:move/u,
+  );
   const replacement = `${target.text} · product bridge`;
   const edited = await nativeTask(page, "edit-1", {
     operation: "edit",
@@ -130,6 +110,25 @@ try {
     replacement,
   );
 
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
+  await connectProductHost(page, origin);
+  await openProductFixture(page, fixture, "open-recovered");
+  const recoveredOpen = await waitForEvent(page, {
+    type: "open-complete",
+    requestId: "open-recovered",
+  });
+  assert.equal(recoveredOpen.recovered, true);
+  const recoveredEdit = await nativeTask(page, "observe-recovered", {
+    operation: "observe",
+    captureSlideIndexes: [],
+  });
+  assert.equal(
+    recoveredEdit.slides
+      .flatMap((slide) => slide.elements)
+      .find((element) => element.elementId === target.elementId)?.text,
+    replacement,
+  );
+
   await sendHostCommand(page, "Send_UNO_Command", {
     Command: ".uno:Undo",
   });
@@ -147,10 +146,27 @@ try {
     )}`,
   );
 
+  await sendHostCommand(page, "Send_UNO_Command", {
+    Command: ".uno:Redo",
+  });
+  const redone = await nativeTask(page, "observe-redone", {
+    operation: "observe",
+    captureSlideIndexes: [],
+  });
+  assert.equal(
+    redone.slides
+      .flatMap((slide) => slide.elements)
+      .find((element) => element.elementId === target.elementId)?.text,
+    replacement,
+  );
+  await sendHostCommand(page, "Send_UNO_Command", {
+    Command: ".uno:Undo",
+  });
+
   const editedForSave = await nativeTask(page, "edit-2", {
     operation: "edit",
-    expectedRevision: restored.revision,
-    expectedSlides: JSON.stringify(restored.slides),
+    expectedRevision: before.revision,
+    expectedSlides: JSON.stringify(before.slides),
     command: {
       op: "replace_text",
       elementId: target.elementId,
@@ -163,7 +179,7 @@ try {
     },
     suppressCapture: true,
   });
-  assert.notEqual(editedForSave.revision, restored.revision);
+  assert.notEqual(editedForSave.revision, before.revision);
   await page.evaluate(() => {
     const saveCommand = {
       type: "command",
@@ -194,6 +210,17 @@ try {
   }, save.requestId);
   assert.equal(savedBytes[0], 0x50);
   assert.equal(savedBytes[1], 0x4b);
+  const savedPackage = unzipSync(Uint8Array.from(savedBytes));
+  const changedParts = changedLogicalParts(unzipSync(fixture), savedPackage);
+  assert.deepEqual(
+    changedParts,
+    ["ppt/slides/slide1.xml"],
+    "A single text edit must not rewrite unrelated OOXML parts.",
+  );
+  assert.ok(
+    strFromU8(savedPackage["ppt/slides/slide1.xml"]).includes(replacement),
+    "The localized OOXML part must contain the edited text.",
+  );
   const savedRevision =
     '"saved:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"';
   await page.evaluate(
@@ -215,8 +242,10 @@ try {
     slideCount: opened.slideCount,
     editedElementId: target.elementId,
     undoRestoredRevision: restored.revision,
+    recovered: recoveredOpen.recovered,
     savedRevision,
     savedBytes: savedBytes.length,
+    changedParts,
     pageErrors,
     requestFailures,
   };
@@ -239,15 +268,85 @@ try {
   );
 }
 
-async function waitForEvent(page, expected) {
+async function connectProductHost(page, origin) {
   await page.waitForFunction(
-    (match) =>
-      globalThis.__spellbookProductHost?.events.some((event) =>
-        Object.entries(match).every(([key, value]) => event[key] === value),
-      ),
-    expected,
-    { timeout: 30_000 },
+    () => document.body.dataset.state === "runtime-ready",
+    null,
+    { timeout: 60_000 },
   );
+  await page.evaluate((hostOrigin) => {
+    const events = [];
+    const channel = new MessageChannel();
+    channel.port1.onmessage = (event) => events.push(event.data);
+    channel.port1.start();
+    globalThis.__spellbookProductHost = {
+      events,
+      port: channel.port1,
+    };
+    window.postMessage(
+      {
+        type: "spellbook.browser-office-connect",
+        protocolVersion: 1,
+      },
+      hostOrigin,
+      [channel.port2],
+    );
+  }, origin);
+  await waitForEvent(page, { type: "ready" });
+}
+
+async function openProductFixture(page, bytes, requestId) {
+  await page.evaluate(
+    ({ source, id }) => {
+      const value = Uint8Array.from(source);
+      globalThis.__spellbookProductHost.port.postMessage(
+        {
+          type: "open",
+          requestId: id,
+          fileName: "product-bridge.pptx",
+          revision:
+            '"baseline:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+          maxBytes: 64 * 1024 * 1024,
+          bytes: value.buffer,
+        },
+        [value.buffer],
+      );
+    },
+    { source: Array.from(bytes), id: requestId },
+  );
+}
+
+async function waitForEvent(page, expected) {
+  try {
+    await page.waitForFunction(
+      (match) =>
+        globalThis.__spellbookProductHost?.events.some((event) =>
+          Object.entries(match).every(([key, value]) => event[key] === value),
+        ),
+      expected,
+      { timeout: 30_000 },
+    );
+  } catch (error) {
+    const events = await page.evaluate(() =>
+      (globalThis.__spellbookProductHost?.events ?? []).map((event) => ({
+        type: event.type,
+        id: event.id,
+        error: event.error,
+        messageId: event.messageId,
+        command: event.command,
+        requestId: event.requestId,
+        modified: event.modified,
+        valueRevision: event.value?.revision,
+        bytes:
+          event.bytes instanceof ArrayBuffer
+            ? `<${event.bytes.byteLength} bytes>`
+            : undefined,
+      })),
+    );
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}; expected=${JSON.stringify(expected)}; events=${JSON.stringify(events)}`,
+    );
+  }
   return page.evaluate(
     (match) =>
       globalThis.__spellbookProductHost.events.find((event) =>
@@ -272,18 +371,21 @@ async function nativeTask(page, id, request) {
 }
 
 async function sendHostCommand(page, messageId, values) {
+  const requestId = `host-command-${messageId}-${Date.now()}-${Math.random()}`;
   await page.evaluate(
-    ({ command, payload }) =>
+    ({ command, payload, requestId: id }) =>
       globalThis.__spellbookProductHost.port.postMessage({
         type: "command",
         messageId: command,
         values: payload,
+        requestId: id,
       }),
-    { command: messageId, payload: values },
+    { command: messageId, payload: values, requestId },
   );
   await waitForEvent(page, {
     type: "command-complete",
     messageId,
+    requestId,
   });
 }
 
@@ -297,4 +399,16 @@ function firstDifference(left, right, path = "slides") {
     if (difference) return difference;
   }
   return null;
+}
+
+function changedLogicalParts(before, after) {
+  const names = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return [...names]
+    .filter((name) => !equalBytes(before[name], after[name]))
+    .sort();
+}
+
+function equalBytes(left, right) {
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
 }

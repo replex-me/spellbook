@@ -20,6 +20,7 @@ const expectedHostOrigin = productMode
   : null;
 
 let enginePort;
+let engineDocumentOpen = false;
 let hostPort;
 let hostRevision = "";
 let hostMaximumBytes = 0;
@@ -49,7 +50,12 @@ let currentSlideCount = 0;
 let baseBytes;
 let journal;
 let productExportQueue = Promise.resolve();
+let productMessageQueue = Promise.resolve();
 const commands = [];
+const productUndoHistory = [];
+const productRedoHistory = [];
+let reconciledModelRevision = "";
+let unreconciledModelRevision = "";
 
 function setState(nextState, message) {
   body.dataset.state = nextState;
@@ -91,12 +97,17 @@ async function writeAndOpen(bytes, name = "document.pptx") {
   currentBytes = bytes.slice();
   filename = name;
   activePath = `/tmp/spellbook/${name.replace(/[^a-zA-Z0-9._-]/gu, "-")}`;
+  if (engineDocumentOpen) {
+    await request("close");
+    engineDocumentOpen = false;
+  }
   try {
     FS.mkdir("/tmp/spellbook");
   } catch {}
   FS.writeFile(activePath, bytes);
   setState("opening", `Opening ${filename}`);
   const result = await request("open", { path: activePath });
+  engineDocumentOpen = true;
   currentSlideCount = result.slideCount;
   await waitForUiPaint("document");
   setState("document-ready", `${filename} · ${result.slideCount} slides`);
@@ -257,6 +268,201 @@ async function undoMutation() {
   return result;
 }
 
+async function observeNativeDocument() {
+  const result = await request("native", {
+    nativeRequest: { operation: "observe", captureSlideIndexes: [] },
+  });
+  if (
+    !result.value ||
+    typeof result.value.revision !== "string" ||
+    !result.value.revision
+  )
+    throw new Error("Browser Office observation has no document revision.");
+  return result.value;
+}
+
+function parseExpectedSlides(value) {
+  let slides;
+  try {
+    slides = typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    throw new Error("Browser edit expectedSlides is invalid JSON.");
+  }
+  if (!Array.isArray(slides))
+    throw new Error("Browser edit expectedSlides must be an array.");
+  return slides;
+}
+
+function expectedTextForElement(slides, elementId) {
+  for (const slide of slides) {
+    if (!Array.isArray(slide?.elements)) continue;
+    const element = slide.elements.find(
+      (candidate) => candidate?.elementId === elementId,
+    );
+    if (element) {
+      if (typeof element.text !== "string")
+        throw new Error("Browser package target has no editable text.");
+      return element.text;
+    }
+  }
+  throw new Error("Browser package target is absent from expectedSlides.");
+}
+
+async function prepareProductPackageMutation(nativeRequest) {
+  if (nativeRequest?.operation !== "edit" || nativeRequest.dryRun === true)
+    return null;
+  if (!currentBytes || !journal)
+    throw new Error("No browser Office document is open.");
+  if (
+    typeof nativeRequest.expectedRevision !== "string" ||
+    nativeRequest.expectedRevision !== reconciledModelRevision
+  )
+    throw new Error("browser_package_revision_changed");
+  const command = nativeRequest.command;
+  if (!command || typeof command !== "object" || Array.isArray(command))
+    throw new Error("Browser edit command is invalid.");
+  if (command.op !== "replace_text")
+    throw new Error(`browser_ooxml_reconciliation_required:${command.op}`);
+  if (typeof command.elementId !== "string" || typeof command.text !== "string")
+    throw new Error("Browser replace_text command is invalid.");
+  const packageCommand = {
+    op: "replace_text",
+    elementId: command.elementId,
+    expectedText: expectedTextForElement(
+      parseExpectedSlides(nativeRequest.expectedSlides),
+      command.elementId,
+    ),
+    text: command.text,
+  };
+  const beforeBytes = currentBytes.slice();
+  const mutation = await applyMutation(beforeBytes, packageCommand);
+  return {
+    beforeBytes,
+    beforeRevision: reconciledModelRevision,
+    command: packageCommand,
+    mutation,
+  };
+}
+
+async function commitProductPackageMutation(prepared, nativeValue) {
+  if (!prepared) return;
+  if (
+    !nativeValue ||
+    typeof nativeValue.revision !== "string" ||
+    !nativeValue.revision
+  )
+    throw new Error("Browser native edit has no resulting revision.");
+  const target = nativeValue.slides
+    ?.flatMap((slide) => slide.elements ?? [])
+    .find((element) => element.elementId === prepared.command.elementId);
+  if (target?.text !== prepared.command.text)
+    throw new Error("Browser native and package edits disagree.");
+  if (!prepared.mutation.report.changedParts.length) {
+    reconciledModelRevision = nativeValue.revision;
+    unreconciledModelRevision = "";
+    return;
+  }
+  const afterBytes = new Uint8Array(prepared.mutation.bytes);
+  const journalCommand = {
+    ...prepared.command,
+    reconciliation: {
+      beforeRevision: prepared.beforeRevision,
+      afterRevision: nativeValue.revision,
+    },
+  };
+  currentBytes = afterBytes;
+  productUndoHistory.push({
+    beforeBytes: prepared.beforeBytes,
+    afterBytes,
+    beforeRevision: prepared.beforeRevision,
+    afterRevision: nativeValue.revision,
+    command: journalCommand,
+  });
+  commands.push(journalCommand);
+  productRedoHistory.length = 0;
+  reconciledModelRevision = nativeValue.revision;
+  unreconciledModelRevision = "";
+  currentSlideCount = prepared.mutation.report.slideCount;
+  try {
+    await persistCheckpoint();
+  } catch (error) {
+    currentBytes = prepared.beforeBytes;
+    productUndoHistory.pop();
+    commands.pop();
+    await request("dispatch", { unoCommand: "Undo" });
+    const restored = await observeNativeDocument();
+    if (restored.revision !== prepared.beforeRevision)
+      throw new Error(
+        `browser_package_checkpoint_and_rollback_failed:${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    reconciledModelRevision = restored.revision;
+    throw error;
+  }
+  observed.lastMutation = prepared.mutation.report;
+  evidence.value = JSON.stringify(observed);
+}
+
+async function replayRecoveredCommands(base, recoveredCommands) {
+  let candidate = base.slice();
+  commands.length = 0;
+  productUndoHistory.length = 0;
+  productRedoHistory.length = 0;
+  for (const command of recoveredCommands) {
+    const before = candidate.slice();
+    const result = await applyMutation(before, command);
+    candidate = new Uint8Array(result.bytes);
+    const reconciliation = command.reconciliation;
+    if (
+      typeof reconciliation?.beforeRevision !== "string" ||
+      !reconciliation.beforeRevision ||
+      typeof reconciliation.afterRevision !== "string" ||
+      !reconciliation.afterRevision
+    )
+      throw new Error("Browser recovery command has no revision identity.");
+    productUndoHistory.push({
+      beforeBytes: before,
+      afterBytes: candidate,
+      beforeRevision: reconciliation.beforeRevision,
+      afterRevision: reconciliation.afterRevision,
+      command,
+    });
+    commands.push(command);
+  }
+  return candidate;
+}
+
+async function undoProductMutation() {
+  const previous = productUndoHistory.at(-1);
+  if (!previous || !commands.length) return false;
+  await writeAndOpen(previous.beforeBytes, filename);
+  productUndoHistory.pop();
+  commands.pop();
+  productRedoHistory.push(previous);
+  reconciledModelRevision = previous.beforeRevision;
+  unreconciledModelRevision = "";
+  await persistCheckpoint();
+  reportHostModified(commands.length > 0);
+  return true;
+}
+
+async function redoProductMutation() {
+  const next = productRedoHistory.at(-1);
+  if (!next) return false;
+  if ((await sha256(currentBytes)) !== (await sha256(next.beforeBytes)))
+    throw new Error("Browser redo base no longer matches the package history.");
+  await writeAndOpen(next.afterBytes, filename);
+  productRedoHistory.pop();
+  productUndoHistory.push(next);
+  commands.push(next.command);
+  reconciledModelRevision = next.afterRevision;
+  unreconciledModelRevision = "";
+  await persistCheckpoint();
+  reportHostModified(true);
+  return true;
+}
+
 async function openJournal(initialBytes, name) {
   baseBytes = initialBytes.slice();
   journal = await openBrowserDocumentJournal({
@@ -312,15 +518,29 @@ function reportHostModified(modified) {
   postHost({ type: "modified", modified });
 }
 
+function enqueueProductOperation(operation) {
+  const pendingOperation = productMessageQueue.then(operation);
+  productMessageQueue = pendingOperation.catch((error) => {
+    postHost({
+      type: "error",
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+  return pendingOperation;
+}
+
 async function exportProductDocumentNow({ checkpoint = true } = {}) {
   if (!currentBytes || !journal)
     throw new Error("No browser Office document is open.");
-  const exportPath = "/tmp/spellbook/product-export.pptx";
-  await request("store", { path: exportPath });
-  const bytes = new Uint8Array(FS.readFile(exportPath)).slice();
+  const live = await observeNativeDocument();
+  if (live.revision !== reconciledModelRevision) {
+    unreconciledModelRevision = live.revision;
+    throw new Error("browser_edit_reconciliation_required");
+  }
+  unreconciledModelRevision = "";
+  const bytes = currentBytes.slice();
   if (!bytes.byteLength || bytes.byteLength > hostMaximumBytes)
     throw new Error("Browser Office export exceeded the document limit.");
-  currentBytes = bytes;
   if (checkpoint) await persistCheckpoint();
   return bytes;
 }
@@ -356,14 +576,37 @@ async function openProductDocument(message) {
   hostMaximumBytes = message.maxBytes;
   history.length = 0;
   commands.length = 0;
+  productUndoHistory.length = 0;
+  productRedoHistory.length = 0;
+  reconciledModelRevision = "";
+  unreconciledModelRevision = "";
   await requestPersistentBrowserStorage();
   await openJournal(initial, message.fileName);
   const recovered = await journal.load();
-  const candidate = recovered?.candidateBytes ?? initial;
   baseBytes = initial.slice();
-  currentBytes = candidate.slice();
-  await writeAndOpen(currentBytes, message.fileName);
-  const modified = Boolean(recovered);
+  let candidate = initial;
+  if (recovered) {
+    if ((await sha256(recovered.baseBytes)) !== (await sha256(initial)))
+      throw new Error("Browser recovery base differs from the host document.");
+    const replayed = await replayRecoveredCommands(
+      initial,
+      recovered.metadata.commands,
+    );
+    if (
+      (await sha256(replayed)) !== recovered.metadata.candidateSha256 ||
+      (await sha256(recovered.candidateBytes)) !==
+        recovered.metadata.candidateSha256
+    )
+      throw new Error("Browser recovery command journal cannot be reconciled.");
+    candidate = recovered.candidateBytes;
+  }
+  await writeAndOpen(candidate, message.fileName);
+  const live = await observeNativeDocument();
+  const recoveredRevision = commands.at(-1)?.reconciliation?.afterRevision;
+  if (recoveredRevision && live.revision !== recoveredRevision)
+    throw new Error("Browser recovery model differs from the package journal.");
+  reconciledModelRevision = live.revision;
+  const modified = commands.length > 0;
   lastReportedModified = !modified;
   reportHostModified(modified);
   postHost({
@@ -417,13 +660,27 @@ async function handleProductHostMessage(message) {
       );
       if (!["Undo", "Redo"].includes(command))
         throw new Error("Browser Office host command is not allowed.");
-      await request("dispatch", { unoCommand: command });
-      const status = await request("status");
-      reportHostModified(Boolean(status.modified));
+      const handled =
+        command === "Undo"
+          ? await undoProductMutation()
+          : await redoProductMutation();
+      if (!handled) {
+        await request("dispatch", { unoCommand: command });
+        const live = await observeNativeDocument();
+        unreconciledModelRevision =
+          live.revision === reconciledModelRevision ? "" : live.revision;
+        const status = await request("status");
+        reportHostModified(
+          Boolean(status.modified) || Boolean(unreconciledModelRevision),
+        );
+      }
       postHost({
         type: "command-complete",
         messageId: message.messageId,
         command,
+        ...(typeof message.requestId === "string"
+          ? { requestId: message.requestId }
+          : {}),
       });
       return;
     }
@@ -453,6 +710,11 @@ async function handleProductHostMessage(message) {
     baseBytes = currentBytes.slice();
     await request("mark-saved");
     await journal.clear();
+    history.length = 0;
+    commands.length = 0;
+    productUndoHistory.length = 0;
+    productRedoHistory.length = 0;
+    unreconciledModelRevision = "";
     lastReportedModified = true;
     reportHostModified(false);
     postHost({ type: "save-response", success: true });
@@ -460,11 +722,17 @@ async function handleProductHostMessage(message) {
   }
   if (typeof message.id === "string" && message.request) {
     try {
+      const prepared = await prepareProductPackageMutation(message.request);
       const result = await request("native", {
         nativeRequest: message.request,
       });
+      await commitProductPackageMutation(prepared, result.value);
       const status = await request("status");
-      reportHostModified(Boolean(status.modified));
+      reportHostModified(
+        Boolean(status.modified) ||
+          commands.length > 0 ||
+          Boolean(unreconciledModelRevision),
+      );
       postHost({ id: message.id, value: result.value });
     } catch (error) {
       postHost({
@@ -490,12 +758,9 @@ function connectProductHost(event) {
     return;
   hostPort = event.ports[0];
   hostPort.onmessage = (hostEvent) => {
-    void handleProductHostMessage(hostEvent.data).catch((error) => {
-      postHost({
-        type: "error",
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+    void enqueueProductOperation(() =>
+      handleProductHostMessage(hostEvent.data),
+    );
   };
   hostPort.start();
   postHost({ type: "ready", protocolVersion: 1 });
@@ -508,27 +773,33 @@ let checkpointInFlight = false;
 let lastCheckpointAt = 0;
 function startProductHeartbeat() {
   if (!productMode || !runtimeReady || !hostPort || productHeartbeat) return;
-  const poll = async () => {
+  const poll = () => {
     if (!currentBytes || checkpointInFlight) return;
     checkpointInFlight = true;
-    try {
+    void enqueueProductOperation(async () => {
       const current = await request("status");
-      const modified = Boolean(current.modified);
+      const modified =
+        Boolean(current.modified) ||
+        commands.length > 0 ||
+        Boolean(unreconciledModelRevision);
       reportHostModified(modified);
       if (modified && Date.now() - lastCheckpointAt >= 10_000) {
-        await exportProductDocument();
+        const live = await observeNativeDocument();
+        unreconciledModelRevision =
+          live.revision === reconciledModelRevision ? "" : live.revision;
+        if (!unreconciledModelRevision) await persistCheckpoint();
         lastCheckpointAt = Date.now();
       }
-    } catch (error) {
-      postHost({
-        type: "error",
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      checkpointInFlight = false;
-    }
+    }).then(
+      () => {
+        checkpointInFlight = false;
+      },
+      () => {
+        checkpointInFlight = false;
+      },
+    );
   };
-  productHeartbeat = setInterval(() => void poll(), 750);
+  productHeartbeat = setInterval(poll, 750);
 }
 
 async function runConformance() {
@@ -546,6 +817,8 @@ async function runConformance() {
   await journal.clear();
   commands.length = 0;
   history.length = 0;
+  productUndoHistory.length = 0;
+  productRedoHistory.length = 0;
   const initial = await writeAndOpen(fixture, "general-native-surface.pptx");
   await runNativeBridgeProbe();
   await writeAndOpen(fixture, "general-native-surface.pptx");
@@ -651,6 +924,8 @@ async function resumeConformance(expected) {
   currentBytes = baseBytes.slice();
   commands.length = 0;
   history.length = 0;
+  productUndoHistory.length = 0;
+  productRedoHistory.length = 0;
   for (let index = 0; index < checkpoint.metadata.commands.length; index += 1) {
     const command = checkpoint.metadata.commands[index];
     history.push(currentBytes.slice());
@@ -729,6 +1004,8 @@ fileInput.addEventListener("change", async () => {
   if (!file) return;
   history.length = 0;
   commands.length = 0;
+  productUndoHistory.length = 0;
+  productRedoHistory.length = 0;
   undoButton.disabled = true;
   const bytes = new Uint8Array(await file.arrayBuffer());
   await openJournal(bytes, file.name);

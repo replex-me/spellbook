@@ -1,7 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { unzipSync } from "fflate";
 
 import { createSessionToken, localAccountId } from "../../src/lib/auth";
 
@@ -78,8 +79,51 @@ test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
 }) => {
   test.skip(!documentId, "SPELLBOOK_SELFHOST_DOCUMENT_ID is required");
 
+  const baselineResponse = await page.request.get(
+    `/api/documents/${documentId}/download?source=current`,
+  );
+  expect(baselineResponse.ok()).toBe(true);
+  const baselineBytes = new Uint8Array(await baselineResponse.body());
+
+  await page.addInitScript(() => {
+    const NativeMessageChannel = window.MessageChannel;
+    const channels: MessageChannel[] = [];
+    Object.defineProperty(window, "__spellbookObservedMessageChannels", {
+      value: channels,
+    });
+    Object.defineProperty(window, "MessageChannel", {
+      configurable: true,
+      value: function ObservedMessageChannel() {
+        const channel = new NativeMessageChannel();
+        channels.push(channel);
+        return channel;
+      },
+    });
+  });
+  await page.route(
+    `**/api/documents/${documentId}/native/result`,
+    async (route) => {
+      let body: any = null;
+      try {
+        body = route.request().postDataJSON();
+      } catch {}
+      if (typeof body?.id === "string" && body.id.startsWith("selfhost-e2e-")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "{}",
+        });
+        return;
+      }
+      await route.continue();
+    },
+  );
+
   await page.goto(`/documents/${documentId}`);
-  await expect(page).toHaveURL(new RegExp(`/documents/${documentId}$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/(?:browser-)?documents/${documentId}$`),
+  );
+  const browserEditor = page.url().includes("/browser-documents/");
   await expect(page.getByTitle("PPT 편집기")).toBeVisible();
   await expect(page.locator(".native-save-state")).toContainText("저장됨", {
     timeout: 60_000,
@@ -101,6 +145,125 @@ test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
     page.getByText("PPT는 지금 바로 직접 편집할 수 있습니다."),
   ).toBeVisible();
 
+  const replacement = `Spellbook round trip ${Date.now()}`;
+  const changed = browserEditor
+    ? await editThroughBrowserBridge(page, replacement)
+    : await editThroughCollaboraBridge(page, replacement);
+  expect(changed).toBe(true);
+
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(page.locator(".native-save-state")).toContainText("저장", {
+    timeout: 5_000,
+  });
+  await expect(page.locator(".native-save-state")).toHaveText("저장됨", {
+    timeout: 60_000,
+  });
+
+  const downloadEvent = page.waitForEvent("download", { timeout: 60_000 });
+  await page.getByRole("button", { name: "PPTX 다운로드" }).click();
+  const download = await downloadEvent;
+
+  await fs.mkdir(evidenceDir, { recursive: true });
+  const downloadedFile = path.join(evidenceDir, "round-trip.pptx");
+  await download.saveAs(downloadedFile);
+  const downloadedBytes = new Uint8Array(await fs.readFile(downloadedFile));
+  const archiveCheck = spawnSync("unzip", ["-t", downloadedFile], {
+    encoding: "utf8",
+  });
+  expect(archiveCheck.status, archiveCheck.stderr).toBe(0);
+  const slide = spawnSync(
+    "unzip",
+    ["-p", downloadedFile, "ppt/slides/slide1.xml"],
+    { encoding: "utf8" },
+  );
+  expect(slide.status, slide.stderr).toBe(0);
+  expect(slide.stdout).toContain(replacement);
+  if (browserEditor) {
+    const changedParts = changedLogicalParts(
+      unzipSync(baselineBytes),
+      unzipSync(downloadedBytes),
+    );
+    expect(changedParts).toEqual(["ppt/slides/slide1.xml"]);
+    await fs.writeFile(
+      path.join(evidenceDir, "round-trip-changed-parts.json"),
+      `${JSON.stringify({ changedParts }, null, 2)}\n`,
+    );
+  }
+  await page.screenshot({
+    path: path.join(evidenceDir, "live-pptx-editor.png"),
+    fullPage: true,
+  });
+});
+
+async function editThroughBrowserBridge(page: Page, replacement: string) {
+  const before = await browserBridgeRequest(page, "observe", {
+    operation: "observe",
+    captureSlideIndexes: [],
+  });
+  const target = before.slides
+    .flatMap((slide: { elements: Array<{ text?: string }> }) => slide.elements)
+    .find((element: { text?: string }) => element.text);
+  if (!target) throw new Error("browser_editor_text_target_not_found");
+  const after = await browserBridgeRequest(page, "edit", {
+    operation: "edit",
+    expectedRevision: before.revision,
+    expectedSlides: JSON.stringify(before.slides),
+    permission: { mode: "document", elementIds: [], slideIndexes: [] },
+    command: {
+      op: "replace_text",
+      elementId: target.elementId,
+      text: replacement,
+    },
+    suppressCapture: true,
+  });
+  return after.slides.some((slide: { elements: Array<{ text?: string }> }) =>
+    slide.elements.some(
+      (element: { text?: string }) => element.text === replacement,
+    ),
+  );
+}
+
+async function browserBridgeRequest(
+  page: Page,
+  operation: string,
+  request: unknown,
+) {
+  return page.evaluate(
+    ({ id, nativeRequest }) =>
+      new Promise<any>((resolve, reject) => {
+        const channels = (
+          window as typeof window & {
+            __spellbookObservedMessageChannels?: MessageChannel[];
+          }
+        ).__spellbookObservedMessageChannels;
+        const channel = channels?.at(-1);
+        if (!channel) {
+          reject(new Error("browser_editor_message_channel_not_found"));
+          return;
+        }
+        const timeout = window.setTimeout(() => {
+          channel.port1.removeEventListener("message", onMessage);
+          reject(new Error(`browser_editor_${operation}_timeout`));
+        }, 30_000);
+        const onMessage = (event: MessageEvent) => {
+          if (event.data?.id !== id) return;
+          window.clearTimeout(timeout);
+          channel.port1.removeEventListener("message", onMessage);
+          if (event.data.error) reject(new Error(event.data.error));
+          else resolve(event.data.value);
+        };
+        channel.port1.addEventListener("message", onMessage);
+        channel.port1.start();
+        channel.port1.postMessage({ id, request: nativeRequest });
+      }),
+    {
+      id: `selfhost-e2e-${operation}-${Date.now()}`,
+      nativeRequest: request,
+    },
+  );
+}
+
+async function editThroughCollaboraBridge(page: Page, replacement: string) {
   await expect
     .poll(() =>
       page
@@ -116,9 +279,7 @@ test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
       frame.url().includes("/extensions/org.spellbook.editor/index.html"),
     );
   expect(editorBridge).toBeDefined();
-
-  const replacement = `Spellbook round trip ${Date.now()}`;
-  const changed = await editorBridge!.evaluate(async (nextText) => {
+  return editorBridge!.evaluate(async (nextText) => {
     const native = (
       window as typeof window & {
         presentNative: {
@@ -148,36 +309,19 @@ test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
       (element: { text?: string }) => element.text === nextText,
     );
   }, replacement);
-  expect(changed).toBe(true);
+}
 
-  await page.getByRole("button", { name: "저장", exact: true }).click();
-  await expect(page.locator(".native-save-state")).toContainText("저장", {
-    timeout: 5_000,
-  });
-  await expect(page.locator(".native-save-state")).toHaveText("저장됨", {
-    timeout: 60_000,
-  });
+function changedLogicalParts(
+  before: Record<string, Uint8Array>,
+  after: Record<string, Uint8Array>,
+) {
+  const names = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return [...names]
+    .filter((name) => !equalBytes(before[name], after[name]))
+    .sort();
+}
 
-  const downloadEvent = page.waitForEvent("download", { timeout: 60_000 });
-  await page.getByRole("button", { name: "PPTX 다운로드" }).click();
-  const download = await downloadEvent;
-
-  await fs.mkdir(evidenceDir, { recursive: true });
-  const downloadedFile = path.join(evidenceDir, "round-trip.pptx");
-  await download.saveAs(downloadedFile);
-  const archiveCheck = spawnSync("unzip", ["-t", downloadedFile], {
-    encoding: "utf8",
-  });
-  expect(archiveCheck.status, archiveCheck.stderr).toBe(0);
-  const slide = spawnSync(
-    "unzip",
-    ["-p", downloadedFile, "ppt/slides/slide1.xml"],
-    { encoding: "utf8" },
-  );
-  expect(slide.status, slide.stderr).toBe(0);
-  expect(slide.stdout).toContain(replacement);
-  await page.screenshot({
-    path: path.join(evidenceDir, "live-pptx-editor.png"),
-    fullPage: true,
-  });
-});
+function equalBytes(left?: Uint8Array, right?: Uint8Array) {
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
