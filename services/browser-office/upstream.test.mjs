@@ -31,6 +31,15 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "page-background-native-undo",
     "slide-real-name-undo",
     "moved-page-object-identity",
+    "table-structure-geometry-undo",
+    "table-insert-format-inheritance",
+    "table-text-cursor-undo",
+    "slide-layout-master-preservation",
+    "sparse-master-slide-insertion",
+    "pptx-slide-name-roundtrip",
+    "pptx-text-shadow-roundtrip",
+    "native-object-creation-undo",
+    "text-layout-cache-invalidation",
   ]);
   assert.match(manifest.toolchain.emscripten.commit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.toolchain.qt.commit, /^[0-9a-f]{40}$/u);
@@ -75,10 +84,27 @@ test("browser LibreOffice patches name their complete source surface", () => {
     ),
   );
   assert.deepEqual([...new Set(paths)].sort(), [
+    "include/svx/svdotable.hxx",
+    "oox/source/drawingml/textcharacterproperties.cxx",
+    "oox/source/export/drawingml.cxx",
+    "sd/inc/drawdoc.hxx",
+    "sd/inc/sdpage.hxx",
+    "sd/source/core/drawdoc2.cxx",
+    "sd/source/core/sdpage.cxx",
+    "sd/source/filter/eppt/pptx-epptooxml.cxx",
+    "sd/source/ui/inc/unmodpg.hxx",
+    "sd/source/ui/unoidl/unopage.cxx",
     "sd/source/ui/view/drviews7.cxx",
     "sd/source/ui/view/unmodpg.cxx",
+    "svx/source/inc/cell.hxx",
     "svx/source/svdraw/svdmodel.cxx",
+    "svx/source/svdraw/svdundo.cxx",
     "svx/source/table/cell.cxx",
+    "svx/source/table/svdotable.cxx",
+    "svx/source/table/tablecolumn.cxx",
+    "svx/source/table/tablemodel.cxx",
+    "svx/source/table/tablerow.cxx",
     "svx/source/table/tableundo.cxx",
+    "svx/source/unodraw/unoshtxt.cxx",
   ]);
 });

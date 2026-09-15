@@ -12,6 +12,14 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
+The cumulative `browser-undo-v2` source series currently ports generic
+document behavior: table structure, formatting and Undo; page and object
+identity; master-safe layout support; sparse-master insertion; object-creation
+Undo; text-layout invalidation; slide-name persistence; and text-shadow
+persistence. Collabora transport handlers are deliberately absent. Object
+locks, interactions and placeholder inheritance still require browser-source
+ports before the series is admitted to a single integrated WASM build.
+
 Verify every source edit before starting the expensive build:
 
 ```sh
