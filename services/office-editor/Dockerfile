@@ -1,5 +1,8 @@
 ARG SPELLBOOK_COLLABORA_BASE_IMAGE=collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282
 ARG SPELLBOOK_COLLABORA_ENGINE_PATCH_LEVEL=stock
+ARG BUILDPLATFORM=linux/amd64
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 FROM ${SPELLBOOK_COLLABORA_BASE_IMAGE} AS collabora
 
 FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS open-fonts
@@ -16,7 +19,7 @@ RUN fc-cache -f \
     && fc-match --format='%{family}' 'Noto Sans KR' | grep --fixed-strings "Noto Sans KR" \
     && fc-match --format='%{family}' Pretendard | grep --fixed-strings "Pretendard"
 
-FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS gateway-builder
+FROM --platform=${BUILDPLATFORM} golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS gateway-builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src

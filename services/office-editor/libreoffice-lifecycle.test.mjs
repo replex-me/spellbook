@@ -20,6 +20,10 @@ const candidateRuntime = fs.readFileSync(
   "services/office-editor/libreoffice/build-candidate-runtime.sh",
   "utf8",
 );
+const officeDockerfile = fs.readFileSync(
+  "services/office-editor/Dockerfile",
+  "utf8",
+);
 
 test("source build admission and candidate promotion are separate evidence states", () => {
   assert.equal(typeof manifest.sourcePatchSeriesReady, "boolean");
@@ -57,6 +61,10 @@ test("source build admission and candidate promotion are separate evidence state
     candidateRuntime,
     /org\.spellbook\.collabora-patch-series-sha256/u,
   );
+  assert.match(officeDockerfile, /ARG BUILDPLATFORM=linux\/amd64/u);
+  assert.match(officeDockerfile, /ARG TARGETOS=linux/u);
+  assert.match(officeDockerfile, /ARG TARGETARCH=amd64/u);
+  assert.match(officeDockerfile, /FROM --platform=\$\{BUILDPLATFORM\}/u);
 });
 
 test("managed distributions receive one digest-pinned public runtime receipt", () => {
