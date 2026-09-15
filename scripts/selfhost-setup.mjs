@@ -44,7 +44,9 @@ const passwordHash = `scrypt:${salt.toString("base64url")}:${scryptSync(
 const secret = () => randomBytes(36).toString("base64url");
 const values = {
   SPELLBOOK_PUBLIC_URL: "http://localhost:3000",
+  SPELLBOOK_EDITOR_MODE: "wopi",
   SPELLBOOK_OFFICE_PUBLIC_URL: "http://localhost:9980",
+  SPELLBOOK_BROWSER_OFFICE_PUBLIC_URL: "http://localhost:4173",
   SPELLBOOK_LOCAL_EMAIL: email,
   SPELLBOOK_LOCAL_PASSWORD_HASH: passwordHash,
   SPELLBOOK_SESSION_SECRET: secret(),

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -8,13 +9,54 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cleanupScript = path.join(root, "scripts", "cleanup-local-docker.mjs");
 
-export function selfhostUpPlan(nodeExecutable = process.execPath) {
+export function selfhostUpPlan(
+  nodeExecutable = process.execPath,
+  editorMode = configuredSelfhostEditorMode(),
+) {
+  if (!new Set(["wopi", "browser"]).has(editorMode))
+    throw new Error("SPELLBOOK_EDITOR_MODE must be wopi or browser.");
+  const inactiveEditor =
+    editorMode === "browser" ? "office-editor" : "browser-office";
+  const compose = ["compose", "--profile", editorMode];
   return {
     beforeBuild: [nodeExecutable, [cleanupScript, "--execute"]],
-    build: ["docker", ["compose", "build"]],
-    start: ["docker", ["compose", "up", "--detach", "--no-build", "--wait"]],
+    stopInactive: [
+      "docker",
+      ["compose", "stop", "--timeout", "30", inactiveEditor],
+    ],
+    build: ["docker", [...compose, "build"]],
+    start: [
+      "docker",
+      [
+        ...compose,
+        "up",
+        "--detach",
+        "--no-build",
+        "--wait",
+        "--remove-orphans",
+      ],
+    ],
     afterStart: [nodeExecutable, [cleanupScript, "--execute"]],
   };
+}
+
+export function configuredSelfhostEditorMode(
+  environment = process.env,
+  environmentFile = path.join(root, ".env"),
+) {
+  if (environment.SPELLBOOK_EDITOR_MODE)
+    return environment.SPELLBOOK_EDITOR_MODE.trim().toLowerCase();
+  try {
+    const line = readFileSync(environmentFile, "utf8")
+      .split(/\r?\n/u)
+      .find((entry) => entry.startsWith("SPELLBOOK_EDITOR_MODE="));
+    return (
+      line?.slice("SPELLBOOK_EDITOR_MODE=".length).trim().toLowerCase() ||
+      "wopi"
+    );
+  } catch {
+    return "wopi";
+  }
 }
 
 function execute([command, args]) {
@@ -33,6 +75,7 @@ function execute([command, args]) {
 function run() {
   const plan = selfhostUpPlan();
   execute(plan.beforeBuild);
+  execute(plan.stopInactive);
   execute(plan.build);
   try {
     execute(plan.start);

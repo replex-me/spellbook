@@ -72,6 +72,13 @@ test("adopts only exact legacy Spellbook Compose image names", () => {
   assert.equal(
     componentFromImage({
       component: null,
+      references: ["spellbook-browser-office:browser-v1"],
+    }),
+    "browser-office",
+  );
+  assert.equal(
+    componentFromImage({
+      component: null,
       references: ["another-spellbook-web:latest"],
     }),
     null,

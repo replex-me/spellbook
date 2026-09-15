@@ -78,6 +78,8 @@ jobs:
             dockerfile: services/document-worker/Dockerfile
           - name: office-editor
             dockerfile: services/office-editor/Dockerfile
+          - name: browser-office
+            dockerfile: services/browser-office/Dockerfile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build release runtime image

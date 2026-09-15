@@ -19,6 +19,7 @@ test("release SBOMs cover the source and every shipped runtime image", () => {
     "ai-connector",
     "document-worker",
     "office-editor",
+    "browser-office",
   ]) {
     assert.match(workflow, new RegExp(`name: ${name}`));
   }

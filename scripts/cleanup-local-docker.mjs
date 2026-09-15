@@ -5,7 +5,7 @@ import path from "node:path";
 
 const SPELLBOOK_LABEL = "org.spellbook.component";
 const LEGACY_COMPONENT_REFERENCE =
-  /^spellbook-(?<component>web|document-worker|ai-connector|office-editor)(?=[:@])/u;
+  /^spellbook-(?<component>web|document-worker|ai-connector|office-editor|browser-office)(?=[:@])/u;
 
 export function componentFromImage(image) {
   if (typeof image.component === "string" && image.component.length > 0)

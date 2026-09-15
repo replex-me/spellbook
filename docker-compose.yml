@@ -63,6 +63,7 @@ services:
       retries: 20
 
   office-editor:
+    profiles: ["wopi"]
     build:
       context: .
       dockerfile: services/office-editor/Dockerfile
@@ -96,6 +97,7 @@ services:
       start_period: 30s
 
   browser-office:
+    profiles: ["browser"]
     build:
       context: .
       dockerfile: services/browser-office/Dockerfile
@@ -159,10 +161,6 @@ services:
       document-worker:
         condition: service_healthy
       ai-connector:
-        condition: service_healthy
-      office-editor:
-        condition: service_healthy
-      browser-office:
         condition: service_healthy
     healthcheck:
       test:

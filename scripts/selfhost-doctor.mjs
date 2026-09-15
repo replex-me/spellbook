@@ -2,17 +2,25 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-const required = [
+const baseRequired = [
   "SPELLBOOK_LOCAL_EMAIL",
   "SPELLBOOK_LOCAL_PASSWORD_HASH",
   "SPELLBOOK_SESSION_SECRET",
-  "SPELLBOOK_WOPI_SECRET",
   "SPELLBOOK_INTERNAL_TOKEN",
   "SPELLBOOK_POSTGRES_PASSWORD",
 ];
 
 const result = [];
 const environment = readEnvironment(".env");
+const editorMode = (environment.SPELLBOOK_EDITOR_MODE || "wopi")
+  .trim()
+  .toLowerCase();
+const editorModeValid = editorMode === "wopi" || editorMode === "browser";
+result.push({ check: `editor mode ${editorMode}`, ok: editorModeValid });
+const required = [
+  ...baseRequired,
+  ...(editorMode === "wopi" ? ["SPELLBOOK_WOPI_SECRET"] : []),
+];
 for (const key of required) {
   const value = environment[key];
   const valid =
@@ -27,7 +35,7 @@ for (const key of required) {
 const proofMode = environment.SPELLBOOK_WOPI_PROOF_MODE || "required";
 result.push({
   check: "WOPI proof verification required",
-  ok: proofMode === "required",
+  ok: editorMode !== "wopi" || proofMode === "required",
 });
 const storageReserve = Number(
   environment.SPELLBOOK_STORAGE_RESERVE_BYTES || 512 * 1024 * 1024,
@@ -53,7 +61,10 @@ try {
 } catch {
   proofKeyValid = false;
 }
-result.push({ check: "persistent WOPI proof key", ok: proofKeyValid });
+result.push({
+  check: "persistent WOPI proof key",
+  ok: editorMode !== "wopi" || proofKeyValid,
+});
 
 try {
   execFileSync("docker", ["compose", "config", "--quiet"], {
@@ -64,9 +75,13 @@ try {
   result.push({ check: "docker compose config", ok: false });
 }
 
+const editorRuntime =
+  editorMode === "browser"
+    ? ["browser-office", "http://127.0.0.1:4173/readyz"]
+    : ["office-editor", "http://127.0.0.1:9980/readyz"];
 for (const [name, url] of [
   ["web", "http://127.0.0.1:3000/api/health"],
-  ["office-editor", "http://127.0.0.1:9980/readyz"],
+  editorRuntime,
 ]) {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(2_000) });

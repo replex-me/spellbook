@@ -28,6 +28,14 @@ the exact legacy Compose image names during migration, but it neither performs
 a global Docker prune nor removes another project's images, containers or
 volumes. Run `pnpm docker:cleanup` to inspect the plan without changing state.
 
+`SPELLBOOK_EDITOR_MODE` selects exactly one live editor engine. The default
+`wopi` profile starts the server-side Collabora editor while the browser engine
+is still being promoted. Set it to `browser` to start the client-side Office
+runtime instead; `pnpm selfhost:up` stops the inactive engine before starting
+the selected profile, so browser mode does not retain Collabora's runtime
+memory cost. The browser endpoint defaults to `http://localhost:4173` through
+`SPELLBOOK_BROWSER_OFFICE_PUBLIC_URL`.
+
 The default `internal` mode keeps the connector in the private Compose network. To exercise the same user-device boundary used by a hosted Spellbook service, set `SPELLBOOK_AI_CONNECTOR_MODE=local` in `.env`, recreate only the web container, and start the loopback connector on the user's computer:
 
 ```bash
@@ -82,7 +90,7 @@ The original upload is immutable. Deleting the Compose stack with `docker compos
 
 ## Network and TLS
 
-Only the web application and Collabora browser endpoint are published by the local profile. Worker ports stay on the private Compose network and require an internal token. For internet exposure, terminate TLS at a reverse proxy, set the two public URLs to their HTTPS origins, restrict frame ancestors, and do not publish PostgreSQL or worker ports.
+Only the web application and the selected editor endpoint are published by the local profile. Worker ports stay on the private Compose network and require an internal token. For internet exposure, terminate TLS at a reverse proxy, set the active editor's public URL to its HTTPS origin, restrict frame ancestors, and do not publish PostgreSQL or worker ports.
 
 WOPI access tokens are scoped to one document session and use a secret distinct from service-to-service authentication. Collabora signs each WOPI request with the stable installation key advertised in discovery. The host verifies the three rotation-safe proof combinations defined by WOPI, rejects timestamps outside a 20-minute window and refreshes cached discovery keys after a mismatch or old-key match. Keep `SPELLBOOK_WOPI_PROOF_MODE=required`; disabling it is only for isolated development tests. Internet exposure still requires TLS termination and an applicable WOPI conformance run against the deployed HTTPS origin.
 
