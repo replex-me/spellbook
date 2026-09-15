@@ -53,7 +53,24 @@ proven.
 | ---------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-09-15 | `19f7806` | The product rejects six slide-structure commands before mutation when the browser runtime cannot safely observe and undo them; the verifier proves the revision and slide count remain unchanged                                     | It prevents corruption but does not make slide insertion, duplication, deletion, movement, rename or hide available to the user          |
 | 2026-09-15 | `27b08cc` | The stock product path proves text replacement, move, resize and fill color through edit and Undo; unsafe rotation and line/transparency paths are gated; the `browser-undo-v6` source and bounded property adapter cover those gaps | The v6 C++ patch applies cleanly, but it has not yet been compiled or passed the integrated browser edit, Undo, recovery and save matrix |
-| 2026-09-15 | `47e3ef2` | Browser timeouts now report the pending native request and revision/save/Undo state; a rolling experiment isolated a stock WASM stall after the first post-save edit rather than hiding it as a generic timeout                      | Diagnostics and a release criterion expose the defect but do not make a long-lived editing session reliable                            |
+| 2026-09-15 | `47e3ef2` | Browser timeouts now report the pending native request and revision/save/Undo state; a rolling experiment isolated a stock WASM stall after the first post-save edit rather than hiding it as a generic timeout                      | Diagnostics and a release criterion expose the defect but do not make a long-lived editing session reliable                              |
+| 2026-09-15 | `8a08e18` | The `browser-undo-v7` source and adapter route eight text-formatting operations and five shape-appearance operations through bounded typed property transactions with native Undo and PPTX round-trip regressions                    | The source patch and simulated adapter tests do not prove that the compiled WASM runtime executes those 13 candidate-only operations     |
+| 2026-09-15 | `9819b10` | The browser build now pins the complete Linux, Emscripten and Qt toolchain, preserves source/native/WASM/ccache stages across retries and emits a hash-bound build receipt                                                           | A reproducible build path reduces build risk but is not an editor capability, and the exact candidate has not completed its build        |
+| 2026-09-15 | `60c73cb` | Candidate verification admits only receipt-bound raw runtime bytes without changing the tracked promotion manifest and adds a one-session 100-cycle matrix across all 17 admitted element operations                                 | The stock four-operation path still passes, but the candidate runtime and its native, endurance and PowerPoint evidence remain pending   |
+
+## Locked next scoring checkpoint
+
+The score remains **49 / 100** until one immutable `browser-undo-v7` runtime
+passes every condition below. Passing the complete checkpoint earns exactly
+**5 points**, taking the score to **54 / 100**; partial completion earns no
+fractional point and does not change either the denominator or this allocation.
+
+| Existing product outcome                      | Delta | Required evidence in the same candidate run                                                                |
+| --------------------------------------------- | ----: | ---------------------------------------------------------------------------------------------------------- |
+| PowerPoint-like direct editing UX             |    +2 | All 17 element operations execute through the product bridge and each restores through Undo/Redo           |
+| PPT feature breadth for people and AI         |    +1 | The 13 candidate-only operations are advertised and executed only by the exact receipt-bound patched build |
+| Fidelity, Undo, save and PowerPoint integrity |    +1 | Native CppUnit plus localized package save/reopen and PowerPoint reopen pass without collateral OOXML      |
+| Public infrastructure, performance and safety |    +1 | One document session completes 100 mixed edit/observe/Undo/Redo/save cycles without a hang or divergence   |
 
 ## What the last three days produced
 
