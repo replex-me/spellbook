@@ -12,6 +12,7 @@ export default async function HomePage({
 }) {
   const session = await currentSession();
   const { error } = await searchParams;
+  const externalAuth = process.env.SPELLBOOK_AUTH_MODE === "external";
   if (!session) {
     return (
       <main className="auth-shell">
@@ -44,12 +45,17 @@ export default async function HomePage({
               로그인할 수 없습니다: {error}
             </p>
           ) : null}
-          <a className="ds-button is-primary auth-login" href="/login">
-            이 서버에 로그인
+          <a
+            className="ds-button is-primary auth-login"
+            href={externalAuth ? "/auth/login" : "/login"}
+          >
+            {externalAuth ? "계정으로 계속" : "이 서버에 로그인"}
             <SpellbookIcon name="arrowRight" />
           </a>
           <p className="auth-note">
-            설치할 때 만든 로컬 관리자 계정을 사용합니다.
+            {externalAuth
+              ? "연결된 계정으로 문서와 작업 이력을 안전하게 분리합니다."
+              : "설치할 때 만든 로컬 관리자 계정을 사용합니다."}
           </p>
         </section>
         <aside className="auth-visual" aria-hidden="true">

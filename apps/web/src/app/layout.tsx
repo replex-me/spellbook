@@ -5,7 +5,7 @@ import "./design-system.css";
 
 export const metadata: Metadata = {
   title: "Spellbook — AI PowerPoint Editor",
-  description: "원본 PPTX를 보면서 고치고 그대로 돌려받는 비공개 편집 도구",
+  description: "원본 PPTX를 보면서 고치고 편집 가능한 상태로 돌려받는 도구",
 };
 
 export default function RootLayout({

@@ -6,29 +6,72 @@ let schemaReady: Promise<void> | null = null;
 export function db(): Sql {
   if (client) return client;
   const url = process.env.DATABASE_URL?.trim();
-  if (!url) throw new Error("DATABASE_URL is required.");
-  const max = Number(process.env.SPELLBOOK_DB_POOL_MAX ?? 4);
-  if (!Number.isInteger(max) || max < 1 || max > 50)
-    throw new Error("SPELLBOOK_DB_POOL_MAX must be an integer from 1 to 50.");
-  client = postgres(url, {
-    max,
-    idle_timeout: 10,
-    connect_timeout: 10,
-    prepare: false,
-  });
+  const max = databasePoolMax();
+  if (url)
+    client = postgres(url, {
+      max,
+      idle_timeout: 10,
+      connect_timeout: 10,
+      prepare: false,
+    });
+  else {
+    const host = process.env.SPELLBOOK_DB_HOST?.trim();
+    const database = process.env.SPELLBOOK_DB_NAME?.trim();
+    const username = process.env.SPELLBOOK_DB_USER?.trim();
+    if (!host || !database || !username)
+      throw new Error(
+        "DATABASE_URL or SPELLBOOK_DB_HOST, SPELLBOOK_DB_NAME and SPELLBOOK_DB_USER are required.",
+      );
+    client = postgres({
+      host,
+      port: Number(process.env.SPELLBOOK_DB_PORT ?? 5432),
+      database,
+      username,
+      password: process.env.SPELLBOOK_DB_PASSWORD,
+      max,
+      idle_timeout: 10,
+      connect_timeout: 10,
+      prepare: false,
+    });
+  }
   return client;
+}
+
+export function databasePoolMax(
+  value = process.env.SPELLBOOK_DB_POOL_MAX,
+): number {
+  if (value === undefined || value.trim() === "") return 4;
+  if (!/^\d+$/.test(value.trim()))
+    throw new Error("SPELLBOOK_DB_POOL_MAX must be a positive integer.");
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 50)
+    throw new Error("SPELLBOOK_DB_POOL_MAX must be between 1 and 50.");
+  return parsed;
+}
+
+export function automaticMigrationsEnabled(
+  value = process.env.SPELLBOOK_AUTO_MIGRATE,
+): boolean {
+  if (value === undefined || value.trim() === "") return true;
+  if (value === "1") return true;
+  if (value === "0") return false;
+  throw new Error("SPELLBOOK_AUTO_MIGRATE must be 0 or 1.");
 }
 
 export async function ensureSchema(): Promise<void> {
   if (schemaReady) return schemaReady;
-  schemaReady = migrate().catch((error) => {
+  if (!automaticMigrationsEnabled()) {
+    schemaReady = Promise.resolve();
+    return schemaReady;
+  }
+  schemaReady = runMigrations().catch((error) => {
     schemaReady = null;
     throw error;
   });
   return schemaReady;
 }
 
-async function migrate(): Promise<void> {
+export async function runMigrations(): Promise<void> {
   const sql = db();
   await sql.unsafe(`
     create table if not exists spellbook_documents (
@@ -229,3 +272,5 @@ export async function closeDbForTests(): Promise<void> {
   client = null;
   schemaReady = null;
 }
+
+export const closeDb = closeDbForTests;
