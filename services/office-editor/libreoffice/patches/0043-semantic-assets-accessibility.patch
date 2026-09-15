@@ -1,41 +1,31 @@
-From dd3aa2338327f3d80c2691bdacb1d3608e4bdc0d Mon Sep 17 00:00:00 2001
-From: Spellbook Contributors <spellbook@users.noreply.github.com>
-Date: Wed, 16 Sep 2026 04:34:23 +0900
-Subject: [PATCH] native-edit: preserve semantic asset and accessibility edits
-
----
- engine/sd/qa/unit/uiimpress.cxx       | 211 ++++++++++++-
- engine/sd/source/ui/unoidl/unoobj.cxx |  34 +++
- engine/sd/source/ui/view/drviews2.cxx | 406 +++++++++++++++++++++++++-
- 3 files changed, 647 insertions(+), 4 deletions(-)
-
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index df15e4493..3c9b16dcb 100644
+index df15e4493..5151aaa22 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -133,6 +133,8 @@
+@@ -133,6 +133,9 @@
  #include <editeng/outlobj.hxx>
  #include <sdmod.hxx>
  #include <svx/svdotext.hxx>
 +#include <svx/svdograf.hxx>
 +#include <svx/svdomedia.hxx>
++#include <svx/diagram/DiagramHelper_svx.hxx>
  #include <xmloff/autolayout.hxx>
- 
+
  using namespace ::com::sun::star;
-@@ -581,8 +583,11 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
+@@ -581,8 +584,11 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
      xProperties->getPropertyValue(u"MoveProtect"_ustr) >>= bOldMoveProtect;
      const OUString aOldTitle = pObject->GetTitle();
      const OUString aOldDescription = pObject->GetDescription();
 +    const sal_uInt32 nOldNavigationPosition = pObject->GetNavigationPosition();
 +    const sal_uInt32 nNewNavigationPosition
 +        = nOldNavigationPosition == 0 && pPage->GetObjCount() > 1 ? 1 : 0;
- 
+
 -    static constexpr OUString aJson = uR"json(
 +    const OUString aJson = uR"json(
  {
      "Transforms": {
          "SlideCommands": [
-@@ -592,7 +597,9 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
+@@ -592,7 +598,9 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
                  "Description": "Accessible description",
                  "TextLeftDistance": 321,
                  "Shadow": true,
@@ -46,23 +36,23 @@ index df15e4493..3c9b16dcb 100644
              }}
          ]
      }
-@@ -614,6 +621,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
+@@ -614,6 +622,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
      CPPUNIT_ASSERT_EQUAL(sal_Int32(321), nLeft);
      CPPUNIT_ASSERT(bShadow);
      CPPUNIT_ASSERT(bMoveProtect);
 +    CPPUNIT_ASSERT_EQUAL(nNewNavigationPosition, pObject->GetNavigationPosition());
- 
+
      pImpressDocument->GetDocShell()->GetUndoManager()->Undo();
      xProperties->getPropertyValue(u"TextLeftDistance"_ustr) >>= nLeft;
-@@ -624,6 +632,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
+@@ -624,6 +633,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
      CPPUNIT_ASSERT_EQUAL(nOldLeft, nLeft);
      CPPUNIT_ASSERT_EQUAL(bOldShadow, bShadow);
      CPPUNIT_ASSERT_EQUAL(bOldMoveProtect, bMoveProtect);
 +    CPPUNIT_ASSERT_EQUAL(nOldNavigationPosition, pObject->GetNavigationPosition());
- 
+
      pImpressDocument->GetDocShell()->GetUndoManager()->Redo();
      xProperties->getPropertyValue(u"TextLeftDistance"_ustr) >>= nLeft;
-@@ -634,6 +643,204 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
+@@ -634,6 +644,348 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
      CPPUNIT_ASSERT_EQUAL(sal_Int32(321), nLeft);
      CPPUNIT_ASSERT(bShadow);
      CPPUNIT_ASSERT(bMoveProtect);
@@ -264,21 +254,165 @@ index df15e4493..3c9b16dcb 100644
 +    CPPUNIT_ASSERT_EQUAL(bNewLoop, bLoop);
 +    CPPUNIT_ASSERT_EQUAL(bNewMute, bMute);
 +    CPPUNIT_ASSERT_EQUAL(nNewVolume, nVolume);
++}
++
++CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureSemanticDiagramUndoRedo)
++{
++    createSdImpressDoc("pptx/smartart-hierarchy3-two-parents.pptx");
++    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
++    CPPUNIT_ASSERT(pImpressDocument);
++    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
++    SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
++    CPPUNIT_ASSERT(pPage);
++    SdrObject* pDiagram = pPage->GetObj(0);
++    CPPUNIT_ASSERT(pDiagram);
++    CPPUNIT_ASSERT(pDiagram->isDiagram());
++    const auto xHelper = pDiagram->getDiagramHelper();
++    CPPUNIT_ASSERT(xHelper);
++
++    OUString aParentId;
++    for (const auto& [rId, rText] : xHelper->getDiagramChildren(OUString()))
++        if (rText == u"ParentB"_ustr)
++            aParentId = rId;
++    CPPUNIT_ASSERT(!aParentId.isEmpty());
++    auto findChildText = [&]() {
++        OUString aResult;
++        for (const auto& rChild : xHelper->getDiagramChildren(aParentId))
++            if (rChild.second == u"ChildB1"_ustr
++                || rChild.second == u"Updated child"_ustr)
++                aResult = rChild.second;
++        return aResult;
++    };
++    CPPUNIT_ASSERT_EQUAL(u"ChildB1"_ustr, findChildText());
++
++    static constexpr OUString aJson = uR"json(
++{
++    "Transforms": {
++        "SlideCommands": [
++            {"JumpToSlide": 0},
++            {"SetDiagramNode.0": {
++                "Action": "set",
++                "ExpectedText": "ChildB1",
++                "Occurrence": 0,
++                "Text": "Updated child"
++            }}
++        ]
++    }
++}
++)json"_ustr;
++    auto* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
++    const size_t nUndoBefore = pUndoManager->GetUndoActionCount();
++    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
++                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
++
++    CPPUNIT_ASSERT_EQUAL(u"Updated child"_ustr, findChildText());
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount() - nUndoBefore);
++    pUndoManager->Undo();
++    CPPUNIT_ASSERT_EQUAL(u"ChildB1"_ustr, findChildText());
++    pUndoManager->Redo();
++    CPPUNIT_ASSERT_EQUAL(u"Updated child"_ustr, findChildText());
++
++    pUndoManager->Undo();
++    pUndoManager->Clear();
++    const size_t nTopLevelBefore = xHelper->getDiagramChildren(OUString()).size();
++    static constexpr OUString aAddJson
++        = uR"json({"Transforms":{"SlideCommands":[{"JumpToSlide":0},{"SetDiagramNode.0":{"Action":"add","ExpectedText":"","Occurrence":0,"Text":"Added top"}}]}})json"_ustr;
++    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
++                    { comphelper::makePropertyValue(u"DataJson"_ustr, aAddJson) });
++    auto hasTopLevelText = [&](const OUString& rExpected) {
++        const auto aNodes = xHelper->getDiagramChildren(OUString());
++        return std::any_of(aNodes.begin(), aNodes.end(),
++                           [&](const auto& rNode) { return rNode.second == rExpected; });
++    };
++    CPPUNIT_ASSERT_EQUAL(nTopLevelBefore + 1,
++                         xHelper->getDiagramChildren(OUString()).size());
++    CPPUNIT_ASSERT(hasTopLevelText(u"Added top"_ustr));
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
++    pUndoManager->Undo();
++    CPPUNIT_ASSERT_EQUAL(nTopLevelBefore, xHelper->getDiagramChildren(OUString()).size());
++    pUndoManager->Redo();
++    CPPUNIT_ASSERT_EQUAL(nTopLevelBefore + 1,
++                         xHelper->getDiagramChildren(OUString()).size());
++
++    pUndoManager->Clear();
++    static constexpr OUString aDeleteJson
++        = uR"json({"Transforms":{"SlideCommands":[{"JumpToSlide":0},{"SetDiagramNode.0":{"Action":"delete","ExpectedText":"Added top","Occurrence":0,"Text":""}}]}})json"_ustr;
++    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
++                    { comphelper::makePropertyValue(u"DataJson"_ustr, aDeleteJson) });
++    CPPUNIT_ASSERT_EQUAL(nTopLevelBefore, xHelper->getDiagramChildren(OUString()).size());
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
++    pUndoManager->Undo();
++    CPPUNIT_ASSERT(hasTopLevelText(u"Added top"_ustr));
++    pUndoManager->Redo();
++    CPPUNIT_ASSERT(!hasTopLevelText(u"Added top"_ustr));
++}
++
++CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureSharedDiagramTextIsolation)
++{
++    createSdImpressDoc("pptx/Bar_List.pptx");
++    auto pImpressDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
++    CPPUNIT_ASSERT(pImpressDocument);
++    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
++    SdPage* pPage = pDoc->GetSdPage(0, PageKind::Standard);
++    CPPUNIT_ASSERT(pPage);
++    SdrObject* pDiagram = pPage->GetObj(0);
++    CPPUNIT_ASSERT(pDiagram);
++    CPPUNIT_ASSERT(pDiagram->isDiagram());
++    const auto xHelper = pDiagram->getDiagramHelper();
++    CPPUNIT_ASSERT(xHelper);
++
++    auto collectTexts = [&]() {
++        std::vector<OUString> aTexts;
++        std::function<void(const OUString&)> collectChildren = [&](const OUString& rParent) {
++            for (const auto& rNode : xHelper->getDiagramChildren(rParent))
++            {
++                aTexts.push_back(rNode.second);
++                collectChildren(rNode.first);
++            }
++        };
++        collectChildren(OUString());
++        return aTexts;
++    };
++    auto containsText = [](const std::vector<OUString>& rTexts, const OUString& rExpected) {
++        return std::find(rTexts.begin(), rTexts.end(), rExpected) != rTexts.end();
++    };
++    const auto aBefore = collectTexts();
++    CPPUNIT_ASSERT(containsText(aBefore, u"Eleven"_ustr));
++    CPPUNIT_ASSERT(containsText(aBefore, u"Twelve"_ustr));
++    CPPUNIT_ASSERT(containsText(aBefore, u"Thirteen"_ustr));
++
++    static constexpr OUString aJson
++        = uR"json({"Transforms":{"SlideCommands":[{"JumpToSlide":0},{"SetDiagramNode.0":{"Action":"set","ExpectedText":"Twelve","Occurrence":0,"Text":"Twelve updated"}}]}})json"_ustr;
++    auto* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
++    pUndoManager->Clear();
++    dispatchCommand(mxComponent, u".uno:TransformDocumentStructure"_ustr,
++                    { comphelper::makePropertyValue(u"DataJson"_ustr, aJson) });
++
++    const auto aAfter = collectTexts();
++    CPPUNIT_ASSERT(containsText(aAfter, u"Eleven"_ustr));
++    CPPUNIT_ASSERT(containsText(aAfter, u"Twelve updated"_ustr));
++    CPPUNIT_ASSERT(containsText(aAfter, u"Thirteen"_ustr));
++    CPPUNIT_ASSERT(!containsText(aAfter, u"Twelve"_ustr));
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
++    pUndoManager->Undo();
++    CPPUNIT_ASSERT(containsText(collectTexts(), u"Twelve"_ustr));
++    pUndoManager->Redo();
++    CPPUNIT_ASSERT(containsText(collectTexts(), u"Twelve updated"_ustr));
  }
- 
+
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectInteractionUndoRedo)
 diff --git a/sd/source/ui/unoidl/unoobj.cxx b/sd/source/ui/unoidl/unoobj.cxx
-index 04f37834c..41d8263c0 100644
+index 04f37834c..1f7ed998d 100644
 --- a/sd/source/ui/unoidl/unoobj.cxx
 +++ b/sd/source/ui/unoidl/unoobj.cxx
 @@ -21,6 +21,7 @@
- 
+
  #include <memory>
  #include <set>
 +#include <sstream>
  #include <string_view>
  #include <utility>
- 
+
 @@ -28,6 +29,7 @@
  #include <com/sun/star/presentation/ClickAction.hpp>
  #include <com/sun/star/beans/PropertyAttribute.hpp>
@@ -291,14 +425,14 @@ index 04f37834c..41d8263c0 100644
  #include <Outliner.hxx>
  #include <comphelper/sequence.hxx>
  #include <svx/svdogrp.hxx>
-+#include <svx/diagram/IDiagramHelper.hxx>
++#include <svx/diagram/DiagramHelper_svx.hxx>
  #include <o3tl/typed_flags_set.hxx>
  #include <vcl/svapp.hxx>
  #include <tools/debug.hxx>
-@@ -677,12 +680,43 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
+@@ -677,12 +680,55 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
          mpModel->SetModified();
  }
- 
+
 +namespace
 +{
 +OUString spellbookDiagramState(SdrObject* pObject)
@@ -308,12 +442,24 @@ index 04f37834c..41d8263c0 100644
 +
 +    boost::property_tree::ptree aRoot;
 +    boost::property_tree::ptree aNodes;
-+    for (const auto& [rId, rText] : pObject->getDiagramHelper()->getChildren(OUString()))
++    const auto xHelper = pObject->getDiagramHelper();
++    std::vector<OUString> aParents{ OUString() };
++    std::set<OUString> aVisited;
++    for (size_t nParent = 0; nParent < aParents.size() && aVisited.size() < 1000;
++         ++nParent)
 +    {
-+        boost::property_tree::ptree aNode;
-+        aNode.put("id", OUStringToOString(rId, RTL_TEXTENCODING_UTF8).getStr());
-+        aNode.put("text", OUStringToOString(rText, RTL_TEXTENCODING_UTF8).getStr());
-+        aNodes.push_back(std::make_pair("", aNode));
++        for (const auto& [rId, rText] : xHelper->getDiagramChildren(aParents[nParent]))
++        {
++            if (rId.isEmpty() || !aVisited.insert(rId).second)
++                continue;
++            boost::property_tree::ptree aNode;
++            aNode.put("id", OUStringToOString(rId, RTL_TEXTENCODING_UTF8).getStr());
++            aNode.put("text", OUStringToOString(rText, RTL_TEXTENCODING_UTF8).getStr());
++            aNode.put("parentId",
++                      OUStringToOString(aParents[nParent], RTL_TEXTENCODING_UTF8).getStr());
++            aNodes.push_back(std::make_pair("", aNode));
++            aParents.push_back(rId);
++        }
 +    }
 +    aRoot.add_child("nodes", aNodes);
 +    std::ostringstream aJson;
@@ -325,9 +471,9 @@ index 04f37834c..41d8263c0 100644
  cpo::uno::Any SAL_CALL SdXShape::getPropertyValue( const OUString& PropertyName )
  {
      SolarMutexGuard aGuard;
- 
+
      cpo::uno::Any aRet;
- 
+
 +    if (PropertyName == u"SpellbookDiagramState"_ustr)
 +    {
 +        const OUString aState = spellbookDiagramState(mpShape->GetSdrObject());
@@ -337,10 +483,10 @@ index 04f37834c..41d8263c0 100644
 +    }
 +
      const SfxItemPropertyMapEntry* pEntry = mpPropSet->getPropertyMapEntry(PropertyName);
- 
+
      if( pEntry && mpShape->GetSdrObject() )
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index de1b17bf0..9afc1fa09 100644
+index de1b17bf0..9ef83d469 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
 @@ -52,6 +52,7 @@
@@ -363,21 +509,21 @@ index de1b17bf0..9afc1fa09 100644
  #include <svx/sdtagitm.hxx>
  #include <svx/svdetc.hxx>
  #include <svx/svdograf.hxx>
-+#include <svx/svdogrp.hxx>
++#include <svx/svditer.hxx>
 +#include <svx/svdomedia.hxx>
  #include <svx/svdoole2.hxx>
  #include <svx/svdpagv.hxx>
  #include <svx/svdlayer.hxx>
  #include <svx/svdundo.hxx>
-+#include <svx/diagram/IDiagramHelper.hxx>
-+#include <svx/diagram/datamodel.hxx>
++#include <svx/diagram/DiagramHelper_svx.hxx>
++#include <svx/diagram/datamodel_svx.hxx>
  #include <svx/svxdlg.hxx>
  #include <svx/svxids.hrc>
  #include <svx/sdtfsitm.hxx>
 @@ -1118,6 +1124,143 @@ private:
      OUString maNewBookmark;
  };
- 
+
 +class SetEquationSourceUndoAction final : public SdUndoAction
 +{
 +public:
@@ -539,12 +685,12 @@ index de1b17bf0..9afc1fa09 100644
 +        u"D3DDoubleSided"_ustr,
 +        u"NavigationOrder"_ustr,
      };
- 
+
      std::vector<std::pair<OUString, cpo::uno::Any>> aValues;
 @@ -2053,6 +2212,19 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
      if (aValues.empty())
          throw lang::IllegalArgumentException(u"No object properties supplied"_ustr, nullptr, 0);
- 
+
 +    SdrMediaObj* pMediaObject = dynamic_cast<SdrMediaObj*>(pObject);
 +    const bool bChangesMedia = std::any_of(
 +        aValues.begin(), aValues.end(), [](const auto& rEntry) {
@@ -561,7 +707,7 @@ index de1b17bf0..9afc1fa09 100644
      // UNO property setters do not consistently create native Undo actions.
      // Attribute undo covers merged drawing/text items; geometry undo covers
      // protection, visibility, printable state, layer and glue-point fields.
-@@ -2066,8 +2238,235 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
+@@ -2066,8 +2238,329 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
          rCtx.addUndo(
              rCtx.mpDoc->GetSdrUndoFactory().CreateUndoGeoObject(*pObject));
      }
@@ -626,19 +772,29 @@ index de1b17bf0..9afc1fa09 100644
 +    auto xHelper = pObject->getDiagramHelper();
 +    if (!xHelper)
 +        throw lang::IllegalArgumentException(u"Diagram model is unavailable"_ustr, nullptr, 0);
++    if (aAction == "set" && aExpectedText == aText)
++        return;
 +
 +    OUString aNodeId;
 +    if (aAction != "add")
 +    {
 +        sal_Int32 nMatch = 0;
-+        for (const auto& [rId, rText] : xHelper->getChildren(OUString()))
++        std::vector<OUString> aParents{ OUString() };
++        std::set<OUString> aVisited;
++        for (size_t nParent = 0;
++             nParent < aParents.size() && aVisited.size() < 1000 && aNodeId.isEmpty();
++             ++nParent)
 +        {
-+            if (rText != aExpectedText)
-+                continue;
-+            if (nMatch++ == nOccurrence)
++            for (const auto& [rId, rText] : xHelper->getDiagramChildren(aParents[nParent]))
 +            {
-+                aNodeId = rId;
-+                break;
++                if (rId.isEmpty() || !aVisited.insert(rId).second)
++                    continue;
++                if (rText == aExpectedText && nMatch++ == nOccurrence)
++                {
++                    aNodeId = rId;
++                    break;
++                }
++                aParents.push_back(rId);
 +            }
 +        }
 +        if (aNodeId.isEmpty())
@@ -648,53 +804,137 @@ index de1b17bf0..9afc1fa09 100644
 +    auto xStartState = xHelper->extractDiagramDataState();
 +    if (!xStartState)
 +        throw lang::IllegalArgumentException(u"Diagram state is unavailable"_ustr, nullptr, 0);
++    SdrTextObj* pChangedTextObject = nullptr;
++    std::optional<OutlinerParaObject> oOldText;
 +    try
 +    {
 +        if (aAction == "add")
 +        {
-+            if (xHelper->addNode(aText).isEmpty())
++            if (xHelper
++                    ->addDiagramNode(aText, pObject->getSdrModelFromSdrObject(),
++                                     OUString(), false)
++                    .isEmpty())
 +                throw lang::IllegalArgumentException(u"Diagram node could not be added"_ustr,
 +                                                      nullptr, 0);
++            xHelper->reLayout();
 +        }
 +        else if (aAction == "delete")
 +        {
-+            if (!xHelper->removeNode(aNodeId))
++            if (!xHelper->removeDiagramNode(aNodeId,
++                                            pObject->getSdrModelFromSdrObject()))
 +                throw lang::IllegalArgumentException(
-+                    u"Only a removable top-level diagram node can be deleted"_ustr, nullptr, 0);
++                    u"Diagram node cannot be deleted while it owns children or is the last node"_ustr,
++                    nullptr, 0);
++            xHelper->reLayout();
 +        }
 +        else
 +        {
-+            auto xNextState = xHelper->extractDiagramDataState();
-+            bool bChanged = false;
-+            for (auto& rPoint : xNextState->getPoints())
++            SdrTextObj* pFirstTextObject = nullptr;
++            sal_Int32 nFirstParagraph = -1;
++            sal_Int32 nChangedParagraph = -1;
++            for (const auto& rConnection : xStartState->getConnections())
 +            {
-+                if (rPoint.msModelId != aNodeId)
++                if (!rConnection.is()
++                    || rConnection->mnXMLType != svx::diagram::TypeConstant::XML_presOf
++                    || rConnection->msSourceId != aNodeId)
 +                    continue;
-+                if (!rPoint.msTextBody)
-+                    rPoint.msTextBody = std::make_shared<svx::diagram::TextBody>();
-+                else
-+                    rPoint.msTextBody
-+                        = std::make_shared<svx::diagram::TextBody>(*rPoint.msTextBody);
-+                rPoint.msTextBody->msText = aText;
-+                bChanged = true;
-+                break;
++                SdrTextObj* pCandidate = nullptr;
++                SdrObjListIter aIterator(*pObject, SdrIterMode::DeepNoGroups);
++                while (aIterator.IsMore())
++                {
++                    SdrObject* pDescendant = aIterator.Next();
++                    if (pDescendant && pDescendant->getDiagramDataModelID()
++                                           == rConnection->msDestId
++                        && pDescendant->IsSdrTextObj())
++                    {
++                        pCandidate = static_cast<SdrTextObj*>(pDescendant);
++                        break;
++                    }
++                }
++                if (!pCandidate || !pCandidate->GetOutlinerParaObject())
++                    continue;
++                const size_t nRepresentedNodes = std::count_if(
++                    xStartState->getConnections().begin(),
++                    xStartState->getConnections().end(), [&](const auto& rOther) {
++                        return rOther.is()
++                               && rOther->mnXMLType
++                                      == svx::diagram::TypeConstant::XML_presOf
++                               && rOther->msDestId == rConnection->msDestId;
++                    });
++                const sal_Int32 nParagraph
++                    = nRepresentedNodes > 1 ? rConnection->getParagraphIndex() : -1;
++                Outliner* pOutliner = rCtx.mpDoc->GetInternalOutliner();
++                const OutlinerMode eOldMode = pOutliner->GetOutlinerMode();
++                comphelper::ScopeGuard const aOutlinerGuard(
++                    [pOutliner, eOldMode]() { pOutliner->Init(eOldMode); });
++                pOutliner->Init(pCandidate->GetOutlinerParaObject()->GetOutlinerMode());
++                pOutliner->SetText(*pCandidate->GetOutlinerParaObject());
++                const sal_Int32 nParagraphCount = pOutliner->GetParagraphCount();
++                if (nParagraphCount <= 0 || nParagraph >= nParagraphCount)
++                    continue;
++                const OUString aCurrentText
++                    = nParagraph >= 0
++                          ? pOutliner->GetText(pOutliner->GetParagraph(nParagraph))
++                          : pOutliner->GetText(pOutliner->GetParagraph(0), nParagraphCount);
++                if (!pFirstTextObject)
++                {
++                    pFirstTextObject = pCandidate;
++                    nFirstParagraph = nParagraph;
++                }
++                if (aCurrentText == aExpectedText)
++                {
++                    pChangedTextObject = pCandidate;
++                    nChangedParagraph = nParagraph;
++                    break;
++                }
 +            }
-+            if (!bChanged)
++            if (!pChangedTextObject && aExpectedText.isEmpty())
++            {
++                pChangedTextObject = pFirstTextObject;
++                nChangedParagraph = nFirstParagraph;
++            }
++            if (!pChangedTextObject || !pChangedTextObject->GetOutlinerParaObject())
 +                throw lang::IllegalArgumentException(u"Diagram node data is unavailable"_ustr,
 +                                                      nullptr, 0);
-+            xHelper->applyDiagramDataState(xNextState);
++            oOldText.emplace(*pChangedTextObject->GetOutlinerParaObject());
++            if (rCtx.mbUndo)
++                rCtx.addUndo(rCtx.mpDoc->GetSdrUndoFactory().CreateUndoObjectSetText(
++                    *pChangedTextObject, 0));
++            Outliner* pOutliner = rCtx.mpDoc->GetInternalOutliner();
++            const OutlinerMode eOldMode = pOutliner->GetOutlinerMode();
++            comphelper::ScopeGuard const aOutlinerGuard(
++                [pOutliner, eOldMode]() { pOutliner->Init(eOldMode); });
++            pOutliner->Init(oOldText->GetOutlinerMode());
++            pOutliner->SetText(*oOldText);
++            const sal_Int32 nLastParagraph = pOutliner->GetParagraphCount() - 1;
++            const ESelection aSelection
++                = nChangedParagraph >= 0
++                      ? ESelection(nChangedParagraph, 0, nChangedParagraph,
++                                   pOutliner->GetText(
++                                       pOutliner->GetParagraph(nChangedParagraph))
++                                       .getLength())
++                      : ESelection(0, 0, nLastParagraph,
++                                   pOutliner->GetText(pOutliner->GetParagraph(nLastParagraph))
++                                       .getLength());
++            pOutliner->QuickInsertText(aText, aSelection);
++            pChangedTextObject->SetOutlinerParaObject(pOutliner->CreateParaObject());
++            xHelper->TextInformationChange();
 +        }
-+        xHelper->reLayout(*static_cast<SdrObjGroup*>(pObject));
 +    }
 +    catch (...)
 +    {
-+        xHelper->applyDiagramDataState(xStartState);
-+        xHelper->reLayout(*static_cast<SdrObjGroup*>(pObject));
++        if (!rCtx.mbUndo && oOldText && pChangedTextObject)
++        {
++            pChangedTextObject->SetOutlinerParaObject(oOldText);
++            xHelper->TextInformationChange();
++        }
++        else if (!rCtx.mbUndo && aAction != "set")
++        {
++            xHelper->applyDiagramDataState(xStartState);
++            xHelper->reLayout();
++        }
 +        throw;
 +    }
-+    if (rCtx.mbUndo)
-+        rCtx.addUndo(rCtx.mpDoc->GetSdrUndoFactory().CreateUndoDiagramModelData(
-+            *pObject, xStartState));
 +    pObject->SetChanged();
 +    pObject->BroadcastObjectChange();
 +    rCtx.touch(pPage);
@@ -798,8 +1038,8 @@ index de1b17bf0..9afc1fa09 100644
 +    pOldObject->BroadcastObjectChange();
      rCtx.touch(pPage);
  }
- 
-@@ -3516,6 +3915,9 @@ constexpr SlideCommand aSlideCommands[] = {
+
+@@ -3516,6 +4009,9 @@ constexpr SlideCommand aSlideCommands[] = {
      { "SetSections", false, false, &handleSetSections },
      { "SetNotes", false, false, &handleSetNotes },
      { "SetObjectProperties.", true, false, &handleSetObjectProperties },

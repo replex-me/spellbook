@@ -1288,9 +1288,10 @@ function spellbookDocumentOperation(request) {
       return null;
     const semanticNodes = [];
     const occurrences = new Map();
-    const appendText = (candidate) => {
-      const text = String(candidate ?? "").trim();
-      if (!text) return;
+    const appendText = (candidate, preserveWhitespace = false) => {
+      const sourceText = String(candidate ?? "");
+      const text = preserveWhitespace ? sourceText : sourceText.trim();
+      if (!text.trim()) return;
       const occurrence = occurrences.get(text) ?? 0;
       occurrences.set(text, occurrence + 1);
       semanticNodes.push({ text, occurrence });
@@ -1307,7 +1308,7 @@ function spellbookDocumentOperation(request) {
       }
     };
     if (Array.isArray(nativeState?.nodes))
-      nativeState.nodes.forEach((node) => appendText(node?.text));
+      nativeState.nodes.forEach((node) => appendText(node?.text, true));
     else collectText(shape);
     return {
       importedAsGroup,

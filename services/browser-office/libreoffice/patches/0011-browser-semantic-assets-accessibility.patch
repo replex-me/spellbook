@@ -1,27 +1,28 @@
-From 265fe78f618caa0614832cd678244f0d6ffc9fac Mon Sep 17 00:00:00 2001
-From: Spellbook Contributors <spellbook@users.noreply.github.com>
-Date: Wed, 16 Sep 2026 04:34:28 +0900
-Subject: [PATCH] native-edit: preserve semantic asset operations in browser
-
----
- sd/qa/unit/uiimpress.cxx       | 204 ++++++++++++++-
- sd/source/ui/unoidl/unoobj.cxx | 446 ++++++++++++++++++++++++++++++++-
- 2 files changed, 643 insertions(+), 7 deletions(-)
-
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 2a1913f07..e4827f0a3 100644
+index 2a1913f07..5cda29f26 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -41,6 +41,8 @@
+@@ -11,6 +11,8 @@
+
+ #include <LibreOfficeKit/LibreOfficeKitEnums.h>
+
++#include <algorithm>
++
+ #include <com/sun/star/beans/XPropertySet.hpp>
+ #include <com/sun/star/container/XEnumeration.hpp>
+ #include <com/sun/star/container/XEnumerationAccess.hpp>
+@@ -41,7 +43,10 @@
  #include <svl/srchitem.hxx>
  #include <svx/svxids.hrc>
  #include <svx/svdoashp.hxx>
 +#include <svx/svdograf.hxx>
 +#include <svx/svdomedia.hxx>
  #include <svx/svdotable.hxx>
++#include <svx/diagram/IDiagramHelper.hxx>
  #include <svx/xfillit0.hxx>
  #include <svx/xflclit.hxx>
-@@ -53,6 +55,7 @@
+ #include <svx/xflgrit.hxx>
+@@ -53,6 +58,7 @@
  #include <controller/SlsPageSelector.hxx>
  #include <svl/stritem.hxx>
  #include <undo/undomanager.hxx>
@@ -29,7 +30,7 @@ index 2a1913f07..e4827f0a3 100644
  #include <vcl/scheduler.hxx>
  #include <docmodel/uno/UnoComplexColor.hxx>
  #include <comphelper/propertyvalue.hxx>
-@@ -1593,6 +1596,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1593,6 +1599,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
      sal_Int32 nOriginalMargin = 0;
      bool bOriginalShadow = false;
      bool bOriginalMoveProtect = false;
@@ -37,24 +38,24 @@ index 2a1913f07..e4827f0a3 100644
      OUString aOriginalName;
      OUString aOriginalTitle;
      OUString aOriginalDescription;
-@@ -1604,6 +1608,9 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1604,6 +1611,9 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
      xProperties->getPropertyValue("TextLeftDistance") >>= nOriginalMargin;
      xProperties->getPropertyValue("Shadow") >>= bOriginalShadow;
      xProperties->getPropertyValue("MoveProtect") >>= bOriginalMoveProtect;
 +    xProperties->getPropertyValue("NavigationOrder") >>= nOriginalNavigationOrder;
 +    const sal_Int32 nChangedNavigationOrder
 +        = nOriginalNavigationOrder == 0 && xShapes->getCount() > 1 ? 1 : 0;
- 
+
      pDrawDocument->BegUndo("Browser object properties");
      xProperties->setPropertyValue("Name", uno::Any(OUString("Browser shape")));
-@@ -1613,12 +1620,14 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1613,12 +1623,14 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
      xProperties->setPropertyValue("TextLeftDistance", uno::Any(sal_Int32(420)));
      xProperties->setPropertyValue("Shadow", uno::Any(true));
      xProperties->setPropertyValue("MoveProtect", uno::Any(true));
 +    xProperties->setPropertyValue("NavigationOrder", uno::Any(nChangedNavigationOrder));
      pDrawDocument->EndUndo();
      CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
- 
+
      auto assertProperties = [&](const OUString& rName, const OUString& rTitle,
                                  const OUString& rDescription, bool bDecorative,
 -                                sal_Int32 nMargin, bool bShadow, bool bMoveProtect) {
@@ -63,7 +64,7 @@ index 2a1913f07..e4827f0a3 100644
          OUString aActualName;
          OUString aActualTitle;
          OUString aActualDescription;
-@@ -1626,6 +1635,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1626,6 +1638,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
          sal_Int32 nActualMargin = 0;
          bool bActualShadow = false;
          bool bActualMoveProtect = false;
@@ -71,7 +72,7 @@ index 2a1913f07..e4827f0a3 100644
          xProperties->getPropertyValue("Name") >>= aActualName;
          xProperties->getPropertyValue("Title") >>= aActualTitle;
          xProperties->getPropertyValue("Description") >>= aActualDescription;
-@@ -1633,6 +1643,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1633,6 +1646,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
          xProperties->getPropertyValue("TextLeftDistance") >>= nActualMargin;
          xProperties->getPropertyValue("Shadow") >>= bActualShadow;
          xProperties->getPropertyValue("MoveProtect") >>= bActualMoveProtect;
@@ -79,7 +80,7 @@ index 2a1913f07..e4827f0a3 100644
          CPPUNIT_ASSERT_EQUAL(rName, aActualName);
          CPPUNIT_ASSERT_EQUAL(rTitle, aActualTitle);
          CPPUNIT_ASSERT_EQUAL(rDescription, aActualDescription);
-@@ -1640,16 +1651,17 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1640,16 +1654,17 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
          CPPUNIT_ASSERT_EQUAL(nMargin, nActualMargin);
          CPPUNIT_ASSERT_EQUAL(bShadow, bActualShadow);
          CPPUNIT_ASSERT_EQUAL(bMoveProtect, bActualMoveProtect);
@@ -97,22 +98,22 @@ index 2a1913f07..e4827f0a3 100644
      assertProperties("Browser shape", "Browser title", "Browser description", true,
 -                     420, true, true);
 +                     420, true, true, nChangedNavigationOrder);
- 
+
      saveAndReload("Impress Office Open XML");
      xPagesSupplier.set(mxComponent, uno::UNO_QUERY_THROW);
-@@ -1658,7 +1670,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1658,7 +1673,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
      xShape.set(xShapes->getByIndex(0), uno::UNO_QUERY_THROW);
      xProperties.set(xShape, uno::UNO_QUERY_THROW);
      assertProperties("Browser shape", "Browser title", "Browser description", true,
 -                     420, true, true);
 +                     420, true, true, nChangedNavigationOrder);
  }
- 
+
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookUnoTextWritesUseNativeUndo)
-@@ -2244,6 +2256,188 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookDocumentDesignAndAnimationCom
+@@ -2244,6 +2259,273 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookDocumentDesignAndAnimationCom
      assertTheme();
  }
- 
+
 +CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookAssetReplacementUsesOneNativeUndo)
 +{
 +    createSdImpressDoc();
@@ -295,23 +296,108 @@ index 2a1913f07..e4827f0a3 100644
 +    CPPUNIT_ASSERT_EQUAL(nReplacementVolume, nVolume);
 +}
 +
++CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookSemanticDiagramUsesOneNativeUndo)
++{
++    createSdImpressDoc("pptx/smartart-children.pptx");
++    auto pDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
++    CPPUNIT_ASSERT(pDocument);
++    SdDrawDocument* pDrawDocument = pDocument->GetDoc();
++    SdPage* pPage = pDrawDocument->GetSdPage(0, PageKind::Standard);
++    CPPUNIT_ASSERT(pPage);
++    SdrObject* pDiagram = pPage->GetObj(0);
++    CPPUNIT_ASSERT(pDiagram);
++    CPPUNIT_ASSERT(pDiagram->isDiagram());
++    const auto xHelper = pDiagram->getDiagramHelper();
++    CPPUNIT_ASSERT(xHelper);
++
++    OUString aParentId;
++    for (const auto& [rId, rText] : xHelper->getChildren(OUString()))
++        if (rText == u"a"_ustr)
++            aParentId = rId;
++    CPPUNIT_ASSERT(!aParentId.isEmpty());
++    auto findChildText = [&]() {
++        OUString aResult;
++        for (const auto& rChild : xHelper->getChildren(aParentId))
++            if (rChild.second == u"b"_ustr
++                || rChild.second == u"Updated child"_ustr)
++                aResult = rChild.second;
++        return aResult;
++    };
++    CPPUNIT_ASSERT_EQUAL(u"b"_ustr, findChildText());
++
++    uno::Reference<beans::XPropertySet> xProperties(pDiagram->getUnoShape(),
++                                                    uno::UNO_QUERY_THROW);
++    OUString aState;
++    xProperties->getPropertyValue("SpellbookDiagramState") >>= aState;
++    CPPUNIT_ASSERT(aState.indexOf(u"\"text\":\"b\""_ustr) >= 0);
++    CPPUNIT_ASSERT(aState.indexOf(u"parentId"_ustr) >= 0);
++    static constexpr OUString aMutation
++        = uR"json({"Action":"set","ExpectedText":"b","Occurrence":0,"Text":"Updated child"})json"_ustr;
++    auto* pUndoManager = pDrawDocument->GetUndoManager();
++    pUndoManager->Clear();
++    pDrawDocument->BegUndo("Browser semantic diagram");
++    xProperties->setPropertyValue("SpellbookDiagramMutation", uno::Any(aMutation));
++    pDrawDocument->EndUndo();
++
++    CPPUNIT_ASSERT_EQUAL(u"Updated child"_ustr, findChildText());
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
++    pUndoManager->Undo();
++    CPPUNIT_ASSERT_EQUAL(u"b"_ustr, findChildText());
++    pUndoManager->Redo();
++    CPPUNIT_ASSERT_EQUAL(u"Updated child"_ustr, findChildText());
++
++    pUndoManager->Undo();
++    pUndoManager->Clear();
++    const size_t nTopLevelBefore = xHelper->getChildren(OUString()).size();
++    auto hasTopLevelText = [&](const OUString& rExpected) {
++        const auto aNodes = xHelper->getChildren(OUString());
++        return std::any_of(aNodes.begin(), aNodes.end(),
++                           [&](const auto& rNode) { return rNode.second == rExpected; });
++    };
++    static constexpr OUString aAddMutation
++        = uR"json({"Action":"add","ExpectedText":"","Occurrence":0,"Text":"Added top"})json"_ustr;
++    pDrawDocument->BegUndo("Browser semantic diagram add");
++    xProperties->setPropertyValue("SpellbookDiagramMutation", uno::Any(aAddMutation));
++    pDrawDocument->EndUndo();
++    CPPUNIT_ASSERT_EQUAL(nTopLevelBefore + 1, xHelper->getChildren(OUString()).size());
++    CPPUNIT_ASSERT(hasTopLevelText(u"Added top"_ustr));
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
++    pUndoManager->Undo();
++    CPPUNIT_ASSERT_EQUAL(nTopLevelBefore, xHelper->getChildren(OUString()).size());
++    pUndoManager->Redo();
++    CPPUNIT_ASSERT(hasTopLevelText(u"Added top"_ustr));
++
++    pUndoManager->Clear();
++    static constexpr OUString aDeleteMutation
++        = uR"json({"Action":"delete","ExpectedText":"Added top","Occurrence":0,"Text":""})json"_ustr;
++    pDrawDocument->BegUndo("Browser semantic diagram delete");
++    xProperties->setPropertyValue("SpellbookDiagramMutation", uno::Any(aDeleteMutation));
++    pDrawDocument->EndUndo();
++    CPPUNIT_ASSERT_EQUAL(nTopLevelBefore, xHelper->getChildren(OUString()).size());
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
++    pUndoManager->Undo();
++    CPPUNIT_ASSERT(hasTopLevelText(u"Added top"_ustr));
++    pUndoManager->Redo();
++    CPPUNIT_ASSERT(!hasTopLevelText(u"Added top"_ustr));
++}
++
  // TODO - Readd when we implement style level fill color and set that for default style
  /*CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testThemeShapeInsert)
  {
 diff --git a/sd/source/ui/unoidl/unoobj.cxx b/sd/source/ui/unoidl/unoobj.cxx
-index 353818bc4..7c8c56db1 100644
+index 353818bc4..28d300d43 100644
 --- a/sd/source/ui/unoidl/unoobj.cxx
 +++ b/sd/source/ui/unoidl/unoobj.cxx
 @@ -20,7 +20,9 @@
  #include <sal/config.h>
- 
+
  #include <memory>
 +#include <optional>
  #include <set>
 +#include <sstream>
  #include <string_view>
  #include <utility>
- 
+
 @@ -28,6 +30,10 @@
  #include <com/sun/star/presentation/ClickAction.hpp>
  #include <com/sun/star/beans/PropertyAttribute.hpp>
@@ -341,7 +427,7 @@ index 353818bc4..7c8c56db1 100644
  #include <o3tl/typed_flags_set.hxx>
  #include <vcl/svapp.hxx>
  #include <tools/debug.hxx>
-@@ -183,6 +193,361 @@ void addObjectInteractionUndo(
+@@ -183,6 +193,389 @@ void addObjectInteractionUndo(
          *pDocument, rObject, bHadOldInfo, eOldAction, rOldBookmark,
          eNewAction, rNewBookmark));
  }
@@ -506,12 +592,24 @@ index 353818bc4..7c8c56db1 100644
 +        return OUString();
 +    boost::property_tree::ptree aRoot;
 +    boost::property_tree::ptree aNodes;
-+    for (const auto& [rId, rText] : pObject->getDiagramHelper()->getChildren(OUString()))
++    const auto xHelper = pObject->getDiagramHelper();
++    std::vector<OUString> aParents{ OUString() };
++    std::set<OUString> aVisited;
++    for (size_t nParent = 0; nParent < aParents.size() && aVisited.size() < 1000;
++         ++nParent)
 +    {
-+        boost::property_tree::ptree aNode;
-+        aNode.put("id", OUStringToOString(rId, RTL_TEXTENCODING_UTF8).getStr());
-+        aNode.put("text", OUStringToOString(rText, RTL_TEXTENCODING_UTF8).getStr());
-+        aNodes.push_back(std::make_pair("", aNode));
++        for (const auto& [rId, rText] : xHelper->getChildren(aParents[nParent]))
++        {
++            if (rId.isEmpty() || !aVisited.insert(rId).second)
++                continue;
++            boost::property_tree::ptree aNode;
++            aNode.put("id", OUStringToOString(rId, RTL_TEXTENCODING_UTF8).getStr());
++            aNode.put("text", OUStringToOString(rText, RTL_TEXTENCODING_UTF8).getStr());
++            aNode.put("parentId",
++                      OUStringToOString(aParents[nParent], RTL_TEXTENCODING_UTF8).getStr());
++            aNodes.push_back(std::make_pair("", aNode));
++            aParents.push_back(rId);
++        }
 +    }
 +    aRoot.add_child("nodes", aNodes);
 +    std::ostringstream aJson;
@@ -544,16 +642,32 @@ index 353818bc4..7c8c56db1 100644
 +        throw lang::IllegalArgumentException(u"Invalid diagram mutation"_ustr, nullptr, 0);
 +
 +    auto xHelper = pObject->getDiagramHelper();
++    if (!xHelper)
++        throw lang::IllegalArgumentException(u"Diagram model is unavailable"_ustr, nullptr, 0);
++    if (aAction == "set" && aExpectedText == aText)
++        return;
 +    OUString aNodeId;
 +    if (aAction != "add")
 +    {
 +        sal_Int32 nMatch = 0;
-+        for (const auto& [rId, rText] : xHelper->getChildren(OUString()))
-+            if (rText == aExpectedText && nMatch++ == nOccurrence)
++        std::vector<OUString> aParents{ OUString() };
++        std::set<OUString> aVisited;
++        for (size_t nParent = 0;
++             nParent < aParents.size() && aVisited.size() < 1000 && aNodeId.isEmpty();
++             ++nParent)
++        {
++            for (const auto& [rId, rText] : xHelper->getChildren(aParents[nParent]))
 +            {
-+                aNodeId = rId;
-+                break;
++                if (rId.isEmpty() || !aVisited.insert(rId).second)
++                    continue;
++                if (rText == aExpectedText && nMatch++ == nOccurrence)
++                {
++                    aNodeId = rId;
++                    break;
++                }
++                aParents.push_back(rId);
 +            }
++        }
 +        if (aNodeId.isEmpty())
 +            throw lang::IllegalArgumentException(u"Diagram node changed"_ustr, nullptr, 0);
 +    }
@@ -701,12 +815,12 @@ index 353818bc4..7c8c56db1 100644
 +    pOldObject->BroadcastObjectChange();
 +}
  }
- 
+
  #define IMPRESS_MAP_ENTRIES \
-@@ -486,6 +851,30 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
+@@ -486,6 +879,30 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
  {
      SolarMutexGuard aGuard;
- 
+
 +    SdrObject* pSpellbookObject = mpShape->GetSdrObject();
 +    SdDrawDocument* pSpellbookDocument = mpModel ? mpModel->GetDoc() : nullptr;
 +    if (aPropertyName == u"SpellbookDiagramMutation"_ustr)
@@ -732,10 +846,10 @@ index 353818bc4..7c8c56db1 100644
 +    }
 +
      const SfxItemPropertyMapEntry* pEntry = mpPropSet->getPropertyMapEntry(aPropertyName);
- 
+
      if( pEntry )
-@@ -503,7 +892,18 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
- 
+@@ -503,7 +920,18 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
+
                      SdrObjList* pObjList = pObj->getParentSdrObjListFromSdrObject();
                      if( pObjList )
 -                        pObjList->SetObjectNavigationPosition( *pObj, (nNavOrder < 0) ? SAL_MAX_UINT32 : static_cast< sal_uInt32 >( nNavOrder ) );
@@ -753,8 +867,8 @@ index 353818bc4..7c8c56db1 100644
 +                    }
                      break;
                  }
- 
-@@ -784,6 +1184,17 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
+
+@@ -784,6 +1212,17 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
              u"GlowEffectColor"_ustr,
              u"GlowEffectTransparency"_ustr,
              u"SoftEdgeRadius"_ustr,
@@ -772,7 +886,7 @@ index 353818bc4..7c8c56db1 100644
              u"EdgeKind"_ustr,
              u"StartPosition"_ustr,
              u"EndPosition"_ustr,
-@@ -794,6 +1205,16 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
+@@ -794,6 +1233,16 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
          };
          SdrObject* pObject = mpShape->GetSdrObject();
          SdDrawDocument* pDocument = mpModel ? mpModel->GetDoc() : nullptr;
@@ -789,7 +903,7 @@ index 353818bc4..7c8c56db1 100644
          if (pObject && pDocument && pDocument->IsUndoEnabled()
              && aUndoProperties.contains(aPropertyName))
          {
-@@ -802,7 +1223,20 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
+@@ -802,7 +1251,20 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
              pDocument->AddUndo(
                  pDocument->GetSdrUndoFactory().CreateUndoGeoObject(*pObject));
          }
@@ -809,12 +923,12 @@ index 353818bc4..7c8c56db1 100644
 +                *pDocument, *pMediaObject, std::move(*oOldMedia),
 +                pMediaObject->getMediaProperties()));
      }
- 
+
      if( mpModel )
-@@ -815,6 +1249,14 @@ css::uno::Any SAL_CALL SdXShape::getPropertyValue( const OUString& PropertyName
- 
+@@ -815,6 +1277,14 @@ css::uno::Any SAL_CALL SdXShape::getPropertyValue( const OUString& PropertyName
+
      uno::Any aRet;
- 
+
 +    if (PropertyName == u"SpellbookDiagramState"_ustr)
 +    {
 +        const OUString aState = spellbookDiagramState(mpShape->GetSdrObject());
@@ -824,5 +938,5 @@ index 353818bc4..7c8c56db1 100644
 +    }
 +
      const SfxItemPropertyMapEntry* pEntry = mpPropSet->getPropertyMapEntry(PropertyName);
- 
+
      if( pEntry && mpShape->GetSdrObject() )
