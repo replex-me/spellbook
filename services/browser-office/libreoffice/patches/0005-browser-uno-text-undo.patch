@@ -206,7 +206,7 @@ index 64da139..61ab37d 100644
                  pTextObj->NbcSetOutlinerParaObjectForText(std::move(pUpdatedText), mpText);
 +                if (bChanged)
 +                {
-+                    pTextObj->ReformatText();
++                    mpText->ReformatText();
 +                    pTextObj->GetViewContact().flushViewObjectContacts(false);
 +                    pTextObj->SetChanged();
 +                    pTextObj->BroadcastObjectChange();
