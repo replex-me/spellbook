@@ -12,6 +12,8 @@ const requiredArtifacts = Object.freeze([
   "soffice.data.js.metadata",
   "soffice.wasm",
   "soffice.data",
+  "soffice.wasm.br",
+  "soffice.data.br",
 ]);
 
 export async function createBrowserRuntimeReceipt({

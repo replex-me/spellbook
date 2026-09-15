@@ -19,6 +19,8 @@ test("browser runtime receipt binds every artifact to source and toolchain ident
         Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01]),
       ),
       writeFile(path.join(root, "soffice.data"), Buffer.from([0x01])),
+      writeFile(path.join(root, "soffice.wasm.br"), Buffer.from([0x02])),
+      writeFile(path.join(root, "soffice.data.br"), Buffer.from([0x03])),
     ]);
     const receipt = await createBrowserRuntimeReceipt({
       runtimeDirectory: root,
@@ -37,6 +39,8 @@ test("browser runtime receipt binds every artifact to source and toolchain ident
         "soffice.data.js.metadata",
         "soffice.wasm",
         "soffice.data",
+        "soffice.wasm.br",
+        "soffice.data.br",
       ],
     );
     for (const artifact of receipt.artifacts) {

@@ -7,7 +7,7 @@ import test from "node:test";
 import { admitCandidateRuntime } from "./candidate-runtime.mjs";
 import { createBrowserRuntimeReceipt } from "./libreoffice/write-build-receipt.mjs";
 
-test("candidate runtime is admitted only from receipt-bound raw artifacts", async () => {
+test("candidate runtime serves only receipt-bound production assets", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "spellbook-candidate-"));
   try {
     await writeArtifacts(root);
@@ -35,12 +35,24 @@ test("candidate runtime is admitted only from receipt-bound raw artifacts", asyn
       [
         "soffice.js",
         "soffice.data.js.metadata",
-        "soffice.wasm",
-        "soffice.data",
+        "soffice.wasm.br",
+        "soffice.data.br",
       ],
+    );
+    assert.deepEqual(
+      admitted.upstream.runtimeAssets.map(
+        ({ contentEncoding }) => contentEncoding ?? "identity",
+      ),
+      ["identity", "identity", "br", "br"],
     );
 
     await writeFile(path.join(root, "soffice.data"), Buffer.from([0x02]));
+    await assert.rejects(
+      admitCandidateRuntime({ runtimeDirectory: root }),
+      /digest differs/u,
+    );
+    await writeFile(path.join(root, "soffice.data"), Buffer.from([0x01]));
+    await writeFile(path.join(root, "soffice.data.br"), Buffer.from([0x04]));
     await assert.rejects(
       admitCandidateRuntime({ runtimeDirectory: root }),
       /digest differs/u,
@@ -59,5 +71,7 @@ async function writeArtifacts(root) {
       Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01]),
     ),
     writeFile(path.join(root, "soffice.data"), Buffer.from([0x01])),
+    writeFile(path.join(root, "soffice.wasm.br"), Buffer.from([0x02])),
+    writeFile(path.join(root, "soffice.data.br"), Buffer.from([0x03])),
   ]);
 }

@@ -4,11 +4,37 @@ import path from "node:path";
 
 import { upstreamManifest } from "./libreoffice/upstream.mjs";
 
-const requiredArtifacts = Object.freeze([
-  ["soffice.js", "text/javascript; charset=utf-8"],
-  ["soffice.data.js.metadata", "application/json"],
-  ["soffice.wasm", "application/wasm"],
-  ["soffice.data", "application/octet-stream"],
+const requiredArtifactNames = Object.freeze([
+  "soffice.js",
+  "soffice.data.js.metadata",
+  "soffice.wasm",
+  "soffice.data",
+  "soffice.wasm.br",
+  "soffice.data.br",
+]);
+const servedRuntimeArtifacts = Object.freeze([
+  {
+    path: "soffice.js",
+    storedPath: "soffice.js",
+    contentType: "text/javascript; charset=utf-8",
+  },
+  {
+    path: "soffice.data.js.metadata",
+    storedPath: "soffice.data.js.metadata",
+    contentType: "application/json",
+  },
+  {
+    path: "soffice.wasm",
+    storedPath: "soffice.wasm.br",
+    contentType: "application/wasm",
+    contentEncoding: "br",
+  },
+  {
+    path: "soffice.data",
+    storedPath: "soffice.data.br",
+    contentType: "application/octet-stream",
+    contentEncoding: "br",
+  },
 ]);
 
 export async function admitCandidateRuntime({
@@ -25,13 +51,13 @@ export async function admitCandidateRuntime({
   const receiptArtifacts = new Map(
     receipt.artifacts.map((artifact) => [artifact.name, artifact]),
   );
-  if (receiptArtifacts.size !== requiredArtifacts.length)
+  if (receiptArtifacts.size !== requiredArtifactNames.length)
     throw new Error(
       "Candidate runtime receipt has an unexpected artifact set.",
     );
 
-  const runtimeAssets = [];
-  for (const [name, contentType] of requiredArtifacts) {
+  const verifiedArtifacts = new Map();
+  for (const name of requiredArtifactNames) {
     const expected = receiptArtifacts.get(name);
     if (!expected) throw new Error(`Candidate runtime receipt omits ${name}.`);
     const file = path.join(directory, name);
@@ -47,14 +73,15 @@ export async function admitCandidateRuntime({
     )
       throw new Error("Candidate runtime artifact is not WebAssembly.");
     if (name.endsWith(".metadata")) JSON.parse(bytes.toString("utf8"));
-    runtimeAssets.push({
-      path: name,
-      storedPath: name,
-      contentType,
+    verifiedArtifacts.set(name, {
       bytes: details.size,
       sha256,
     });
   }
+  const runtimeAssets = servedRuntimeArtifacts.map((asset) => ({
+    ...asset,
+    ...verifiedArtifacts.get(asset.storedPath),
+  }));
 
   const runtimeIdentity = Object.freeze({
     buildCommit: manifest.source.candidateCommit,

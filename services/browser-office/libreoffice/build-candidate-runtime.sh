@@ -174,10 +174,10 @@ for artifact in soffice.js soffice.data.js.metadata soffice.wasm soffice.data; d
   install -m 0644 "$installation_root/$artifact" "$SPELLBOOK_BROWSER_OUTPUT_DIR/$artifact"
 done
 
+brotli --force --quality=11 "$SPELLBOOK_BROWSER_OUTPUT_DIR/soffice.wasm"
+brotli --force --quality=11 "$SPELLBOOK_BROWSER_OUTPUT_DIR/soffice.data"
 node "$spellbook_repo_root/services/browser-office/libreoffice/write-build-receipt.mjs" \
   --runtime-dir "$SPELLBOOK_BROWSER_OUTPUT_DIR" \
   --output "$SPELLBOOK_BROWSER_OUTPUT_DIR/build-receipt.json"
-brotli --force --quality=11 "$SPELLBOOK_BROWSER_OUTPUT_DIR/soffice.wasm"
-brotli --force --quality=11 "$SPELLBOOK_BROWSER_OUTPUT_DIR/soffice.data"
 
 echo "Built $patch_level once; native tests, raw artifacts, compressed assets and receipt are in $SPELLBOOK_BROWSER_OUTPUT_DIR."
