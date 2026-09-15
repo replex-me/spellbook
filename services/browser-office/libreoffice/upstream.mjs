@@ -12,6 +12,15 @@ export const upstreamManifest = JSON.parse(
   readFileSync(path.join(browserOfficeRoot, "upstream.json"), "utf8"),
 );
 
+export function valueAtPath(valuePath) {
+  const value = valuePath
+    .split(".")
+    .reduce((current, key) => current?.[key], upstreamManifest);
+  if (value === undefined)
+    throw new Error(`Unknown browser upstream key: ${valuePath}`);
+  return value;
+}
+
 export function computePatchSeriesSha256(
   manifest = upstreamManifest,
   root = browserOfficeRoot,
@@ -42,7 +51,16 @@ export function patchedSourcePaths(patchText) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (process.argv[2] !== "patch-series-sha256")
-    throw new Error("Usage: node upstream.mjs patch-series-sha256");
-  process.stdout.write(`${computePatchSeriesSha256()}\n`);
+  if (process.argv[2] === "patch-series-sha256") {
+    process.stdout.write(`${computePatchSeriesSha256()}\n`);
+    process.exit(0);
+  }
+  if (process.argv[2] !== "get" || !process.argv[3])
+    throw new Error(
+      "Usage: node upstream.mjs get <key.path> | patch-series-sha256",
+    );
+  const value = valueAtPath(process.argv[3]);
+  process.stdout.write(
+    `${Array.isArray(value) ? value.join("\n") : String(value)}\n`,
+  );
 }

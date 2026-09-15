@@ -39,6 +39,36 @@ Verify every source edit before starting the expensive build:
 pnpm browser-office:engine:verify -- --source /absolute/path/to/libreoffice-core
 ```
 
+Build the admitted series from the pinned Linux, Emscripten and Qt toolchain:
+
+```sh
+docker buildx build \
+  --platform=linux/amd64 \
+  --file services/browser-office/libreoffice/Dockerfile.toolchain \
+  --tag spellbook-browser-office-toolchain:v7 \
+  --load .
+
+docker run --rm --user=1000:1000 \
+  --volume "$PWD:/workspace:ro" \
+  --volume "/absolute/build-root:/build" \
+  --volume "/absolute/output:/output" \
+  --env SPELLBOOK_SOURCE_REVISION="$(git rev-parse HEAD)" \
+  --env SPELLBOOK_BROWSER_BUILD_ROOT=/build \
+  --env SPELLBOOK_BROWSER_OUTPUT_DIR=/output \
+  spellbook-browser-office-toolchain:v7 \
+  /workspace/services/browser-office/libreoffice/build-candidate-runtime.sh
+```
+
+The build root is deliberately external and keyed by the patch-series hash.
+Native CppUnit targets and the WASM link each write a completion marker only
+after success, so a failed step resumes from its existing object files instead
+of restarting the preceding hour-long work. A root belonging to another source
+or patch identity is rejected rather than cleaned implicitly. The output holds
+the four raw runtime assets, Brotli serving variants and a receipt binding their
+hashes to the exact public source, LibreOffice, patch-series, Emscripten and Qt
+identities. Building does not set `buildReady`; promotion still requires the
+integrated product, endurance, fidelity and PowerPoint gates.
+
 General document fixes must be represented in both LibreOffice source lines or
 explicitly proven unnecessary on one line. Collabora-only transport commands
 are not copied into ZetaOffice: the browser calls the same bounded operation

@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   computePatchSeriesSha256,
   patchedSourcePaths,
+  valueAtPath,
 } from "./libreoffice/upstream.mjs";
 
 const manifest = JSON.parse(
@@ -14,8 +15,18 @@ const fetcher = readFileSync(
   new URL("./fetch-runtime.mjs", import.meta.url),
   "utf8",
 );
+const toolchainDockerfile = readFileSync(
+  new URL("./libreoffice/Dockerfile.toolchain", import.meta.url),
+  "utf8",
+);
+const candidateBuilder = readFileSync(
+  new URL("./libreoffice/build-candidate-runtime.sh", import.meta.url),
+  "utf8",
+);
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v7");
+  assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.source.candidateCommit, /^[0-9a-f]{40}$/u);
@@ -59,6 +70,12 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "text-appearance-property-native-undo",
   ]);
   assert.match(manifest.toolchain.emscripten.commit, /^[0-9a-f]{40}$/u);
+  assert.match(manifest.toolchain.emsdk.commit, /^[0-9a-f]{40}$/u);
+  assert.equal(manifest.toolchain.emsdk.version, "3.1.65");
+  assert.match(
+    manifest.toolchain.builderBaseImage,
+    /^node:22\.22\.0-bookworm@sha256:[0-9a-f]{64}$/u,
+  );
   assert.match(manifest.toolchain.qt.commit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.toolchain.qt.qtbaseCommit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.javascriptBridge.commit, /^[0-9a-f]{40}$/u);
@@ -96,6 +113,21 @@ test("browser Office runtime is reproducible and remains unapproved by default",
   assert.match(fetcher, /does not match the pinned/);
   assert.match(fetcher, /Content-Encoding/);
   assert.match(fetcher, /\.partial/);
+  for (const identity of [
+    manifest.toolchain.builderBaseImage,
+    manifest.toolchain.emsdk.commit,
+    manifest.toolchain.emsdk.version,
+    manifest.toolchain.emscripten.commit,
+    manifest.toolchain.qt.commit,
+    manifest.toolchain.qt.qtbaseCommit,
+  ])
+    assert.ok(
+      toolchainDockerfile.includes(identity),
+      `Toolchain image omits ${identity}.`,
+    );
+  assert.match(candidateBuilder, /native-tests\.\$expected_patch_sha/u);
+  assert.match(candidateBuilder, /wasm\.\$expected_patch_sha/u);
+  assert.match(candidateBuilder, /use a new build root/u);
 });
 
 test("browser LibreOffice patches name their complete source surface", () => {

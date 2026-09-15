@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "The browser LibreOffice candidate build requires Linux." >&2
+  exit 1
+fi
+if [[ "$(uname -m)" != "x86_64" ]]; then
+  echo "The admitted browser toolchain currently requires Linux x86_64." >&2
+  exit 1
+fi
+if [[ "$EUID" -eq 0 ]]; then
+  echo "LibreOffice refuses root compilation; run as an unprivileged build user." >&2
+  exit 1
+fi
+
+spellbook_repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+upstream_reader="$spellbook_repo_root/services/browser-office/libreoffice/upstream.mjs"
+source_repository="$(node "$upstream_reader" get source.repository)"
+source_commit="$(node "$upstream_reader" get source.candidateCommit)"
+patch_level="$(node "$upstream_reader" get sourceCandidate.patchLevel)"
+expected_patch_sha="$(node "$upstream_reader" get sourceCandidate.patchSeriesSha256)"
+actual_patch_sha="$(node "$upstream_reader" patch-series-sha256)"
+patch_series_ready="$(node "$upstream_reader" get sourceCandidate.patchSeriesReady)"
+emsdk_commit="$(node "$upstream_reader" get toolchain.emsdk.commit)"
+emscripten_commit="$(node "$upstream_reader" get toolchain.emscripten.commit)"
+qt_commit="$(node "$upstream_reader" get toolchain.qt.commit)"
+qtbase_commit="$(node "$upstream_reader" get toolchain.qt.qtbaseCommit)"
+
+if [[ "$patch_series_ready" != "true" || "$actual_patch_sha" != "$expected_patch_sha" ]]; then
+  echo "The exact browser patch series must pass source admission before building." >&2
+  exit 1
+fi
+if [[ ! "${SPELLBOOK_SOURCE_REVISION:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "SPELLBOOK_SOURCE_REVISION must identify the exact public source commit." >&2
+  exit 1
+fi
+if [[ -z "${SPELLBOOK_BROWSER_BUILD_ROOT:-}" || "$SPELLBOOK_BROWSER_BUILD_ROOT" != /* ]]; then
+  echo "SPELLBOOK_BROWSER_BUILD_ROOT must be an explicit absolute directory." >&2
+  exit 1
+fi
+if [[ -z "${SPELLBOOK_BROWSER_OUTPUT_DIR:-}" || "$SPELLBOOK_BROWSER_OUTPUT_DIR" != /* ]]; then
+  echo "SPELLBOOK_BROWSER_OUTPUT_DIR must be an explicit absolute directory." >&2
+  exit 1
+fi
+if [[ "$SPELLBOOK_BROWSER_BUILD_ROOT" == "/" || "$SPELLBOOK_BROWSER_OUTPUT_DIR" == "/" ]]; then
+  echo "Build and output directories cannot be the filesystem root." >&2
+  exit 1
+fi
+if [[ ! -f "${SPELLBOOK_EMSDK_ENV:-}" || ! -x "${SPELLBOOK_QT5DIR:-}/bin/qmake" ]]; then
+  echo "The pinned Emscripten and Qt toolchain is unavailable." >&2
+  exit 1
+fi
+
+source "${SPELLBOOK_EMSDK_ENV}"
+export CCACHE_DIR="$SPELLBOOK_BROWSER_BUILD_ROOT/ccache"
+export QT5DIR="$SPELLBOOK_QT5DIR"
+parallelism="${SPELLBOOK_BROWSER_BUILD_PARALLELISM:-$(nproc)}"
+if [[ ! "$parallelism" =~ ^[1-9][0-9]*$ ]]; then
+  echo "SPELLBOOK_BROWSER_BUILD_PARALLELISM must be a positive integer." >&2
+  exit 1
+fi
+
+mkdir -p \
+  "$SPELLBOOK_BROWSER_BUILD_ROOT" \
+  "$SPELLBOOK_BROWSER_OUTPUT_DIR" \
+  "$CCACHE_DIR" \
+  "$SPELLBOOK_BROWSER_BUILD_ROOT/tarballs"
+
+source_root="$SPELLBOOK_BROWSER_BUILD_ROOT/source"
+source_identity="$source_commit:$patch_level:$expected_patch_sha"
+source_marker="$SPELLBOOK_BROWSER_BUILD_ROOT/source.identity"
+if [[ -f "$source_marker" ]]; then
+  if [[ "$(<"$source_marker")" != "$source_identity" ]]; then
+    echo "The preserved source tree belongs to a different candidate; use a new build root." >&2
+    exit 1
+  fi
+elif [[ -e "$source_root" ]]; then
+  echo "An unowned source tree already exists at $source_root." >&2
+  exit 1
+else
+  git init --quiet "$source_root"
+  git -C "$source_root" remote add origin "$source_repository"
+  git -C "$source_root" fetch --quiet --depth=1 origin "$source_commit"
+  git -C "$source_root" checkout --quiet --detach FETCH_HEAD
+  node "$spellbook_repo_root/services/browser-office/libreoffice/verify-source.mjs" \
+    --source "$source_root"
+  while IFS= read -r relative_patch; do
+    patch_path="$spellbook_repo_root/services/browser-office/$relative_patch"
+    git -C "$source_root" apply --check --whitespace=error-all "$patch_path"
+    git -C "$source_root" apply --whitespace=error-all "$patch_path"
+  done < <(node "$upstream_reader" get sourceCandidate.patches)
+  git -C "$source_root" diff --check
+  git -C "$source_root" -c user.name=Spellbook -c user.email=build@invalid.example \
+    commit --quiet --all --message="Apply $patch_level"
+  printf '%s\n' "$source_identity" > "$source_marker"
+fi
+
+source_parent="$(git -C "$source_root" rev-parse HEAD^)"
+if [[ "$source_parent" != "$source_commit" ]]; then
+  echo "The preserved browser source does not descend from the pinned candidate." >&2
+  exit 1
+fi
+if [[ "$(git -C /opt/emsdk rev-parse HEAD)" != "$emsdk_commit" || \
+      "$(git -C /opt/emsdk/upstream/emscripten rev-parse HEAD)" != "$emscripten_commit" || \
+      "$(git -C /opt/qt5 rev-parse HEAD)" != "$qt_commit" || \
+      "$(git -C /opt/qt5/qtbase rev-parse HEAD)" != "$qtbase_commit" ]]; then
+  echo "The installed browser toolchain differs from upstream.json." >&2
+  exit 1
+fi
+
+tarballs="$SPELLBOOK_BROWSER_BUILD_ROOT/tarballs"
+native_build="$SPELLBOOK_BROWSER_BUILD_ROOT/native"
+native_marker="$SPELLBOOK_BROWSER_BUILD_ROOT/native-tests.$expected_patch_sha"
+if [[ ! -f "$native_marker" ]]; then
+  mkdir -p "$native_build"
+  if [[ ! -f "$native_build/Makefile" ]]; then
+    (
+      cd "$native_build"
+      "$source_root/autogen.sh" \
+        --with-parallelism="$parallelism" \
+        --with-external-tar="$tarballs" \
+        --without-java \
+        --without-junit \
+        --without-help \
+        --disable-odk \
+        --disable-online-update \
+        --disable-report-builder \
+        --disable-scripting \
+        --disable-skia \
+        --enable-release-build \
+        --with-lang="en-US ko" \
+        --with-theme=colibre
+    )
+  fi
+  while IFS= read -r cppunit_target; do
+    if [[ ! "$cppunit_target" =~ ^[A-Za-z0-9_]+$ ]]; then
+      echo "Invalid CppUnit target: $cppunit_target" >&2
+      exit 1
+    fi
+    make -C "$native_build" "$cppunit_target"
+  done < <(node "$upstream_reader" get sourceCandidate.requiredCppunitTargets)
+  printf 'passed\n' > "$native_marker"
+fi
+
+wasm_build="$SPELLBOOK_BROWSER_BUILD_ROOT/wasm"
+wasm_marker="$SPELLBOOK_BROWSER_BUILD_ROOT/wasm.$expected_patch_sha"
+mkdir -p "$wasm_build"
+if [[ ! -f "$wasm_build/Makefile" ]]; then
+  (
+    cd "$wasm_build"
+    "$source_root/autogen.sh" \
+      --with-parallelism="$parallelism" \
+      --with-external-tar="$tarballs" \
+      --with-distro=LibreOfficeWASM32 \
+      --with-build-platform-configure-options=--enable-ccache \
+      --enable-ccache \
+      --enable-release-build \
+      --with-lang="en-US ko" \
+      --with-theme=colibre
+  )
+fi
+if [[ ! -f "$wasm_marker" ]]; then
+  make -C "$wasm_build" build
+  printf 'built\n' > "$wasm_marker"
+fi
+
+installation_root="$wasm_build/workdir/installation/LibreOffice/emscripten"
+for artifact in soffice.js soffice.data.js.metadata soffice.wasm soffice.data; do
+  if [[ ! -s "$installation_root/$artifact" ]]; then
+    echo "The WASM build did not produce $artifact." >&2
+    exit 1
+  fi
+  install -m 0644 "$installation_root/$artifact" "$SPELLBOOK_BROWSER_OUTPUT_DIR/$artifact"
+done
+
+node "$spellbook_repo_root/services/browser-office/libreoffice/write-build-receipt.mjs" \
+  --runtime-dir "$SPELLBOOK_BROWSER_OUTPUT_DIR" \
+  --output "$SPELLBOOK_BROWSER_OUTPUT_DIR/build-receipt.json"
+brotli --force --quality=11 "$SPELLBOOK_BROWSER_OUTPUT_DIR/soffice.wasm"
+brotli --force --quality=11 "$SPELLBOOK_BROWSER_OUTPUT_DIR/soffice.data"
+
+echo "Built $patch_level once; native tests, raw artifacts, compressed assets and receipt are in $SPELLBOOK_BROWSER_OUTPUT_DIR."

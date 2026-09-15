@@ -60,6 +60,12 @@
     ]
   },
   "toolchain": {
+    "builderBaseImage": "node:22.22.0-bookworm@sha256:20a424ecd1d2064a44e12fe287bf3dae443aab31dc5e0c0cb6c74bef9c78911c",
+    "emsdk": {
+      "repository": "https://github.com/emscripten-core/emsdk.git",
+      "version": "3.1.65",
+      "commit": "3eb3e02dfd10eaa527ba61b89cfcfba13d1c060d"
+    },
     "emscripten": {
       "repository": "https://github.com/allotropia/emscripten.git",
       "ref": "fixed-3.1.65",
