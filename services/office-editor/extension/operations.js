@@ -15,6 +15,14 @@ function spellbookDocumentOperation(request) {
   const enginePatchVersion = patchLevelMatch ? Number(patchLevelMatch[1]) : 0;
   const hasEnginePatch = (minimumVersion) =>
     enginePatchVersion >= minimumVersion;
+  const runtimeOperations = new Set(
+    Array.isArray(request.nativeAdapter?.supportedOperations)
+      ? request.nativeAdapter.supportedOperations.filter(
+          (operation) => typeof operation === "string",
+        )
+      : [],
+  );
+  const runtimeSupports = (operation) => runtimeOperations.has(operation);
   const patchedUndoEngine = hasEnginePatch(2);
   const patchedObjectPropertyEngine = hasEnginePatch(3);
   const patchedTextRangeEngine = hasEnginePatch(4);
@@ -43,7 +51,8 @@ function spellbookDocumentOperation(request) {
     if (
       !Number.isInteger(contract.minEnginePatch) ||
       contract.minEnginePatch < 0 ||
-      enginePatchVersion < contract.minEnginePatch
+      (enginePatchVersion < contract.minEnginePatch &&
+        !runtimeSupports(operation))
     )
       throw new Error(
         `native_engine_patch_level_${contract.minEnginePatch}_required`,
@@ -1705,7 +1714,7 @@ function spellbookDocumentOperation(request) {
         throw new Error("invalid_speaker_notes");
       if (
         command.op === "set_slide_transition" &&
-        (!patchedSlideTransitionEngine ||
+        ((!patchedSlideTransitionEngine && !runtimeSupports(command.op)) ||
           !Object.hasOwn(slideTransitionPresets, command.transitionEffect) ||
           typeof command.transitionDuration !== "number" ||
           !Number.isFinite(command.transitionDuration) ||
@@ -1713,13 +1722,21 @@ function spellbookDocumentOperation(request) {
           command.transitionDuration > 60)
       )
         throw new Error(
-          !patchedSlideTransitionEngine
+          !patchedSlideTransitionEngine && !runtimeSupports(command.op)
             ? "native_engine_slide_transition_patch_required"
             : "invalid_slide_transition",
         );
-      if (command.op === "set_slide_layout" && !patchedSlideLayoutEngine)
+      if (
+        command.op === "set_slide_layout" &&
+        !patchedSlideLayoutEngine &&
+        !runtimeSupports(command.op)
+      )
         throw new Error("native_engine_slide_layout_patch_required");
-      if (command.op === "insert_slide" && !patchedSlideInsertionEngine)
+      if (
+        command.op === "insert_slide" &&
+        !patchedSlideInsertionEngine &&
+        !runtimeSupports(command.op)
+      )
         throw new Error("native_engine_slide_insertion_patch_required");
       if (
         command.op === "set_slide_layout" &&
@@ -2146,7 +2163,7 @@ function spellbookDocumentOperation(request) {
           );
           undoContextOpen = true;
         }
-        if (patchedObjectLifecycleEngine) {
+        if (patchedObjectLifecycleEngine || runtimeSupports(command.op)) {
           // The patched Impress XShapes.add boundary records one native
           // creation action. Text must be assigned after insertion because an
           // unattached UNO TextShape does not retain its text model.
@@ -2370,7 +2387,7 @@ function spellbookDocumentOperation(request) {
     if (!allowed) throw new Error("outside_edit_permission");
 
     if (command.op === "set_object_interaction") {
-      if (!patchedObjectInteractionEngine)
+      if (!patchedObjectInteractionEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_object_interaction_patch_required");
       const actions = new Set([
         "none",
@@ -2483,7 +2500,7 @@ function spellbookDocumentOperation(request) {
     }
 
     if (command.op === "set_animation_timing") {
-      if (!patchedAnimationTimingEngine)
+      if (!patchedAnimationTimingEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_animation_timing_patch_required");
       if (
         element.parentElementId !== null ||
@@ -2576,7 +2593,7 @@ function spellbookDocumentOperation(request) {
     }
 
     if (command.op === "replace_text_range") {
-      if (!patchedTextRangeEngine)
+      if (!patchedTextRangeEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_text_range_patch_required");
       if (
         element.parentElementId !== null ||
@@ -2675,7 +2692,7 @@ function spellbookDocumentOperation(request) {
     }
 
     if (command.op === "set_character_spacing") {
-      if (!patchedTextPropertiesEngine)
+      if (!patchedTextPropertiesEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_text_property_patch_required");
       if (
         typeof command.spacing !== "number" ||
@@ -2685,7 +2702,9 @@ function spellbookDocumentOperation(request) {
       )
         throw new Error("invalid_character_spacing");
       if (
-        (!patchedTextFormattingEngine && element.parentElementId !== null) ||
+        (!patchedTextFormattingEngine &&
+          !runtimeSupports(command.op) &&
+          element.parentElementId !== null) ||
         !element.text
       )
         throw new Error("unsupported_character_spacing_target");
@@ -2763,7 +2782,7 @@ function spellbookDocumentOperation(request) {
     }
 
     if (command.op === "set_script_position") {
-      if (!patchedTextPropertiesEngine)
+      if (!patchedTextPropertiesEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_text_property_patch_required");
       const expectedScript = {
         normal: [0, 100],
@@ -2772,7 +2791,9 @@ function spellbookDocumentOperation(request) {
       }[command.script];
       if (!expectedScript) throw new Error("invalid_script_position");
       if (
-        (!patchedTextFormattingEngine && element.parentElementId !== null) ||
+        (!patchedTextFormattingEngine &&
+          !runtimeSupports(command.op) &&
+          element.parentElementId !== null) ||
         !element.text
       )
         throw new Error("unsupported_script_position_target");
@@ -2847,7 +2868,7 @@ function spellbookDocumentOperation(request) {
       "set_printable",
     ]);
     if (objectPropertyOperations.has(command.op)) {
-      if (!patchedObjectPropertyEngine)
+      if (!patchedObjectPropertyEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_object_property_patch_required");
       if (element.parentElementId !== null)
         throw new Error("unsupported_nested_property_target");
@@ -3031,7 +3052,7 @@ function spellbookDocumentOperation(request) {
     }
 
     if (command.op === "set_table_cell_format") {
-      if (!patchedTableCellPropertiesEngine)
+      if (!patchedTableCellPropertiesEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_table_cell_property_patch_required");
       if (
         !element.table ||
@@ -3435,7 +3456,8 @@ function spellbookDocumentOperation(request) {
     }
 
     if (command.op === "crop_image") {
-      if (!patchedGraphicCropEngine) throw new Error("native_undo_unavailable");
+      if (!patchedGraphicCropEngine && !runtimeSupports(command.op))
+        throw new Error("native_undo_unavailable");
       if (
         element.parentElementId !== null ||
         !String(element.kind).endsWith("GraphicObjectShape") ||
@@ -4179,7 +4201,7 @@ function spellbookDocumentOperation(request) {
       "set_table_column_width",
     ];
     if (tableStructureOperations.includes(command.op)) {
-      if (!patchedTableStructureEngine)
+      if (!patchedTableStructureEngine && !runtimeSupports(command.op))
         throw new Error("native_engine_table_structure_patch_required");
       if (!element.table) throw new Error("unsupported_table_target");
       const integer = (value, minimum, maximum) =>
@@ -4475,7 +4497,8 @@ function spellbookDocumentOperation(request) {
     if (
       (command.op === "delete_element" ||
         (command.op === "duplicate_element" &&
-          !patchedObjectLifecycleEngine)) &&
+          !patchedObjectLifecycleEngine &&
+          !runtimeSupports(command.op))) &&
       (element.parentElementId !== null || element.childElementIds.length)
     )
       throw new Error("unsupported_structural_target");
@@ -4523,7 +4546,11 @@ function spellbookDocumentOperation(request) {
     const usesTypedTextFormatting = typedTextFormattingOperations.has(
       command.op,
     );
-    if (usesTypedTextFormatting && !patchedTextFormattingEngine)
+    if (
+      usesTypedTextFormatting &&
+      !patchedTextFormattingEngine &&
+      !runtimeSupports(command.op)
+    )
       throw new Error("native_engine_text_formatting_patch_required");
     if (usesTypedTextFormatting && element.text === null)
       throw new Error("unsupported_text_target");
@@ -4739,7 +4766,7 @@ function spellbookDocumentOperation(request) {
       );
     else if (command.op === "ungroup") dispatch(".uno:FormatUngroup");
     else if (command.op === "duplicate_element") {
-      if (patchedObjectLifecycleEngine) {
+      if (patchedObjectLifecycleEngine || runtimeSupports(command.op)) {
         const objectPath = command.elementId.split("/").slice(1).join("/");
         transformSlides([
           { JumpToSlide: slideIndex },
@@ -4954,7 +4981,8 @@ function spellbookDocumentOperation(request) {
   if (
     hasStructureChangingSlideCommand &&
     request.commands.length > 1 &&
-    !patchedUndoEngine
+    !patchedUndoEngine &&
+    !request.commands.every((command) => runtimeSupports(command.op))
   )
     throw new Error(
       "multi_slide_structure_transaction_requires_patched_engine",
@@ -5087,7 +5115,7 @@ function spellbookDocumentOperation(request) {
       const slideIndex = findVirtualPage(reference);
       if (slideIndex < 0) throw new Error("transaction_slide_no_longer_exists");
       if (command.op === "insert_slide") {
-        if (!patchedSlideInsertionEngine)
+        if (!patchedSlideInsertionEngine && !runtimeSupports(command.op))
           throw new Error("native_engine_slide_insertion_patch_required");
         transforms.push(
           { JumpToSlide: slideIndex },

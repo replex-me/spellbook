@@ -524,8 +524,10 @@ globalThis.Module = {
   canvas,
   uno_scripts: [
     new URL("zeta.js", runtimeBase).href,
+    new URL("browser-candidate.js", runtimeBase).href,
     new URL("/harness/mutation-contract.generated.js", location.href).href,
     new URL("/harness/operations.js", location.href).href,
+    new URL("/harness/native-transform-adapter.js", location.href).href,
     new URL("/harness/office-thread.js", location.href).href,
   ],
   locateFile: (path, prefix) => (prefix || runtimeBase) + path,

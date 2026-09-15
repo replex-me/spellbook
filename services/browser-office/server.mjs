@@ -57,6 +57,13 @@ export function buildRoutes(root = serviceRoot, upstream = manifest) {
       ),
     ],
     [
+      "/harness/native-transform-adapter.js",
+      route(
+        path.join(root, "harness/native-transform-adapter.js"),
+        "text/javascript; charset=utf-8",
+      ),
+    ],
+    [
       "/harness/styles.css",
       route(path.join(root, "harness/styles.css"), "text/css; charset=utf-8"),
     ],
@@ -74,6 +81,13 @@ export function buildRoutes(root = serviceRoot, upstream = manifest) {
       "/runtime/ooxml-worker.js",
       route(
         path.join(root, "runtime/ooxml-worker.js"),
+        "text/javascript; charset=utf-8",
+      ),
+    ],
+    [
+      "/runtime/browser-candidate.js",
+      route(
+        path.join(root, "runtime/browser-candidate.js"),
         "text/javascript; charset=utf-8",
       ),
     ],

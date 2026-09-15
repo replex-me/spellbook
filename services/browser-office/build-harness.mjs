@@ -1,12 +1,25 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build } from "esbuild";
 
+import { upstreamManifest } from "./libreoffice/upstream.mjs";
+
 const serviceRoot = path.dirname(fileURLToPath(import.meta.url));
 const runtimeRoot = path.join(serviceRoot, "runtime");
 await mkdir(runtimeRoot, { recursive: true });
+const browserCandidate = {
+  buildCommit: upstreamManifest.source.buildCommit,
+  candidateCommit: upstreamManifest.source.candidateCommit,
+  patchLevel: upstreamManifest.sourceCandidate.patchLevel,
+  patchSeriesSha256: upstreamManifest.sourceCandidate.patchSeriesSha256,
+  buildReady: upstreamManifest.sourceCandidate.buildReady,
+};
+await writeFile(
+  path.join(runtimeRoot, "browser-candidate.js"),
+  `globalThis.spellbookBrowserRuntimeCandidate = Object.freeze(${JSON.stringify(browserCandidate)});\n`,
+);
 await build({
   entryPoints: [path.join(serviceRoot, "ooxml-worker-source.mjs")],
   outfile: path.join(runtimeRoot, "ooxml-worker.js"),

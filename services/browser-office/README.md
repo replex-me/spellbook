@@ -67,6 +67,17 @@ accumulating two feature-specific code paths. It does not claim full browser
 parity: commands whose contract requires a Spellbook engine patch remain
 unavailable on the stock ZetaOffice binary.
 
+The browser-native transform adapter is a fail-closed registry rather than a
+second operation program. Its candidate implementation covers slide names,
+visibility and transitions plus bounded object metadata, text-box geometry,
+shadows, locks, crop and click interactions. It preflights the complete command
+list, follows slide navigation without mutating during validation, groups the
+write into one native Undo context and rolls the context back on failure. These
+operations are advertised to the shared program only when the pinned runtime's
+build commit equals the candidate source commit, the exact `browser-undo-v4`
+patch level is present and `buildReady` has been promoted. The current stock
+binary therefore advertises none of these candidate-only operations.
+
 Browser candidates and their replayable command journal are checkpointed in
 OPFS with two alternating slots. Each slot writes the base package and
 candidate before a checksummed metadata commit record; recovery ignores a
