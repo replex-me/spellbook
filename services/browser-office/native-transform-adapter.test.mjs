@@ -200,6 +200,18 @@ function fixture() {
     FontSlant,
     FontSlant_NONE: "none",
     FontSlant_ITALIC: "italic",
+    FontStrikeout_NONE: 0,
+    FontStrikeout_SINGLE: 1,
+    FontUnderline_NONE: 0,
+    FontUnderline_SINGLE: 1,
+  };
+  const ParagraphAdjust = function ParagraphAdjust() {};
+  const style = {
+    ParagraphAdjust,
+    ParagraphAdjust_LEFT: "left",
+    ParagraphAdjust_RIGHT: "right",
+    ParagraphAdjust_BLOCK: "justify",
+    ParagraphAdjust_CENTER: "center",
   };
   const uno = {
     Any,
@@ -212,11 +224,17 @@ function fixture() {
       float: "float",
       double: "double",
       enum: (value) =>
-        value === FontSlant ? "enum:FontSlant" : "enum:ClickAction",
+        value === FontSlant
+          ? "enum:FontSlant"
+          : value === ParagraphAdjust
+            ? "enum:ParagraphAdjust"
+            : "enum:ClickAction",
       struct: () => "struct:GraphicCrop",
     },
     idl: {
-      com: { sun: { star: { awt, presentation, text: { GraphicCrop } } } },
+      com: {
+        sun: { star: { awt, presentation, style, text: { GraphicCrop } } },
+      },
     },
   };
   const factory = loadFactory();
@@ -224,7 +242,7 @@ function fixture() {
     buildReady: true,
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v6",
+    patchLevel: "browser-undo-v7",
   };
   return {
     adapter: factory({ uno, runtimeIdentity }),
@@ -248,6 +266,7 @@ test("browser adapter advertises only its exact operation families", () => {
   assert.deepEqual(Array.from(adapter.supportedOperations), [
     "crop_image",
     "bold",
+    "font_color",
     "font_family",
     "font_size",
     "fill_opacity",
@@ -255,6 +274,7 @@ test("browser adapter advertises only its exact operation families", () => {
     "line_color",
     "line_opacity",
     "line_width",
+    "paragraph_alignment",
     "rotate",
     "rename_slide",
     "replace_text_range",
@@ -269,6 +289,8 @@ test("browser adapter advertises only its exact operation families", () => {
     "set_speaker_notes",
     "set_script_position",
     "set_text_box",
+    "strikethrough",
+    "underline",
   ]);
 });
 
@@ -280,7 +302,7 @@ test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime",
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v6",
+      patchLevel: "browser-undo-v7",
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
@@ -314,7 +336,7 @@ test("browser adapter routes stock slide lifecycle through Impress commands", ()
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v6",
+      patchLevel: "browser-undo-v7",
     },
   });
   assert.equal(stockAdapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
@@ -346,7 +368,7 @@ test("browser adapter deletes a slide only after native structure admission", ()
       buildReady: true,
       buildCommit: "candidate",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v6",
+      patchLevel: "browser-undo-v7",
       nativeSlideStructureReady: true,
     },
   });
@@ -491,12 +513,16 @@ test("browser adapter writes text, formatting and notes in one native Undo group
       {
         "SetTextProperties.0": {
           Bold: true,
+          FontColor: 0x123456,
           Italic: true,
           FontFamily: "Aptos",
           FontHeightPoints: 20,
           Kerning: 35,
           Escapement: 33,
           EscapementHeight: 58,
+          ParagraphAlignment: "center",
+          Strikethrough: true,
+          Underline: true,
         },
       },
       { SetNotes: "Updated speaker notes" },
@@ -514,6 +540,10 @@ test("browser adapter writes text, formatting and notes in one native Undo group
   assert.equal(runtime.secondShape.textProperties.CharKerning, 20);
   assert.equal(runtime.secondShape.textProperties.CharEscapement, 33);
   assert.equal(runtime.secondShape.textProperties.CharEscapementHeight, 58);
+  assert.equal(runtime.secondShape.textProperties.CharColor, 0x123456);
+  assert.equal(runtime.secondShape.textProperties.CharStrikeout, 1);
+  assert.equal(runtime.secondShape.textProperties.CharUnderline, 1);
+  assert.equal(runtime.secondShape.textProperties.ParaAdjust, "center");
   assert.deepEqual(runtime.writes, [
     ["enter", "AI presentation edit"],
     ["page", "Slide 2"],

@@ -68,7 +68,7 @@ try {
     return (
       runtime?.buildReady === true &&
       runtime.buildCommit === runtime.candidateCommit &&
-      runtime.patchLevel === "browser-undo-v6"
+      runtime.patchLevel === "browser-undo-v7"
     );
   });
   const target = before.slides
@@ -233,63 +233,82 @@ try {
     );
   }
   if (patchedBrowserRuntime) {
-    const fontColor = 0x0f766e;
-    const textRecolored = await nativeTask(page, "font-color-1", {
-      operation: "edit",
-      expectedRevision: before.revision,
-      expectedSlides: JSON.stringify(before.slides),
-      command: {
+    const formatting = target.wholeTextFormatting;
+    assert.ok(formatting, "The product bridge fixture needs uniform text.");
+    const fontFamily =
+      formatting.fontFamily === "Carlito" ? "Aptos" : "Carlito";
+    const textFormattingEdits = [
+      {
+        op: "font_size",
+        command: { size: Number(formatting.fontSize) + 1 },
+        matches: (element) =>
+          Number(element.wholeTextFormatting?.fontSize) ===
+          Number(formatting.fontSize) + 1,
+      },
+      {
+        op: "bold",
+        command: { bold: Number(formatting.fontWeight) < 150 },
+        matches: (element) =>
+          Number(element.wholeTextFormatting?.fontWeight) ===
+          (Number(formatting.fontWeight) < 150 ? 150 : 100),
+      },
+      {
+        op: "italic",
+        command: {
+          italic: String(formatting.fontStyle).toUpperCase().includes("NONE"),
+        },
+        matches: (element) =>
+          String(element.wholeTextFormatting?.fontStyle)
+            .toUpperCase()
+            .includes("NONE") !==
+          String(formatting.fontStyle).toUpperCase().includes("NONE"),
+      },
+      {
+        op: "underline",
+        command: { underline: Number(target.underline ?? 0) === 0 },
+        matches: (element) =>
+          (Number(element.underline ?? 0) !== 0) ===
+          (Number(target.underline ?? 0) === 0),
+      },
+      {
+        op: "strikethrough",
+        command: { strikethrough: Number(target.strikethrough ?? 0) === 0 },
+        matches: (element) =>
+          (Number(element.strikethrough ?? 0) !== 0) ===
+          (Number(target.strikethrough ?? 0) === 0),
+      },
+      {
+        op: "font_family",
+        command: { family: fontFamily },
+        matches: (element) =>
+          element.wholeTextFormatting?.fontFamily === fontFamily,
+      },
+      {
         op: "font_color",
-        elementId: target.elementId,
-        color: fontColor,
+        command: { color: target.color === 0x0f766e ? 0xd97706 : 0x0f766e },
+        matches: (element) =>
+          element.color === (target.color === 0x0f766e ? 0xd97706 : 0x0f766e),
       },
-      permission: {
-        mode: "selection",
-        elementIds: [target.elementId],
-        slideIndexes: [],
-      },
-      suppressCapture: true,
-    });
-    const textRecoloredTarget = textRecolored.slides
-      .flatMap((slide) => slide.elements)
-      .find((element) => element.elementId === target.elementId);
-    assert.equal(textRecoloredTarget?.color, fontColor);
-    await sendHostCommand(page, "Send_UNO_Command", {
-      Command: ".uno:Undo",
-    });
-    const centered = await nativeTask(page, "paragraph-alignment-1", {
-      operation: "edit",
-      expectedRevision: before.revision,
-      expectedSlides: JSON.stringify(before.slides),
-      command: {
+      {
         op: "paragraph_alignment",
-        elementId: target.elementId,
-        alignment: "center",
+        command: {
+          alignment:
+            Number(target.paragraphAlignment) === 3 ? "left" : "center",
+        },
+        matches: (element) =>
+          Number(element.paragraphAlignment) ===
+          (Number(target.paragraphAlignment) === 3 ? 0 : 3),
       },
-      permission: {
-        mode: "selection",
-        elementIds: [target.elementId],
-        slideIndexes: [],
-      },
-      suppressCapture: true,
-    });
-    const centeredTarget = centered.slides
-      .flatMap((slide) => slide.elements)
-      .find((element) => element.elementId === target.elementId);
-    assert.equal(Number(centeredTarget?.paragraphAlignment), 3);
-    await sendHostCommand(page, "Send_UNO_Command", {
-      Command: ".uno:Undo",
-    });
-  } else {
-    await assert.rejects(
-      nativeTask(page, "font-color-gated", {
+    ];
+    for (const edit of textFormattingEdits) {
+      const changed = await nativeTask(page, `text-format-${edit.op}`, {
         operation: "edit",
         expectedRevision: before.revision,
         expectedSlides: JSON.stringify(before.slides),
         command: {
-          op: "font_color",
+          op: edit.op,
           elementId: target.elementId,
-          color: 0x0f766e,
+          ...edit.command,
         },
         permission: {
           mode: "selection",
@@ -297,15 +316,69 @@ try {
           slideIndexes: [],
         },
         suppressCapture: true,
-      }),
-      /browser_native_runtime_patch_required/u,
-    );
-    for (const command of [
-      { op: "rotate", degrees: 15 },
-      { op: "line_color", color: 0x0f766e },
-      { op: "line_width", size: 2 },
-      { op: "fill_opacity", opacity: 63 },
-      { op: "line_opacity", opacity: 57 },
+      });
+      const changedTarget = changed.slides
+        .flatMap((slide) => slide.elements)
+        .find((element) => element.elementId === target.elementId);
+      assert.equal(
+        edit.matches(changedTarget),
+        true,
+        `${edit.op} did not reach its requested value.`,
+      );
+      const undo = await sendHostCommand(page, "Send_UNO_Command", {
+        Command: ".uno:Undo",
+      });
+      assert.equal(
+        undo.revision,
+        before.revision,
+        `${edit.op} did not restore the original revision.`,
+      );
+    }
+  } else {
+    for (const { command, elementId } of [
+      { command: { op: "font_size", size: 24 }, elementId: target.elementId },
+      { command: { op: "bold", bold: true }, elementId: target.elementId },
+      { command: { op: "italic", italic: true }, elementId: target.elementId },
+      {
+        command: { op: "underline", underline: true },
+        elementId: target.elementId,
+      },
+      {
+        command: { op: "strikethrough", strikethrough: true },
+        elementId: target.elementId,
+      },
+      {
+        command: { op: "font_family", family: "Carlito" },
+        elementId: target.elementId,
+      },
+      {
+        command: { op: "font_color", color: 0x0f766e },
+        elementId: target.elementId,
+      },
+      {
+        command: { op: "paragraph_alignment", alignment: "center" },
+        elementId: target.elementId,
+      },
+      {
+        command: { op: "rotate", degrees: 15 },
+        elementId: geometryTarget.elementId,
+      },
+      {
+        command: { op: "line_color", color: 0x0f766e },
+        elementId: geometryTarget.elementId,
+      },
+      {
+        command: { op: "line_width", size: 2 },
+        elementId: geometryTarget.elementId,
+      },
+      {
+        command: { op: "fill_opacity", opacity: 63 },
+        elementId: geometryTarget.elementId,
+      },
+      {
+        command: { op: "line_opacity", opacity: 57 },
+        elementId: geometryTarget.elementId,
+      },
     ])
       await assert.rejects(
         nativeTask(page, `${command.op}-gated`, {
@@ -314,11 +387,11 @@ try {
           expectedSlides: JSON.stringify(before.slides),
           command: {
             ...command,
-            elementId: geometryTarget.elementId,
+            elementId,
           },
           permission: {
             mode: "selection",
-            elementIds: [geometryTarget.elementId],
+            elementIds: [elementId],
             slideIndexes: [],
           },
           suppressCapture: true,
@@ -570,7 +643,7 @@ async function verifyProductSlideStructure(browser, origin) {
       return (
         runtime?.buildReady === true &&
         runtime.buildCommit === runtime.candidateCommit &&
-        runtime.patchLevel === "browser-undo-v6" &&
+        runtime.patchLevel === "browser-undo-v7" &&
         runtime.nativeSlideStructureReady === true
       );
     });

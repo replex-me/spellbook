@@ -6,6 +6,7 @@
   const candidateOperations = Object.freeze([
     "crop_image",
     "bold",
+    "font_color",
     "font_family",
     "font_size",
     "fill_opacity",
@@ -13,6 +14,7 @@
     "line_color",
     "line_opacity",
     "line_width",
+    "paragraph_alignment",
     "rotate",
     "rename_slide",
     "replace_text_range",
@@ -27,6 +29,8 @@
     "set_speaker_notes",
     "set_script_position",
     "set_text_box",
+    "strikethrough",
+    "underline",
   ]);
 
   const objectPropertyTypes = Object.freeze({
@@ -62,7 +66,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v6";
+      runtimeIdentity.patchLevel === "browser-undo-v7";
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(
@@ -397,9 +401,13 @@
               "Kerning",
               "Escapement",
               "EscapementHeight",
+              "FontColor",
               "FontFamily",
               "FontHeightPoints",
               "Italic",
+              "ParagraphAlignment",
+              "Strikethrough",
+              "Underline",
             ],
             "Browser text properties",
           );
@@ -477,6 +485,56 @@
                   new uno.Any(postureType, posture),
                 ),
               );
+          }
+          if (Object.hasOwn(properties, "FontColor")) {
+            if (
+              !Number.isSafeInteger(properties.FontColor) ||
+              properties.FontColor < 0 ||
+              properties.FontColor > 0xffffff
+            )
+              throw new Error("Browser font color is invalid.");
+            addWrite("CharColor", "long", properties.FontColor);
+          }
+          if (Object.hasOwn(properties, "Underline")) {
+            if (typeof properties.Underline !== "boolean")
+              throw new Error("Browser underline is invalid.");
+            addWrite(
+              "CharUnderline",
+              "short",
+              properties.Underline
+                ? css.awt.FontUnderline_SINGLE
+                : css.awt.FontUnderline_NONE,
+            );
+          }
+          if (Object.hasOwn(properties, "Strikethrough")) {
+            if (typeof properties.Strikethrough !== "boolean")
+              throw new Error("Browser strikethrough is invalid.");
+            addWrite(
+              "CharStrikeout",
+              "short",
+              properties.Strikethrough
+                ? css.awt.FontStrikeout_SINGLE
+                : css.awt.FontStrikeout_NONE,
+            );
+          }
+          if (Object.hasOwn(properties, "ParagraphAlignment")) {
+            const paragraphAdjust = {
+              left: css.style.ParagraphAdjust_LEFT,
+              center: css.style.ParagraphAdjust_CENTER,
+              right: css.style.ParagraphAdjust_RIGHT,
+              justify: css.style.ParagraphAdjust_BLOCK,
+            }[properties.ParagraphAlignment];
+            if (paragraphAdjust === undefined)
+              throw new Error("Browser paragraph alignment is invalid.");
+            writes.push(() =>
+              cursor.setPropertyValue(
+                "ParaAdjust",
+                new uno.Any(
+                  uno.type.enum(css.style.ParagraphAdjust),
+                  paragraphAdjust,
+                ),
+              ),
+            );
           }
           if (Object.hasOwn(properties, "Kerning")) {
             if (

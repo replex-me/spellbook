@@ -56,6 +56,7 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "speaker-notes-native-undo",
     "browser-text-pptx-roundtrip",
     "shape-appearance-property-native-undo",
+    "text-appearance-property-native-undo",
   ]);
   assert.match(manifest.toolchain.emscripten.commit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.toolchain.qt.commit, /^[0-9a-f]{40}$/u);

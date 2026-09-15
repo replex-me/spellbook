@@ -9,18 +9,19 @@
     "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v6",
+    "patchLevel": "browser-undo-v7",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "49e054c18a4b7a64a2b4a6031361770da4c75a241bb769f93fb6139aee67be22",
+    "patchSeriesSha256": "040479071040e5a2e8bfcb320b1b6d2f14ba80b57c5287721dfabf2b9f42aa85",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
       "libreoffice/patches/0003-roundtrip-interaction-invariants.patch",
       "libreoffice/patches/0004-browser-uno-property-undo.patch",
       "libreoffice/patches/0005-browser-uno-text-undo.patch",
-      "libreoffice/patches/0006-browser-shape-appearance-undo.patch"
+      "libreoffice/patches/0006-browser-shape-appearance-undo.patch",
+      "libreoffice/patches/0007-browser-text-appearance-undo.patch"
     ],
     "invariants": [
       "table-cell-native-undo",
@@ -50,7 +51,8 @@
       "shape-text-property-native-undo",
       "speaker-notes-native-undo",
       "browser-text-pptx-roundtrip",
-      "shape-appearance-property-native-undo"
+      "shape-appearance-property-native-undo",
+      "text-appearance-property-native-undo"
     ],
     "requiredCppunitTargets": [
       "CppunitTest_sd_uiimpress",

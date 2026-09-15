@@ -12,7 +12,7 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
-The cumulative `browser-undo-v6` source series ports generic document behavior:
+The cumulative `browser-undo-v7` source series ports generic document behavior:
 table structure, formatting and Undo; page and object identity; master-safe
 layout support; sparse-master insertion; object-creation Undo; text-layout
 invalidation; slide names and text shadows; object locks; object interactions;
@@ -20,7 +20,9 @@ editable placeholder inheritance; and native Undo for public UNO page and
 object property writes. It also routes rotation, line color, line width and
 fill/line transparency through bounded UNO property writes because the
 equivalent stock WASM edit/Undo sequence can stop without a completion
-response. The page/object
+response. Text size, family, weight, posture, underline, strikeout, color and
+paragraph alignment likewise share one bounded text-property transaction
+instead of mixing property writes with UI dispatch commands. The page/object
 tests cover one-step Undo/Redo and PPTX save/reopen for slide names, visibility,
 transition state, text margins, shadows and object locks. Browser-source CppUnit regressions are part of the
 series but have not run yet. The remaining build-admission work is the

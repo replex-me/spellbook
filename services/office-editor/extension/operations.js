@@ -4570,6 +4570,10 @@ function spellbookDocumentOperation(request) {
       "bold",
       "italic",
       "font_family",
+      "underline",
+      "strikethrough",
+      "font_color",
+      "paragraph_alignment",
     ]);
     const usesTypedTextFormatting = typedTextFormattingOperations.has(
       command.op,
@@ -4691,7 +4695,15 @@ function spellbookDocumentOperation(request) {
             ? { FontFamily: command.family.trim() }
             : command.op === "bold"
               ? { Bold: command.bold }
-              : { Italic: command.italic };
+              : command.op === "italic"
+                ? { Italic: command.italic }
+                : command.op === "underline"
+                  ? { Underline: command.underline }
+                  : command.op === "strikethrough"
+                    ? { Strikethrough: command.strikethrough }
+                    : command.op === "font_color"
+                      ? { FontColor: Math.round(command.color) }
+                      : { ParagraphAlignment: command.alignment };
       transformSlides([
         { JumpToSlide: slideIndex },
         { [`SetTextProperties.${objectPath}`]: properties },
