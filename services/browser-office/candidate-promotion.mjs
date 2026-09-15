@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { admitCandidateRuntime } from "./candidate-runtime.mjs";
+import { readRepositoryIdentity } from "./repository-identity.mjs";
 import {
   candidateBrowserReportErrors,
   candidateNativeConformanceErrors,
@@ -11,6 +12,7 @@ import {
 
 export function createCandidatePromotion({
   admittedRuntime,
+  integrationSource,
   browserReport,
   browserReportSha256,
   nativeConformanceReport,
@@ -24,6 +26,12 @@ export function createCandidatePromotion({
     ...candidateNativeConformanceErrors(nativeConformanceReport),
   ];
   if (
+    !/^[0-9a-f]{40}$/u.test(integrationSource?.revision ?? "") ||
+    integrationSource?.dirty !== false ||
+    integrationSource.revision !== browserReport.integrationSource?.revision
+  )
+    errors.push("promotion is not running from the verified clean source");
+  if (
     admittedRuntime.receiptSha256 !==
     browserReport.candidateRuntime?.receiptSha256
   )
@@ -35,6 +43,11 @@ export function createCandidatePromotion({
     errors.push(
       "native conformance report does not identify the admitted build receipt",
     );
+  if (
+    browserReport.integrationSource?.revision !==
+    nativeConformanceReport?.integrationSource?.revision
+  )
+    errors.push("browser evidence does not identify one integration source");
   if (powerpointReport?.valid !== true || powerpointReport.errors?.length !== 0)
     errors.push("native PowerPoint evidence is not valid");
   if (powerpointReport?.browserReceiptSha256 !== admittedRuntime.receiptSha256)
@@ -49,6 +62,13 @@ export function createCandidatePromotion({
     errors.push(
       "PowerPoint evidence does not identify the native conformance report",
     );
+  if (
+    powerpointReport?.integrationSourceRevision !==
+    browserReport.integrationSource?.revision
+  )
+    errors.push(
+      "PowerPoint evidence does not identify the integration source revision",
+    );
   if (!/^[0-9a-f]{64}$/u.test(browserReportSha256 ?? ""))
     errors.push("browser evidence digest is invalid");
   if (!/^[0-9a-f]{64}$/u.test(nativeConformanceReportSha256 ?? ""))
@@ -61,9 +81,10 @@ export function createCandidatePromotion({
     schemaVersion: 1,
     status: "verified_not_published",
     verifiedAt,
-    spellbookSourceRevision: admittedRuntime.receipt.spellbookSourceRevision,
+    spellbookSourceRevision: browserReport.integrationSource.revision,
     runtime: {
       receiptSha256: admittedRuntime.receiptSha256,
+      buildSourceRevision: admittedRuntime.receipt.spellbookSourceRevision,
       libreOffice: admittedRuntime.receipt.libreOffice,
       toolchain: admittedRuntime.receipt.toolchain,
       artifacts: admittedRuntime.receipt.artifacts,
@@ -85,6 +106,10 @@ export function createCandidatePromotion({
 }
 
 async function main() {
+  const repositoryRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../..",
+  );
   const runtimeDirectory = path.resolve(
     requiredFlagValue("--candidate-runtime", process.argv),
   );
@@ -107,6 +132,7 @@ async function main() {
     ]);
   const promotion = createCandidatePromotion({
     admittedRuntime,
+    integrationSource: readRepositoryIdentity(repositoryRoot),
     browserReport: JSON.parse(browserBytes.toString("utf8")),
     browserReportSha256: sha256(browserBytes),
     nativeConformanceReport: JSON.parse(

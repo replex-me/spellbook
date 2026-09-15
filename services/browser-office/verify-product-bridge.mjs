@@ -8,11 +8,13 @@ import { chromium } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 
 import { admitCandidateRuntime } from "./candidate-runtime.mjs";
+import { readRepositoryIdentity } from "./repository-identity.mjs";
 import { createHarnessServer } from "./server.mjs";
 import { applyOoxmlCommand } from "./ooxml-worker-source.mjs";
 
 const serviceRoot = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(serviceRoot, "../..");
+const repositoryIdentity = readRepositoryIdentity(repositoryRoot);
 const rendererCallTimeoutMs = 10_000;
 const fixture = new Uint8Array(
   await readFile(
@@ -581,6 +583,7 @@ try {
           artifacts: candidateRuntime.receipt.artifacts,
         }
       : null,
+    integrationSource: repositoryIdentity,
     verifiedElementOperations: [
       "replace_text",
       "move",

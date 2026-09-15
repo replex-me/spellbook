@@ -55,6 +55,13 @@ export function candidateBrowserReportErrors(report) {
   if (!/^[0-9a-f]{64}$/u.test(report?.candidateRuntime?.receiptSha256 ?? ""))
     errors.push("candidate build receipt is not bound to the report");
   if (
+    !/^[0-9a-f]{40}$/u.test(report?.integrationSource?.revision ?? "") ||
+    report?.integrationSource?.dirty !== false
+  )
+    errors.push(
+      "browser bridge evidence is not bound to a clean source commit",
+    );
+  if (
     !sameStringSet(report?.verifiedElementOperations, requiredBridgeOperations)
   )
     errors.push(
@@ -87,6 +94,13 @@ export function candidateNativeConformanceErrors(report) {
     errors.push("browser native conformance status is not verified");
   if (!/^[0-9a-f]{64}$/u.test(report?.candidateReceiptSha256 ?? ""))
     errors.push("browser native conformance has no candidate receipt");
+  if (
+    !/^[0-9a-f]{40}$/u.test(report?.integrationSource?.revision ?? "") ||
+    report?.integrationSource?.dirty !== false
+  )
+    errors.push(
+      "browser native conformance is not bound to a clean source commit",
+    );
   if (!sameStringSet(report?.expectedOperations, requiredNativeOperations))
     errors.push("browser native conformance expected-operation set differs");
   if (!sameStringSet(report?.executedOperations, requiredNativeOperations))
@@ -140,6 +154,13 @@ async function main() {
     browserReport.candidateRuntime?.receiptSha256
   )
     errors.push("browser bridge and native conformance use different runtimes");
+  if (
+    nativeConformance.integrationSource?.revision !==
+    browserReport.integrationSource?.revision
+  )
+    errors.push(
+      "browser bridge and native conformance use different integration sources",
+    );
   const candidateDeck = path.join(evidenceRoot, "saved-product-bridge.pptx");
   const candidateBytes = await fs.readFile(candidateDeck);
   if (sha256(candidateBytes) !== browserReport.savedSha256)
@@ -228,6 +249,7 @@ async function main() {
     errors,
     browserEvidenceRoot: evidenceRoot,
     browserReceiptSha256: browserReport.candidateRuntime.receiptSha256,
+    integrationSourceRevision: browserReport.integrationSource.revision,
     nativeConformanceSha256: sha256(await fs.readFile(nativeConformancePath)),
     verifiedNativeOperations: nativeConformance.executedOperations,
     savedSha256: browserReport.savedSha256,

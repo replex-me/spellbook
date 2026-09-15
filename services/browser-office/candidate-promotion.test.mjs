@@ -48,6 +48,7 @@ const browserReport = {
   status: "browser-product-bridge-verified",
   patchedBrowserRuntime: true,
   candidateRuntime: { receiptSha256 },
+  integrationSource: { revision: "e".repeat(40), dirty: false },
   verifiedElementOperations: operations,
   endurance: {
     status: "browser-product-endurance-verified",
@@ -63,6 +64,7 @@ const browserReport = {
 const nativeConformanceReport = {
   status: "browser-native-conformance-verified",
   candidateReceiptSha256: receiptSha256,
+  integrationSource: { revision: "e".repeat(40), dirty: false },
   expectedOperations: nativeOperations,
   executedOperations: nativeOperations,
   missingOperations: [],
@@ -79,6 +81,7 @@ const powerpointReport = {
   errors: [],
   browserReceiptSha256: receiptSha256,
   nativeConformanceSha256: "1".repeat(64),
+  integrationSourceRevision: "e".repeat(40),
   savedSha256,
   renderer: { name: "Microsoft PowerPoint", version: "16.109.1" },
   slideCounts: { source: 1, candidate: 1 },
@@ -88,6 +91,7 @@ const powerpointReport = {
 test("promotion receipt binds runtime, browser endurance and PowerPoint", () => {
   const promotion = createCandidatePromotion({
     admittedRuntime,
+    integrationSource: browserReport.integrationSource,
     browserReport,
     browserReportSha256: "e".repeat(64),
     nativeConformanceReport,
@@ -98,11 +102,14 @@ test("promotion receipt binds runtime, browser endurance and PowerPoint", () => 
   });
   assert.equal(promotion.status, "verified_not_published");
   assert.equal(promotion.runtime.receiptSha256, receiptSha256);
+  assert.equal(promotion.spellbookSourceRevision, "e".repeat(40));
+  assert.equal(promotion.runtime.buildSourceRevision, "c".repeat(40));
   assert.equal(promotion.evidence.enduranceCycles, 100);
   assert.throws(
     () =>
       createCandidatePromotion({
         admittedRuntime,
+        integrationSource: browserReport.integrationSource,
         browserReport,
         browserReportSha256: "e".repeat(64),
         nativeConformanceReport,

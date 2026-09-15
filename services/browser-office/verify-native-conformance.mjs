@@ -12,10 +12,12 @@ import {
   operationsFromReport,
 } from "../../scripts/native-mutation-conformance-runner.mjs";
 import { admitCandidateRuntime } from "./candidate-runtime.mjs";
+import { readRepositoryIdentity } from "./repository-identity.mjs";
 import { createHarnessServer } from "./server.mjs";
 
 const serviceRoot = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(serviceRoot, "../..");
+const repositoryIdentity = readRepositoryIdentity(repositoryRoot);
 const capabilitiesPath = path.join(
   repositoryRoot,
   "contracts/native-edit-capabilities.json",
@@ -69,6 +71,7 @@ const report = {
   startedAt: new Date().toISOString(),
   candidateReceiptSha256: candidateRuntime.receiptSha256,
   spellbookSourceRevision: candidateRuntime.receipt.spellbookSourceRevision,
+  integrationSource: repositoryIdentity,
   runtime: {
     libreOffice: candidateRuntime.receipt.libreOffice,
     toolchain: candidateRuntime.receipt.toolchain,

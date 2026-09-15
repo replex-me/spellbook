@@ -42,6 +42,7 @@ test("PowerPoint admission requires the complete receipt-bound endurance report"
     status: "browser-product-bridge-verified",
     patchedBrowserRuntime: true,
     candidateRuntime: { receiptSha256: "a".repeat(64) },
+    integrationSource: { revision: "c".repeat(40), dirty: false },
     verifiedElementOperations: operations,
     endurance: {
       status: "browser-product-endurance-verified",
@@ -82,6 +83,7 @@ test("PowerPoint admission also requires every typed native operation", () => {
   const report = {
     status: "browser-native-conformance-verified",
     candidateReceiptSha256: "a".repeat(64),
+    integrationSource: { revision: "c".repeat(40), dirty: false },
     expectedOperations: nativeOperations,
     executedOperations: nativeOperations,
     missingOperations: [],
