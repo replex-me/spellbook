@@ -4,33 +4,69 @@
 
 (function installBrowserNativeTransformAdapter(global) {
   const candidateOperations = Object.freeze([
-    "crop_image",
-    "bold",
-    "font_color",
-    "font_family",
-    "font_size",
-    "fill_opacity",
-    "italic",
-    "line_color",
-    "line_opacity",
-    "line_width",
-    "paragraph_alignment",
-    "rotate",
+    "insert_slide",
+    "duplicate_slide",
+    "delete_slide",
+    "move_slide",
+    "set_speaker_notes",
+    "set_slide_layout",
+    "set_background",
     "rename_slide",
-    "replace_text_range",
-    "set_alt_text",
-    "set_object_interaction",
-    "set_object_lock",
-    "set_character_spacing",
-    "set_shape_name",
-    "set_shape_shadow",
     "set_slide_hidden",
     "set_slide_transition",
-    "set_speaker_notes",
-    "set_script_position",
-    "set_text_box",
-    "strikethrough",
+    "add_text_box",
+    "add_shape",
+    "add_table",
+    "align",
+    "distribute",
+    "group",
+    "replace_text",
+    "move",
+    "resize",
+    "font_size",
+    "bold",
+    "italic",
     "underline",
+    "strikethrough",
+    "text_shadow",
+    "font_family",
+    "font_color",
+    "fill_color",
+    "line_color",
+    "line_width",
+    "fill_opacity",
+    "line_opacity",
+    "text_autofit",
+    "rotate",
+    "z_order",
+    "paragraph_alignment",
+    "flip",
+    "ungroup",
+    "duplicate_element",
+    "delete_element",
+    "set_chart_data",
+    "set_chart_type",
+    "set_table_cell",
+    "set_alt_text",
+    "set_shape_name",
+    "set_text_box",
+    "set_character_spacing",
+    "set_script_position",
+    "set_shape_shadow",
+    "set_object_lock",
+    "set_object_interaction",
+    "replace_text_range",
+    "insert_table_rows",
+    "delete_table_rows",
+    "insert_table_columns",
+    "delete_table_columns",
+    "merge_table_cells",
+    "split_table_cell",
+    "set_table_row_height",
+    "set_table_column_width",
+    "set_table_cell_format",
+    "set_animation_timing",
+    "crop_image",
   ]);
 
   const objectPropertyTypes = Object.freeze({
@@ -169,6 +205,41 @@
         },
       },
       {
+        match: (key) => key === "InsertMasterSlide",
+        prepare: ({ value, controller, dispatch, model, pages, state }) => {
+          const masterPages = model.getMasterPages();
+          const masterIndex = assertIndex(
+            value,
+            masterPages.getCount(),
+            "Browser insert slide master",
+          );
+          const sourcePage = state.currentPage;
+          let sourceIndex = -1;
+          for (let index = 0; index < pages.getCount(); index += 1) {
+            if (uno.sameUnoObject(sourcePage, pages.getByIndex(index))) {
+              sourceIndex = index;
+              break;
+            }
+          }
+          if (sourceIndex < 0)
+            throw new Error("Browser insert slide source is unavailable.");
+          const masterPage = masterPages.getByIndex(masterIndex);
+          return {
+            mutates: true,
+            apply: () => {
+              controller.setCurrentPage(sourcePage);
+              dispatch(".uno:InsertPage");
+              if (pages.getCount() <= sourceIndex + 1)
+                throw new Error("Browser slide insertion did not create a page.");
+              const insertedPage = pages.getByIndex(sourceIndex + 1);
+              if (typeof insertedPage.setMasterPage === "function")
+                insertedPage.setMasterPage(masterPage);
+              controller.setCurrentPage(insertedPage);
+            },
+          };
+        },
+      },
+      {
         match: (key) => key === "DeleteSlide",
         prepare: ({ value, controller, pages }) => {
           const slideIndex = assertIndex(
@@ -245,6 +316,36 @@
         },
       },
       {
+        match: (key) => key === "ChangeLayout",
+        prepare: ({ value, model, state }) => {
+          const layout = assertRecord(value, "Browser slide layout");
+          assertExactKeys(
+            layout,
+            ["MasterIndex", "Layout"],
+            "Browser slide layout",
+          );
+          const masterPages = model.getMasterPages();
+          const masterIndex = assertIndex(
+            layout.MasterIndex,
+            masterPages.getCount(),
+            "Browser slide layout master",
+          );
+          if (!Number.isSafeInteger(layout.Layout))
+            throw new Error("Browser slide layout is invalid.");
+          const page = state.currentPage;
+          const master = masterPages.getByIndex(masterIndex);
+          return {
+            mutates: true,
+            apply: () => {
+              if (typeof page.setMasterPage !== "function")
+                throw new Error("Browser slide master API is unavailable.");
+              page.setMasterPage(master);
+              page.setPropertyValue("Layout", any("short", layout.Layout));
+            },
+          };
+        },
+      },
+      {
         match: (key) => key === "SetSlideTransition",
         prepare: ({ value, state }) => {
           const transition = assertRecord(value, "Browser slide transition");
@@ -293,6 +394,115 @@
           return {
             mutates: true,
             apply: () => writes.forEach((write) => write()),
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("SetAnimationTiming."),
+        prepare: ({ key, value, state }) => {
+          const timing = assertRecord(value, "Browser animation timing");
+          assertExactKeys(
+            timing,
+            [
+              "EffectIndex",
+              "ExpectedPresetId",
+              "Duration",
+              "Delay",
+              "Start",
+            ],
+            "Browser animation timing",
+          );
+          const targetPath = parsePath(
+            key.slice("SetAnimationTiming.".length),
+            "Browser animation target",
+          );
+          const target = resolveShape(
+            state.currentPage,
+            targetPath,
+            "Browser animation target",
+          );
+          if (
+            !Number.isSafeInteger(timing.EffectIndex) ||
+            timing.EffectIndex < 0 ||
+            timing.EffectIndex > 99 ||
+            typeof timing.ExpectedPresetId !== "string" ||
+            !timing.ExpectedPresetId ||
+            timing.ExpectedPresetId.length > 128 ||
+            typeof timing.Duration !== "number" ||
+            !Number.isFinite(timing.Duration) ||
+            timing.Duration < 0.001 ||
+            timing.Duration > 60 ||
+            typeof timing.Delay !== "number" ||
+            !Number.isFinite(timing.Delay) ||
+            timing.Delay < 0 ||
+            timing.Delay > 60 ||
+            !["on-click", "with-previous", "after-previous"].includes(
+              timing.Start,
+            )
+          )
+            throw new Error("Browser animation timing is invalid.");
+          const root = state.currentPage.getAnimationNode();
+          const childrenOf = (node) => {
+            const children = [];
+            try {
+              const enumeration = node.createEnumeration();
+              while (enumeration.hasMoreElements())
+                children.push(enumeration.nextElement());
+            } catch {}
+            return children;
+          };
+          const sameTarget = (candidate) => {
+            const paragraphShape = candidate?.Shape;
+            try {
+              return uno.sameUnoObject(paragraphShape || candidate, target);
+            } catch {
+              return false;
+            }
+          };
+          const containsTarget = (node) =>
+            sameTarget(node?.Target) ||
+            childrenOf(node).some((child) => containsTarget(child));
+          const presetId = (node) =>
+            Array.from(node?.UserData ?? []).find(
+              (entry) => entry?.Name === "preset-id",
+            )?.Value;
+          const effects = [];
+          const collect = (node) => {
+            if (
+              presetId(node) === timing.ExpectedPresetId &&
+              containsTarget(node)
+            )
+              effects.push(node);
+            for (const child of childrenOf(node)) collect(child);
+          };
+          collect(root);
+          const effect = effects[timing.EffectIndex];
+          if (!effect)
+            throw new Error("Browser animation effect no longer matches.");
+          const semanticType = {
+            "on-click": 1,
+            "with-previous": 2,
+            "after-previous": 3,
+          }[timing.Start];
+          return {
+            mutates: true,
+            apply: () => {
+              const setMember = (name, value) => {
+                const setter = effect[`set${name}`];
+                if (typeof setter === "function") setter.call(effect, value);
+                else effect[name] = value;
+              };
+              setMember("Duration", any("double", timing.Duration));
+              setMember("Begin", any("double", timing.Delay));
+              const userData = Array.from(effect.UserData ?? []);
+              const nodeType = userData.find(
+                (entry) => entry?.Name === "node-type",
+              );
+              if (!nodeType)
+                throw new Error("Browser animation start metadata is missing.");
+              nodeType.Value = semanticType;
+              setMember("UserData", userData);
+            },
           };
         },
       },
@@ -616,6 +826,31 @@
           return {
             mutates: true,
             apply: () => writes.forEach((write) => write()),
+          };
+        },
+      },
+      {
+        match: (key) => key.startsWith("DuplicateObject."),
+        prepare: ({ key, value, controller, dispatch, state }) => {
+          const payload = assertRecord(value, "Browser duplicate object");
+          if (Object.keys(payload).length)
+            throw new Error("Browser duplicate object payload must be empty.");
+          const path = parsePath(
+            key.slice("DuplicateObject.".length),
+            "Browser duplicate object target",
+          );
+          const shape = resolveShape(
+            state.currentPage,
+            path,
+            "Browser duplicate object target",
+          );
+          return {
+            mutates: true,
+            apply: () => {
+              controller.select(shape);
+              dispatch(".uno:Copy");
+              dispatch(".uno:Paste");
+            },
           };
         },
       },

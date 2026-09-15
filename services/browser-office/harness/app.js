@@ -324,6 +324,26 @@ function applyMutation(bytes, command) {
   });
 }
 
+async function serializeNativeDocument() {
+  const outputPath = `/tmp/spellbook/native-${++requestSequence}.pptx`;
+  try {
+    await request("store", { path: outputPath });
+    const bytes = FS.readFile(outputPath).slice();
+    if (
+      bytes.byteLength < 4 ||
+      bytes.byteLength > hostMaximumBytes ||
+      bytes[0] !== 0x50 ||
+      bytes[1] !== 0x4b
+    )
+      throw new Error("Browser native serialization produced an invalid PPTX.");
+    return bytes;
+  } finally {
+    try {
+      FS.unlink(outputPath);
+    } catch {}
+  }
+}
+
 async function mutate(command) {
   if (!currentBytes) throw new Error("Open a PPTX before editing slides.");
   const before = currentBytes.slice();
@@ -573,23 +593,91 @@ function productMutationMatches(prepared, nativeValue) {
 }
 
 async function prepareProductPackageMutation(nativeRequest) {
-  if (nativeRequest?.operation !== "edit" || nativeRequest.dryRun === true)
+  if (
+    !["edit", "edit_batch", "insert_image"].includes(
+      nativeRequest?.operation,
+    ) ||
+    nativeRequest.dryRun === true
+  )
     return null;
   if (!currentBytes || !journal)
     throw new Error("No browser Office document is open.");
   if (
     typeof nativeRequest.expectedRevision !== "string" ||
-    nativeRequest.expectedRevision !== reconciledModelRevision
+    !nativeRequest.expectedRevision
   )
     throw new Error("browser_package_revision_changed");
-  const command = nativeRequest.command;
-  if (!command || typeof command !== "object" || Array.isArray(command))
-    throw new Error("Browser edit command is invalid.");
+  if (nativeRequest.expectedRevision !== reconciledModelRevision) {
+    const live = await observeNativeDocument();
+    if (live.revision !== nativeRequest.expectedRevision)
+      throw new Error("browser_package_revision_changed");
+    await checkpointLiveNativeState(live, "manual_before_ai");
+  }
+  const expectedSlides = parseExpectedSlides(nativeRequest.expectedSlides);
+  if (nativeRequest.operation === "insert_image") {
+    if (
+      !(nativeRequest.imageBytes instanceof ArrayBuffer) ||
+      !nativeRequest.imageBytes.byteLength ||
+      nativeRequest.imageBytes.byteLength > 5_000_000 ||
+      !["image/png", "image/jpeg"].includes(nativeRequest.mediaType)
+    )
+      throw new Error("invalid_generated_image");
+    return {
+      persistence: "native_snapshot",
+      beforeBytes: currentBytes.slice(),
+      beforeRevision: reconciledModelRevision,
+      beforeSlides: expectedSlides,
+      nativeRequest: structuredClone(nativeRequest),
+      persistedNativeRequest: {
+        operation: "insert_image",
+        mediaType: nativeRequest.mediaType,
+        slideIndex: nativeRequest.slideIndex,
+        permission: structuredClone(nativeRequest.permission),
+      },
+      sourceOperations: ["insert_image"],
+    };
+  }
+  const nativeCommands =
+    nativeRequest.operation === "edit_batch"
+      ? nativeRequest.commands
+      : [nativeRequest.command];
   if (
-    !productElementOperations.has(command.op) &&
-    !productSlideOperations.has(command.op)
+    !Array.isArray(nativeCommands) ||
+    nativeCommands.length < 1 ||
+    nativeCommands.length > 50 ||
+    nativeCommands.some(
+      (command) =>
+        !command ||
+        typeof command !== "object" ||
+        Array.isArray(command) ||
+        typeof command.op !== "string",
+    )
   )
-    throw new Error(`browser_ooxml_reconciliation_required:${command.op}`);
+    throw new Error("Browser edit command is invalid.");
+  const command = nativeCommands[0];
+  const localized =
+    nativeCommands.length === 1 &&
+    (productElementOperations.has(command.op) ||
+      productSlideOperations.has(command.op));
+  if (!localized) {
+    if (!patchedBrowserRuntimeAdmitted())
+      throw new Error("browser_native_runtime_patch_required");
+    return {
+      persistence: "native_snapshot",
+      beforeBytes: currentBytes.slice(),
+      beforeRevision: reconciledModelRevision,
+      beforeSlides: expectedSlides,
+      nativeRequest: {
+        operation: nativeRequest.operation,
+        ...(nativeRequest.operation === "edit_batch"
+          ? { commands: structuredClone(nativeCommands) }
+          : { command: structuredClone(command) }),
+        permission: structuredClone(nativeRequest.permission),
+        suppressCapture: true,
+      },
+      sourceOperations: nativeCommands.map(({ op }) => op),
+    };
+  }
   if (productSlideOperations.has(command.op) && !nativeSlideStructureAdmitted())
     throw new Error("browser_native_slide_structure_not_ready");
   if (
@@ -602,7 +690,6 @@ async function prepareProductPackageMutation(nativeRequest) {
     typeof command.elementId !== "string"
   )
     throw new Error("Browser element command is invalid.");
-  const expectedSlides = parseExpectedSlides(nativeRequest.expectedSlides);
   const expectedElement = productElementOperations.has(command.op)
     ? expectedElementForId(expectedSlides, command.elementId)
     : null;
@@ -614,6 +701,12 @@ async function prepareProductPackageMutation(nativeRequest) {
     beforeRevision: reconciledModelRevision,
     beforeSlides: expectedSlides,
     nativeCommand: structuredClone(command),
+    nativeRequest: {
+      operation: "edit",
+      command: structuredClone(command),
+      permission: structuredClone(nativeRequest.permission),
+      suppressCapture: true,
+    },
     permission: structuredClone(nativeRequest.permission),
     command: packageCommand,
     mutation,
@@ -799,6 +892,83 @@ async function commitProductPackageMutation(prepared, nativeValue) {
     !nativeValue.revision
   )
     throw new Error("Browser native edit has no resulting revision.");
+  if (prepared.persistence === "native_snapshot") {
+    if (nativeValue.revision === prepared.beforeRevision) {
+      reconciledModelRevision = nativeValue.revision;
+      unreconciledModelRevision = "";
+      return;
+    }
+    let afterBytes;
+    try {
+      afterBytes = await serializeNativeDocument();
+      if ((await sha256(afterBytes)) === (await sha256(prepared.beforeBytes)))
+        throw new Error("Browser native edit did not change the PPTX package.");
+    } catch (error) {
+      await request("dispatch", { unoCommand: "Undo" });
+      const restored = await observeNativeDocument();
+      if (restored.revision !== prepared.beforeRevision) {
+        unreconciledModelRevision = restored.revision;
+        throw new Error("browser_native_snapshot_rollback_failed");
+      }
+      reconciledModelRevision = restored.revision;
+      unreconciledModelRevision = "";
+      throw error;
+    }
+    const journalCommand = {
+      op: "native_snapshot",
+      persistence: "native_snapshot",
+      sourceOperations: prepared.sourceOperations,
+      reconciliation: {
+        beforeRevision: prepared.beforeRevision,
+        afterRevision: nativeValue.revision,
+        nativeRequest:
+          prepared.persistedNativeRequest ?? prepared.nativeRequest,
+      },
+    };
+    currentBytes = afterBytes;
+    productUndoHistory.push({
+      beforeBytes: prepared.beforeBytes,
+      afterBytes,
+      beforeRevision: prepared.beforeRevision,
+      afterRevision: nativeValue.revision,
+      beforeSlides: prepared.beforeSlides,
+      nativeRequest: prepared.nativeRequest,
+      command: journalCommand,
+      persistence: "native_snapshot",
+      nativeUndoAvailable: true,
+      nativeRedoAvailable: false,
+    });
+    commands.push(journalCommand);
+    productRedoHistory.length = 0;
+    reconciledModelRevision = nativeValue.revision;
+    unreconciledModelRevision = "";
+    currentSlideCount = Array.isArray(nativeValue.slides)
+      ? nativeValue.slides.length
+      : currentSlideCount;
+    try {
+      await persistCheckpoint();
+    } catch (error) {
+      currentBytes = prepared.beforeBytes;
+      productUndoHistory.pop();
+      commands.pop();
+      await request("dispatch", { unoCommand: "Undo" });
+      const restored = await observeNativeDocument();
+      if (restored.revision !== prepared.beforeRevision)
+        throw new Error(
+          `browser_native_snapshot_checkpoint_and_rollback_failed:${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      reconciledModelRevision = restored.revision;
+      throw error;
+    }
+    observed.lastMutation = {
+      persistence: "native_snapshot",
+      sourceOperations: prepared.sourceOperations,
+    };
+    evidence.value = JSON.stringify(observed);
+    return;
+  }
   if (!productMutationMatches(prepared, nativeValue)) {
     await request("dispatch", { unoCommand: "Undo" });
     const restored = await observeNativeDocument();
@@ -822,6 +992,7 @@ async function commitProductPackageMutation(prepared, nativeValue) {
       beforeRevision: prepared.beforeRevision,
       afterRevision: nativeValue.revision,
       nativeCommand: prepared.nativeCommand,
+      nativeRequest: prepared.nativeRequest,
       permission: prepared.permission,
     },
   };
@@ -833,6 +1004,7 @@ async function commitProductPackageMutation(prepared, nativeValue) {
     afterRevision: nativeValue.revision,
     beforeSlides: prepared.beforeSlides,
     nativeCommand: prepared.nativeCommand,
+    nativeRequest: prepared.nativeRequest,
     permission: prepared.permission,
     command: journalCommand,
     nativeUndoAvailable: nativeUndoAvailableFor(prepared.nativeCommand.op),
@@ -887,6 +1059,7 @@ async function replayRecoveredCommands(base, recoveredCommands) {
       beforeRevision: reconciliation.beforeRevision,
       afterRevision: reconciliation.afterRevision,
       nativeCommand: reconciliation.nativeCommand ?? null,
+      nativeRequest: reconciliation.nativeRequest ?? null,
       permission: reconciliation.permission ?? null,
       command,
       nativeUndoAvailable: false,
@@ -978,10 +1151,8 @@ async function redoProductMutation() {
   const useNativeRedo = next.nativeRedoAvailable === true;
   const canReplayNative =
     !useNativeRedo &&
-    next.nativeCommand &&
-    typeof next.nativeCommand === "object" &&
-    next.permission &&
-    typeof next.permission === "object";
+    next.nativeRequest &&
+    typeof next.nativeRequest === "object";
   if (useNativeRedo) {
     await request("dispatch", { unoCommand: "Redo" });
     const restored = await observeNativeDocument();
@@ -999,21 +1170,20 @@ async function redoProductMutation() {
     const replayed = (
       await request("native", {
         nativeRequest: {
-          operation: "edit",
+          ...next.nativeRequest,
           expectedRevision: current.revision,
           expectedSlides: JSON.stringify(current.slides),
-          command: next.nativeCommand,
-          permission: next.permission,
           suppressCapture: true,
         },
       })
     ).value;
     if (
       replayed?.revision !== next.afterRevision ||
-      !productMutationMatches(
-        { command: next.command, beforeSlides: current.slides },
-        replayed,
-      )
+      (next.persistence !== "native_snapshot" &&
+        !productMutationMatches(
+          { command: next.command, beforeSlides: current.slides },
+          replayed,
+        ))
     ) {
       await request("dispatch", { unoCommand: "Undo" });
       const recovered = await observeNativeDocument();
@@ -1022,7 +1192,9 @@ async function redoProductMutation() {
       throw new Error("browser_native_replay_revision_mismatch");
     }
     currentBytes = next.afterBytes.slice();
-    next.nativeUndoAvailable = nativeUndoAvailableFor(next.nativeCommand.op);
+    next.nativeUndoAvailable =
+      next.persistence === "native_snapshot" ||
+      nativeUndoAvailableFor(next.nativeCommand?.op);
     next.nativeRedoAvailable = false;
   } else {
     await writeAndOpen(next.afterBytes, filename);
@@ -1083,6 +1255,72 @@ async function persistCheckpoint() {
   });
 }
 
+async function checkpointLiveNativeState(live, reason) {
+  if (
+    !live ||
+    typeof live.revision !== "string" ||
+    !live.revision ||
+    live.revision === reconciledModelRevision
+  )
+    return false;
+  const beforeBytes = currentBytes;
+  const beforeRevision = reconciledModelRevision;
+  const beforeCommands = commands.slice();
+  const beforeUndoHistory = productUndoHistory.slice();
+  const beforeRedoHistory = productRedoHistory.slice();
+  const afterBytes = await serializeNativeDocument();
+  const previousManualSnapshot =
+    commands.at(-1)?.persistence === "native_snapshot" &&
+    commands.at(-1)?.sourceOperations?.length === 1 &&
+    commands.at(-1)?.sourceOperations?.[0] === "manual_edit"
+      ? commands.at(-1)
+      : null;
+  const snapshotCommand = {
+    op: "native_snapshot",
+    persistence: "native_snapshot",
+    sourceOperations: ["manual_edit"],
+    reason,
+    reconciliation: {
+      beforeRevision:
+        previousManualSnapshot?.reconciliation?.beforeRevision ??
+        beforeRevision,
+      afterRevision: live.revision,
+      nativeRequest: { operation: "manual_edit" },
+    },
+  };
+  currentBytes = afterBytes;
+  if (previousManualSnapshot)
+    commands[commands.length - 1] = snapshotCommand;
+  else commands.push(snapshotCommand);
+  productUndoHistory.length = 0;
+  productRedoHistory.length = 0;
+  reconciledModelRevision = live.revision;
+  unreconciledModelRevision = "";
+  currentSlideCount = Array.isArray(live.slides)
+    ? live.slides.length
+    : currentSlideCount;
+  try {
+    await persistCheckpoint();
+  } catch (error) {
+    currentBytes = beforeBytes;
+    commands.splice(0, commands.length, ...beforeCommands);
+    productUndoHistory.splice(
+      0,
+      productUndoHistory.length,
+      ...beforeUndoHistory,
+    );
+    productRedoHistory.splice(
+      0,
+      productRedoHistory.length,
+      ...beforeRedoHistory,
+    );
+    reconciledModelRevision = beforeRevision;
+    unreconciledModelRevision = live.revision;
+    throw error;
+  }
+  return true;
+}
+
 function download(bytes) {
   const url = URL.createObjectURL(
     new Blob([bytes], {
@@ -1134,10 +1372,8 @@ async function exportProductDocumentNow({ checkpoint = true } = {}) {
   if (!currentBytes || !journal)
     throw new Error("No browser Office document is open.");
   const live = await observeNativeDocument();
-  if (live.revision !== reconciledModelRevision) {
-    unreconciledModelRevision = live.revision;
-    throw new Error("browser_edit_reconciliation_required");
-  }
+  if (live.revision !== reconciledModelRevision)
+    await checkpointLiveNativeState(live, "manual_save");
   unreconciledModelRevision = "";
   const bytes = currentBytes.slice();
   if (!bytes.byteLength || bytes.byteLength > hostMaximumBytes)
@@ -1186,13 +1422,64 @@ async function openProductDocument(message) {
   const recovered = await journal.load();
   baseBytes = initial.slice();
   let candidate = initial;
+  let recoveredSnapshotHistory = null;
   if (recovered) {
     if ((await sha256(recovered.baseBytes)) !== (await sha256(initial)))
       throw new Error("Browser recovery base differs from the host document.");
-    const replayed = await replayRecoveredCommands(
-      initial,
-      recovered.metadata.commands,
+    const containsNativeSnapshot = recovered.metadata.commands.some(
+      (command) =>
+        command?.op === "native_snapshot" &&
+        command.persistence === "native_snapshot",
     );
+    let replayed;
+    if (containsNativeSnapshot) {
+      for (const command of recovered.metadata.commands) {
+        const reconciliation = command?.reconciliation;
+        if (
+          typeof reconciliation?.beforeRevision !== "string" ||
+          !reconciliation.beforeRevision ||
+          typeof reconciliation.afterRevision !== "string" ||
+          !reconciliation.afterRevision
+        )
+          throw new Error("Browser recovery command has no revision identity.");
+      }
+      const first = recovered.metadata.commands[0];
+      const last = recovered.metadata.commands.at(-1);
+      const recoveredCommand = {
+        op: "native_snapshot",
+        persistence: "native_snapshot",
+        sourceOperations: recovered.metadata.commands.flatMap((command) =>
+          Array.isArray(command.sourceOperations)
+            ? command.sourceOperations
+            : [command.op],
+        ),
+        reason: "recovered_session",
+        reconciliation: {
+          beforeRevision: first.reconciliation.beforeRevision,
+          afterRevision: last.reconciliation.afterRevision,
+          nativeRequest: null,
+        },
+      };
+      commands.push(recoveredCommand);
+      recoveredSnapshotHistory = {
+        beforeBytes: initial.slice(),
+        afterBytes: recovered.candidateBytes.slice(),
+        beforeRevision: first.reconciliation.beforeRevision,
+        afterRevision: last.reconciliation.afterRevision,
+        beforeSlides: [],
+        nativeRequest: null,
+        command: recoveredCommand,
+        persistence: "native_snapshot",
+        nativeUndoAvailable: false,
+        nativeRedoAvailable: false,
+      };
+      replayed = recovered.candidateBytes.slice();
+    } else {
+      replayed = await replayRecoveredCommands(
+        initial,
+        recovered.metadata.commands,
+      );
+    }
     if (
       (await sha256(replayed)) !== recovered.metadata.candidateSha256 ||
       (await sha256(recovered.candidateBytes)) !==
@@ -1206,6 +1493,8 @@ async function openProductDocument(message) {
   const recoveredRevision = commands.at(-1)?.reconciliation?.afterRevision;
   if (recoveredRevision && live.revision !== recoveredRevision)
     throw new Error("Browser recovery model differs from the package journal.");
+  if (recoveredSnapshotHistory)
+    productUndoHistory.push(recoveredSnapshotHistory);
   reconciledModelRevision = live.revision;
   const modified = commands.length > 0;
   lastReportedModified = !modified;
@@ -1268,8 +1557,8 @@ async function handleProductHostMessage(message) {
       if (!handled) {
         await request("dispatch", { unoCommand: command });
         const live = await observeNativeDocument();
-        unreconciledModelRevision =
-          live.revision === reconciledModelRevision ? "" : live.revision;
+        if (live.revision !== reconciledModelRevision)
+          await checkpointLiveNativeState(live, `manual_${command.toLowerCase()}`);
         const status = await request("status");
         reportHostModified(
           Boolean(status.modified) || Boolean(unreconciledModelRevision),
@@ -1387,9 +1676,9 @@ function startProductHeartbeat() {
       reportHostModified(modified);
       if (modified && Date.now() - lastCheckpointAt >= 10_000) {
         const live = await observeNativeDocument();
-        unreconciledModelRevision =
-          live.revision === reconciledModelRevision ? "" : live.revision;
-        if (!unreconciledModelRevision) await persistCheckpoint();
+        if (live.revision !== reconciledModelRevision)
+          await checkpointLiveNativeState(live, "manual_autosave");
+        else await persistCheckpoint();
         lastCheckpointAt = Date.now();
       }
     }).then(

@@ -89,7 +89,11 @@ export async function admitCandidateRuntime({
     patchLevel: manifest.sourceCandidate.patchLevel,
     patchSeriesSha256: manifest.sourceCandidate.patchSeriesSha256,
     buildReady: true,
-    nativeSlideStructureReady: false,
+    // Candidate verification must exercise the patched slide lifecycle. The
+    // tracked upstream manifest remains false until that verification and the
+    // PowerPoint matrix pass; gating it here would make promotion impossible
+    // by testing only the rejection path.
+    nativeSlideStructureReady: true,
   });
   return {
     runtimeDirectory: directory,
@@ -105,7 +109,7 @@ export async function admitCandidateRuntime({
       sourceCandidate: {
         ...manifest.sourceCandidate,
         buildReady: true,
-        nativeSlideStructureReady: false,
+        nativeSlideStructureReady: true,
       },
       runtimeAssets,
     },

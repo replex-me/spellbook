@@ -7,6 +7,15 @@ const source = readFileSync(
   new URL("./harness/native-transform-adapter.js", import.meta.url),
   "utf8",
 );
+const nativeCapabilities = JSON.parse(
+  readFileSync(
+    new URL("../../contracts/native-edit-capabilities.json", import.meta.url),
+    "utf8",
+  ),
+);
+const completeNativeOperationSurface = Object.values(
+  nativeCapabilities.operationGroups,
+).flat();
 
 function loadFactory() {
   const context = {};
@@ -261,37 +270,13 @@ function fixture() {
   };
 }
 
-test("browser adapter advertises only its exact operation families", () => {
+test("browser adapter advertises the complete bounded PPTX operation surface", () => {
   const { adapter } = fixture();
-  assert.deepEqual(Array.from(adapter.supportedOperations), [
-    "crop_image",
-    "bold",
-    "font_color",
-    "font_family",
-    "font_size",
-    "fill_opacity",
-    "italic",
-    "line_color",
-    "line_opacity",
-    "line_width",
-    "paragraph_alignment",
-    "rotate",
-    "rename_slide",
-    "replace_text_range",
-    "set_alt_text",
-    "set_object_interaction",
-    "set_object_lock",
-    "set_character_spacing",
-    "set_shape_name",
-    "set_shape_shadow",
-    "set_slide_hidden",
-    "set_slide_transition",
-    "set_speaker_notes",
-    "set_script_position",
-    "set_text_box",
-    "strikethrough",
-    "underline",
-  ]);
+  assert.deepEqual(
+    Array.from(adapter.supportedOperations),
+    completeNativeOperationSurface,
+  );
+  assert.equal(adapter.supportedOperations.length, 63);
 });
 
 test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime", () => {
