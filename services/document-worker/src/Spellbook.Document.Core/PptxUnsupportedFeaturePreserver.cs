@@ -12,6 +12,12 @@ namespace Spellbook.Document.Core;
 /// </summary>
 public sealed class PptxUnsupportedFeaturePreserver
 {
+    private static readonly IReadOnlySet<string> PreservedPresentationRelationshipTypes =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings",
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles"
+        };
     private static readonly XNamespace PresentationNamespace =
         "http://schemas.openxmlformats.org/presentationml/2006/main";
     private static readonly XNamespace OfficeRelationshipNamespace =
@@ -125,6 +131,7 @@ public sealed class PptxUnsupportedFeaturePreserver
                 WriteXml(output, candidateRelationships.Path, candidateRelationships.Document);
                 restoredSlides.Add(slideIndex);
             }
+            PreservePresentationPackageFeatures(baseline, output, copiedParts);
             EnsureContentTypes(baseline, output, copiedParts);
         }
 
@@ -135,6 +142,80 @@ public sealed class PptxUnsupportedFeaturePreserver
             Hashing.FileSha256(outputPath),
             restoredSlides,
             copiedParts.Order(StringComparer.Ordinal).ToList());
+    }
+
+    private static void PreservePresentationPackageFeatures(
+        ZipArchive baseline,
+        ZipArchive output,
+        ISet<string> copiedParts)
+    {
+        const string presentationPart = "ppt/presentation.xml";
+        var sourceRelationships = ReadRelationships(baseline, presentationPart);
+        var candidateRelationships = ReadRelationships(output, presentationPart);
+        var candidateIds = candidateRelationships.Document.Root!
+            .Elements(PackageRelationshipNamespace + "Relationship")
+            .Select(element => (string?)element.Attribute("Id"))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.Ordinal);
+        var changed = false;
+
+        foreach (var sourceRelationship in sourceRelationships.Document.Root!
+            .Elements(PackageRelationshipNamespace + "Relationship")
+            .Where(element => PreservedPresentationRelationshipTypes.Contains(
+                (string?)element.Attribute("Type") ?? string.Empty)))
+        {
+            var sourceId = (string?)sourceRelationship.Attribute("Id")
+                ?? throw new InvalidDataException("A preserved presentation relationship has no id.");
+            var type = (string?)sourceRelationship.Attribute("Type")
+                ?? throw new InvalidDataException($"Preserved relationship {sourceId} has no type.");
+            var sourceTarget = (string?)sourceRelationship.Attribute("Target")
+                ?? throw new InvalidDataException($"Preserved relationship {sourceId} has no target.");
+            if (string.Equals(
+                (string?)sourceRelationship.Attribute("TargetMode"),
+                "External",
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Preserved relationship {sourceId} cannot target external content.");
+
+            var sourcePart = ResolvePartPath(presentationPart, sourceTarget);
+            var matching = candidateRelationships.Document.Root!
+                .Elements(PackageRelationshipNamespace + "Relationship")
+                .Where(element => string.Equals(
+                    (string?)element.Attribute("Type"),
+                    type,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matching.Length > 1)
+                throw new InvalidDataException($"Candidate PPTX contains duplicate preserved relationships of type {type}.");
+            if (matching.Length == 1)
+            {
+                var candidateTarget = (string?)matching[0].Attribute("Target")
+                    ?? throw new InvalidDataException($"Candidate preserved relationship {type} has no target.");
+                if (string.Equals(
+                        (string?)matching[0].Attribute("TargetMode"),
+                        "External",
+                        StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(
+                        ResolvePartPath(presentationPart, candidateTarget),
+                        sourcePart,
+                        StringComparison.Ordinal))
+                    throw new InvalidDataException($"Candidate PPTX changed preserved relationship {type}.");
+                CopyPartClosure(baseline, output, sourcePart, copiedParts);
+                continue;
+            }
+
+            CopyPartClosure(baseline, output, sourcePart, copiedParts);
+            var candidateId = candidateIds.Add(sourceId)
+                ? sourceId
+                : NextRelationshipId(candidateIds);
+            var restoredRelationship = new XElement(sourceRelationship);
+            restoredRelationship.SetAttributeValue("Id", candidateId);
+            candidateRelationships.Document.Root!.Add(restoredRelationship);
+            changed = true;
+        }
+
+        if (changed)
+            WriteXml(output, candidateRelationships.Path, candidateRelationships.Document);
     }
 
     private static IReadOnlyList<string> OrderedSlideParts(ZipArchive archive)
@@ -279,7 +360,7 @@ public sealed class PptxUnsupportedFeaturePreserver
             var candidate = $"rId{index}";
             if (existing.Add(candidate)) return candidate;
         }
-        throw new InvalidDataException("No relationship id is available for preserved controls.");
+        throw new InvalidDataException("No relationship id is available for preserved package content.");
     }
 
     private static string RelationshipPartFor(string partPath)

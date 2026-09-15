@@ -1066,6 +1066,68 @@ public sealed class DocumentEngineTests : IDisposable
         Assert.Contains(graph.Slides[0].Warnings, warning => warning.Contains("ActiveX", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void UnsupportedFeaturePreserverRestoresPresentationFeaturesDroppedByLibreOffice()
+    {
+        var baseline = TestPresentationFactory.Create(directory);
+        AddUnsupportedPresentationFeatureFixture(baseline);
+        var candidate = Path.Combine(directory, "presentation-features-candidate.pptx");
+        File.Copy(baseline, candidate);
+        StripUnsupportedPresentationFeatureFixture(candidate);
+        var output = Path.Combine(directory, "presentation-features-preserved.pptx");
+
+        var report = new PptxUnsupportedFeaturePreserver().Preserve(baseline, candidate, output);
+
+        Assert.Equal(
+            ["ppt/printerSettings/printerSettings1.bin", "ppt/tableStyles.xml"],
+            report.CopiedParts);
+        using (var archive = ZipFile.OpenRead(output))
+        {
+            Assert.NotNull(archive.GetEntry("ppt/printerSettings/printerSettings1.bin"));
+            Assert.NotNull(archive.GetEntry("ppt/tableStyles.xml"));
+            var relationships = ReadXml(archive, "ppt/_rels/presentation.xml.rels");
+            Assert.Contains(
+                relationships.Descendants(),
+                element => ((string?)element.Attribute("Type"))?.EndsWith("/printerSettings", StringComparison.Ordinal) == true);
+            Assert.Contains(
+                relationships.Descendants(),
+                element => ((string?)element.Attribute("Type"))?.EndsWith("/tableStyles", StringComparison.Ordinal) == true);
+        }
+
+        var validation = new PptxPackageChangeBudgetValidator().Validate(
+            baseline,
+            output,
+            new PackageChangeBudgetRequest(
+                ContractVersions.Current,
+                ["package_manifest", "presentation_relationships"]));
+        Assert.True(validation.Valid, string.Join("\n", validation.Errors));
+        Assert.DoesNotContain(validation.Changes, change => change.Category == "unknown");
+    }
+
+    [Fact]
+    public void UnsupportedFeaturePreserverRejectsChangedPresentationFeatureContent()
+    {
+        var baseline = TestPresentationFactory.Create(directory);
+        AddUnsupportedPresentationFeatureFixture(baseline);
+        var candidate = Path.Combine(directory, "changed-table-styles.pptx");
+        File.Copy(baseline, candidate);
+        using (var archive = ZipFile.Open(candidate, ZipArchiveMode.Update))
+        {
+            archive.GetEntry("ppt/tableStyles.xml")!.Delete();
+            Write(
+                archive,
+                "ppt/tableStyles.xml",
+                "<a:tblStyleLst xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" def=\"changed\" />");
+        }
+
+        var error = Assert.Throws<InvalidDataException>(() =>
+            new PptxUnsupportedFeaturePreserver().Preserve(
+                baseline,
+                candidate,
+                Path.Combine(directory, "changed-table-styles-output.pptx")));
+        Assert.Contains("collides with candidate content", error.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         Directory.Delete(directory, true);
@@ -1225,6 +1287,71 @@ public sealed class DocumentEngineTests : IDisposable
             new XElement(contentTypes + "Default", new XAttribute("Extension", "wmf"), new XAttribute("ContentType", "image/x-wmf")),
             new XElement(contentTypes + "Default", new XAttribute("Extension", "vml"), new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.vmlDrawing")),
             new XElement(contentTypes + "Override", new XAttribute("PartName", "/ppt/activeX/activeX1.xml"), new XAttribute("ContentType", "application/vnd.ms-office.activeX+xml")));
+        Replace(archive, "[Content_Types].xml", types);
+    }
+
+    private static void AddUnsupportedPresentationFeatureFixture(string path)
+    {
+        XNamespace packageRelationships = "http://schemas.openxmlformats.org/package/2006/relationships";
+        XNamespace contentTypes = "http://schemas.openxmlformats.org/package/2006/content-types";
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        var relationships = ReadXml(archive, "ppt/_rels/presentation.xml.rels");
+        relationships.Root!.Add(
+            new XElement(
+                packageRelationships + "Relationship",
+                new XAttribute("Id", "rIdPrinterSettings"),
+                new XAttribute(
+                    "Type",
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings"),
+                new XAttribute("Target", "printerSettings/printerSettings1.bin")),
+            new XElement(
+                packageRelationships + "Relationship",
+                new XAttribute("Id", "rIdTableStyles"),
+                new XAttribute(
+                    "Type",
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles"),
+                new XAttribute("Target", "tableStyles.xml")));
+        Replace(archive, "ppt/_rels/presentation.xml.rels", relationships);
+
+        Write(archive, "ppt/printerSettings/printerSettings1.bin", [1, 3, 5, 7]);
+        Write(
+            archive,
+            "ppt/tableStyles.xml",
+            "<a:tblStyleLst xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" def=\"{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}\" />");
+        var types = ReadXml(archive, "[Content_Types].xml");
+        types.Root!.Add(
+            new XElement(
+                contentTypes + "Override",
+                new XAttribute("PartName", "/ppt/printerSettings/printerSettings1.bin"),
+                new XAttribute(
+                    "ContentType",
+                    "application/vnd.openxmlformats-officedocument.presentationml.printerSettings")),
+            new XElement(
+                contentTypes + "Override",
+                new XAttribute("PartName", "/ppt/tableStyles.xml"),
+                new XAttribute(
+                    "ContentType",
+                    "application/vnd.openxmlformats-officedocument.presentationml.tableStyles+xml")));
+        Replace(archive, "[Content_Types].xml", types);
+    }
+
+    private static void StripUnsupportedPresentationFeatureFixture(string path)
+    {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Update);
+        archive.GetEntry("ppt/printerSettings/printerSettings1.bin")!.Delete();
+        archive.GetEntry("ppt/tableStyles.xml")!.Delete();
+        var relationships = ReadXml(archive, "ppt/_rels/presentation.xml.rels");
+        relationships.Root!.Elements()
+            .Where(element =>
+                ((string?)element.Attribute("Type"))?.EndsWith("/printerSettings", StringComparison.Ordinal) == true
+                || ((string?)element.Attribute("Type"))?.EndsWith("/tableStyles", StringComparison.Ordinal) == true)
+            .Remove();
+        Replace(archive, "ppt/_rels/presentation.xml.rels", relationships);
+        var types = ReadXml(archive, "[Content_Types].xml");
+        types.Root!.Elements()
+            .Where(element => (string?)element.Attribute("PartName") is
+                "/ppt/printerSettings/printerSettings1.bin" or "/ppt/tableStyles.xml")
+            .Remove();
         Replace(archive, "[Content_Types].xml", types);
     }
 
