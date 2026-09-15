@@ -1,8 +1,8 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 14f0377..402e6c8 100644
+index 14f0377..d48f09d 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -1478,6 +1478,149 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookPlaceholderKeepsLocalInteract
+@@ -1478,6 +1478,180 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookPlaceholderKeepsLocalInteract
                           pInfo->GetBookmark());
  }
  
@@ -112,33 +112,63 @@ index 14f0377..402e6c8 100644
 +    sal_Int32 nOriginalMargin = 0;
 +    bool bOriginalShadow = false;
 +    bool bOriginalMoveProtect = false;
++    OUString aOriginalName;
++    OUString aOriginalTitle;
++    OUString aOriginalDescription;
++    bool bOriginalDecorative = false;
++    xProperties->getPropertyValue("Name") >>= aOriginalName;
++    xProperties->getPropertyValue("Title") >>= aOriginalTitle;
++    xProperties->getPropertyValue("Description") >>= aOriginalDescription;
++    xProperties->getPropertyValue("Decorative") >>= bOriginalDecorative;
 +    xProperties->getPropertyValue("TextLeftDistance") >>= nOriginalMargin;
 +    xProperties->getPropertyValue("Shadow") >>= bOriginalShadow;
 +    xProperties->getPropertyValue("MoveProtect") >>= bOriginalMoveProtect;
 +
 +    pDrawDocument->BegUndo("Browser object properties");
++    xProperties->setPropertyValue("Name", uno::Any(OUString("Browser shape")));
++    xProperties->setPropertyValue("Title", uno::Any(OUString("Browser title")));
++    xProperties->setPropertyValue("Description", uno::Any(OUString("Browser description")));
++    xProperties->setPropertyValue("Decorative", uno::Any(true));
 +    xProperties->setPropertyValue("TextLeftDistance", uno::Any(sal_Int32(420)));
 +    xProperties->setPropertyValue("Shadow", uno::Any(true));
 +    xProperties->setPropertyValue("MoveProtect", uno::Any(true));
 +    pDrawDocument->EndUndo();
 +    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
 +
-+    auto assertProperties = [&](sal_Int32 nMargin, bool bShadow, bool bMoveProtect) {
++    auto assertProperties = [&](const OUString& rName, const OUString& rTitle,
++                                const OUString& rDescription, bool bDecorative,
++                                sal_Int32 nMargin, bool bShadow, bool bMoveProtect) {
++        OUString aActualName;
++        OUString aActualTitle;
++        OUString aActualDescription;
++        bool bActualDecorative = false;
 +        sal_Int32 nActualMargin = 0;
 +        bool bActualShadow = false;
 +        bool bActualMoveProtect = false;
++        xProperties->getPropertyValue("Name") >>= aActualName;
++        xProperties->getPropertyValue("Title") >>= aActualTitle;
++        xProperties->getPropertyValue("Description") >>= aActualDescription;
++        xProperties->getPropertyValue("Decorative") >>= bActualDecorative;
 +        xProperties->getPropertyValue("TextLeftDistance") >>= nActualMargin;
 +        xProperties->getPropertyValue("Shadow") >>= bActualShadow;
 +        xProperties->getPropertyValue("MoveProtect") >>= bActualMoveProtect;
++        CPPUNIT_ASSERT_EQUAL(rName, aActualName);
++        CPPUNIT_ASSERT_EQUAL(rTitle, aActualTitle);
++        CPPUNIT_ASSERT_EQUAL(rDescription, aActualDescription);
++        CPPUNIT_ASSERT_EQUAL(bDecorative, bActualDecorative);
 +        CPPUNIT_ASSERT_EQUAL(nMargin, nActualMargin);
 +        CPPUNIT_ASSERT_EQUAL(bShadow, bActualShadow);
 +        CPPUNIT_ASSERT_EQUAL(bMoveProtect, bActualMoveProtect);
 +    };
-+    assertProperties(420, true, true);
++    assertProperties("Browser shape", "Browser title", "Browser description", true,
++                     420, true, true);
 +    pUndoManager->Undo();
-+    assertProperties(nOriginalMargin, bOriginalShadow, bOriginalMoveProtect);
++    assertProperties(aOriginalName, aOriginalTitle, aOriginalDescription,
++                     bOriginalDecorative, nOriginalMargin, bOriginalShadow,
++                     bOriginalMoveProtect);
 +    pUndoManager->Redo();
-+    assertProperties(420, true, true);
++    assertProperties("Browser shape", "Browser title", "Browser description", true,
++                     420, true, true);
 +
 +    saveAndReload("Impress Office Open XML");
 +    xPagesSupplier.set(mxComponent, uno::UNO_QUERY_THROW);
@@ -146,7 +176,8 @@ index 14f0377..402e6c8 100644
 +    xShapes.set(xPage, uno::UNO_QUERY_THROW);
 +    xShape.set(xShapes->getByIndex(0), uno::UNO_QUERY_THROW);
 +    xProperties.set(xShape, uno::UNO_QUERY_THROW);
-+    assertProperties(420, true, true);
++    assertProperties("Browser shape", "Browser title", "Browser description", true,
++                     420, true, true);
 +}
 +
  // TODO - Readd when we implement style level fill color and set that for default style

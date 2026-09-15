@@ -12,7 +12,7 @@
     "patchLevel": "browser-undo-v4",
     "patchSeriesReady": true,
     "buildReady": false,
-    "patchSeriesSha256": "ef77bbef71297f4354878206fe49a382b5a01bd9f35627276048c427c0323849",
+    "patchSeriesSha256": "3602434abac301569ed6672d629ee33b42c790aaa93dd04cebe5fc665cc19245",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
