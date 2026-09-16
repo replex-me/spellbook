@@ -13,7 +13,7 @@
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "f1f4dd2aeeb3273834807e83137b6b5a4a7914c3e47254f7fef0ad61aaab02f5",
+    "patchSeriesSha256": "de98e9b72e6b6f573159577261fa875a99a886ab6c08c8a467436fe34c633891",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
@@ -28,7 +28,8 @@
       "libreoffice/patches/0011-browser-semantic-assets-accessibility.patch",
       "libreoffice/patches/0012-browser-headless-native-tests.patch",
       "libreoffice/patches/0013-browser-pptx-reading-order.patch",
-      "libreoffice/patches/0014-browser-pptx-accessibility-metadata.patch"
+      "libreoffice/patches/0014-browser-pptx-accessibility-metadata.patch",
+      "libreoffice/patches/0015-browser-undo-test-phases.patch"
     ],
     "invariants": [
       "table-cell-native-undo",
