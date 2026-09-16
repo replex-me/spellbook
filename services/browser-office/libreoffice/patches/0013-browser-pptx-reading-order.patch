@@ -2,7 +2,7 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 index 89db785d..453b5dc9 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -1675,3 +1675,70 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1675,3 +1675,71 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
      assertProperties("Browser shape", "Browser title", "Browser description", true,
 -                     420, true, true, nChangedNavigationOrder);
 +                     420, true, true, -1);
@@ -54,8 +54,9 @@ index 89db785d..453b5dc9 100644
 +
 +    auto* pUndoManager = pDrawDocument->GetDocSh()->GetUndoManager();
 +    pUndoManager->Clear();
++    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY_THROW);
 +    uno::Reference<view::XSelectionSupplier> xController(
-+        mxComponent->getCurrentController(), uno::UNO_QUERY_THROW);
++        xModel->getCurrentController(), uno::UNO_QUERY_THROW);
 +    pDrawDocument->BegUndo("Browser reading order");
 +    xController->select(uno::Any(xBack));
 +    dispatchCommand(mxComponent, ".uno:BringToFront", {});
