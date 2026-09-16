@@ -1802,10 +1802,6 @@
         "type": ["object", "null"],
         "additionalProperties": false,
         "properties": {
-          "lastLineAlignment": {
-            "type": ["string", "null"],
-            "enum": ["left", "center", "right", "justify", null]
-          },
           "leftMargin": {
             "type": ["number", "null"],
             "minimum": -100000,
@@ -1837,7 +1833,6 @@
           }
         },
         "required": [
-          "lastLineAlignment",
           "leftMargin",
           "rightMargin",
           "firstLineIndent",

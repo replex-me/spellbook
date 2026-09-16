@@ -1065,7 +1065,6 @@
             payload,
             [
               "Paragraph",
-              "LastLineAlignment",
               "LeftMargin",
               "RightMargin",
               "FirstLineIndent",
@@ -1114,27 +1113,6 @@
             writes.push(
               propertyWrite(paragraph, name, typeName, propertyValue),
             );
-          if (Object.hasOwn(payload, "LastLineAlignment")) {
-            const valueByName = {
-              left: css.style.ParagraphAdjust.LEFT,
-              center: css.style.ParagraphAdjust.CENTER,
-              right: css.style.ParagraphAdjust.RIGHT,
-              justify: css.style.ParagraphAdjust.BLOCK,
-            };
-            if (!Object.hasOwn(valueByName, payload.LastLineAlignment))
-              throw new Error(
-                "Browser paragraph last-line alignment is invalid.",
-              );
-            writes.push(() =>
-              paragraph.setPropertyValue(
-                "ParaLastLineAdjust",
-                new uno.Any(
-                  uno.type.enum(css.style.ParagraphAdjust),
-                  valueByName[payload.LastLineAlignment],
-                ),
-              ),
-            );
-          }
           for (const [payloadName, unoName] of [
             ["LeftMargin", "ParaLeftMargin"],
             ["RightMargin", "ParaRightMargin"],

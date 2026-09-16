@@ -13,6 +13,13 @@ Spellbook uses Collabora Online for the shared browser editor. Collabora embeds 
 
 The patches add bounded document commands and exact native Undo/Redo behavior. They do not expose raw UNO, macros, external processes or arbitrary file/network access to the AI. A patch is kept only while the pinned upstream lacks equivalent behavior.
 
+For PPTX, `paragraph_alignment` controls the whole paragraph. The bounded
+`set_paragraph_format` command covers margins, indentation, writing direction
+and lists; it does not promise an independently editable last-line alignment.
+LibreOffice rejects some `ParaLastLineAdjust` values, and this adapter has no
+verified PowerPoint round-trip representation for that independent setting.
+Do not add it back on the strength of a UNO setter alone.
+
 `audit-ai-command-surface.mjs` reads the complete Impress UI command inventory
 from the pinned source and routes every command through
 `impress-command-policy.mjs` into the product semantic families declared in

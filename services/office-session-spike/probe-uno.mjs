@@ -1311,8 +1311,6 @@ try {
         elementId: propertyTarget.elementId,
         paragraphId: paragraph.paragraphId,
         paragraphFormat: {
-          lastLineAlignment:
-            paragraph.lastLineAlignment === "right" ? "left" : "right",
           leftMargin: Number(paragraph.leftMargin ?? 0) + 101,
           rightMargin: Number(paragraph.rightMargin ?? 0) + 37,
           firstLineIndent: Number(paragraph.firstLineIndent ?? 0) - 23,

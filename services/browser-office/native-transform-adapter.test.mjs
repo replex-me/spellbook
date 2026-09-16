@@ -567,7 +567,6 @@ test("browser adapter writes bounded slide metadata and paragraph formatting", (
       {
         "SetParagraphProperties.0": {
           Paragraph: 1,
-          LastLineAlignment: "right",
           LeftMargin: 1200,
           RightMargin: 300,
           FirstLineIndent: -200,
@@ -592,7 +591,6 @@ test("browser adapter writes bounded slide metadata and paragraph formatting", (
     IsBackgroundObjectsVisible: false,
   });
   assert.deepEqual(runtime.secondShape.paragraphs[1].properties, {
-    ParaLastLineAdjust: "right",
     ParaLeftMargin: 1200,
     ParaRightMargin: 300,
     ParaFirstLineIndent: -200,
@@ -605,6 +603,28 @@ test("browser adapter writes bounded slide metadata and paragraph formatting", (
     ["page", "Slide 2"],
     ["leave"],
   ]);
+});
+
+test("browser adapter rejects unsupported PPTX last-line alignment before writing", () => {
+  const runtime = fixture();
+  assert.throws(
+    () =>
+      runtime.adapter.transformSlides({
+        commands: [
+          { JumpToSlide: 1 },
+          {
+            "SetParagraphProperties.0": {
+              Paragraph: 1,
+              LastLineAlignment: "right",
+            },
+          },
+        ],
+        ...runtime,
+      }),
+    /Browser paragraph properties contains an unsupported field/u,
+  );
+  assert.deepEqual(runtime.writes, []);
+  assert.deepEqual(runtime.mutations, []);
 });
 
 test("browser adapter source uses the generated browser UNO enum shape", () => {

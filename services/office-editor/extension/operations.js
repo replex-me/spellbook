@@ -690,9 +690,6 @@ function spellbookDocumentOperation(request) {
           endOffset: shapeOffset + paragraphText.length,
           text: paragraphText,
           alignment: safeProperty(paragraph, "ParaAdjust"),
-          lastLineAlignment: paragraphAdjustName(
-            safeProperty(paragraph, "ParaLastLineAdjust"),
-          ),
           leftMargin: safeProperty(paragraph, "ParaLeftMargin"),
           rightMargin: safeProperty(paragraph, "ParaRightMargin"),
           firstLineIndent: safeProperty(paragraph, "ParaFirstLineIndent"),
@@ -724,9 +721,6 @@ function spellbookDocumentOperation(request) {
         paragraphs.push({
           paragraphId: `${elementId}:p${paragraphIndex}`,
           paragraphIndex,
-          lastLineAlignment: paragraphAdjustName(
-            safeProperty(paragraph, "ParaLastLineAdjust"),
-          ),
           leftMargin: safeProperty(paragraph, "ParaLeftMargin"),
           rightMargin: safeProperty(paragraph, "ParaRightMargin"),
           firstLineIndent: safeProperty(paragraph, "ParaFirstLineIndent"),
@@ -793,20 +787,6 @@ function spellbookDocumentOperation(request) {
       .split(/[.:]/u)
       .at(-1)
       .toUpperCase();
-  const paragraphAdjustName = (value) => {
-    const numeric = Number(value);
-    if (Number.isInteger(numeric))
-      return ["left", "right", "justify", "center", "stretch"][numeric] ?? null;
-    return (
-      {
-        LEFT: "left",
-        RIGHT: "right",
-        BLOCK: "justify",
-        CENTER: "center",
-        STRETCH: "stretch",
-      }[enumToken(value)] ?? null
-    );
-  };
   const writingModeName = (value) => {
     const numeric = Number(value);
     if (Number.isInteger(numeric))
@@ -4323,7 +4303,6 @@ function spellbookDocumentOperation(request) {
         throw new Error("native_engine_paragraph_format_patch_required");
       const format = command.paragraphFormat;
       const allowedFields = {
-        lastLineAlignment: "LastLineAlignment",
         leftMargin: "LeftMargin",
         rightMargin: "RightMargin",
         firstLineIndent: "FirstLineIndent",
@@ -4348,10 +4327,7 @@ function spellbookDocumentOperation(request) {
       const expected = {};
       for (const [name, value] of Object.entries(format)) {
         if (value === null || value === undefined) continue;
-        if (name === "lastLineAlignment") {
-          if (!["left", "center", "right", "justify"].includes(value))
-            throw new Error("invalid_paragraph_format");
-        } else if (name === "direction") {
+        if (name === "direction") {
           if (
             !["left-to-right", "right-to-left", "top-to-bottom"].includes(value)
           )
