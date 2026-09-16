@@ -44,7 +44,7 @@ test("candidate verification routes raw artifacts and an in-memory identity", ()
   const runtimeIdentity = {
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v13",
+    patchLevel: "browser-undo-v14",
     buildReady: true,
     nativeSlideStructureReady: false,
   };

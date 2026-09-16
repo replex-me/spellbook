@@ -37,7 +37,7 @@ const browserPatchSeries = manifest.sourceCandidate.patches
   .join("\n");
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v13");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v14");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
@@ -208,6 +208,7 @@ test("browser LibreOffice patches name their complete source surface", () => {
     "sd/inc/drawdoc.hxx",
     "sd/inc/sdpage.hxx",
     "sd/qa/unit/misc-tests.cxx",
+    "sd/qa/unit/sdmodeltestbase.hxx",
     "sd/qa/unit/uiimpress.cxx",
     "sd/source/core/drawdoc2.cxx",
     "sd/source/core/sdpage.cxx",
