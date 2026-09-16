@@ -564,7 +564,7 @@ export async function wopiPutFile(
     if (!current?.wopi_lock || current.wopi_lock !== given)
       throw new WopiLockConflict(current?.wopi_lock ?? "");
     if (current.working_sha256 !== digest) return null;
-    await sql`update spellbook_native_sessions set save_revision=save_revision+1,last_seen_at=now(),updated_at=now() where id=${context.sessionId}`;
+    await sql`update spellbook_native_sessions set last_seen_at=now(),updated_at=now() where id=${context.sessionId}`;
     return current.working_version_id as string;
   });
   if (unchangedVersion) return { version: unchangedVersion, unchanged: true };

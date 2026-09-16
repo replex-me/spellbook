@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Session } from "./models";
@@ -21,7 +21,7 @@ const storage = vi.hoisted(() => ({
         },
   ),
   putObject: vi.fn(),
-  deleteObject: vi.fn(),
+  deleteObject: vi.fn(async () => {}),
 }));
 vi.mock("./workers", () => workers);
 vi.mock("./storage", () => ({
@@ -77,6 +77,10 @@ const session: Session = {
 beforeAll(async () => {
   if (!enabled) return;
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://spellbook.integration.invalid");
+  vi.stubEnv(
+    "SPELLBOOK_BROWSER_OFFICE_URL",
+    "https://office.spellbook.integration.invalid",
+  );
   vi.stubEnv(
     "SPELLBOOK_WOPI_SECRET",
     "integration-wopi-secret-that-is-long-enough",
@@ -461,6 +465,149 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
         allowPartCreationOrDeletion: false,
       },
     });
+  });
+
+  it("refuses to save an AI mutation before its visual review completes", async () => {
+    const f = await fixture();
+    const submitted = await submitNativeTurn(session, f.documentId, {
+      text: "첫 슬라이드 제목을 바꿔줘",
+      permission: "document",
+    });
+    const [turn] = await db()`
+      select job_id from spellbook_native_turns where id=${submitted.turnId}
+    `;
+    const owner = {
+      jobId: String(turn.job_id),
+      sessionId: f.nativeSessionId,
+      executionToken: "pending-review-worker",
+    };
+    await executeNativeTool({ ...owner, operation: "start" });
+    const task = (await executeNativeTool({
+      ...owner,
+      operation: "task_create",
+      request: {
+        operation: "edit",
+        command: { op: "replace_text", elementId: "0/0", text: "변경" },
+      },
+    })) as { taskId: string };
+    await completeNativeTask(session, f.documentId, {
+      id: task.taskId,
+      value: { ...observation, changedSlideIndexes: [0] },
+    });
+
+    const token = signWopiToken({
+      version: 1,
+      sessionId: f.nativeSessionId,
+      documentId: f.documentId,
+      accountId,
+      expiresAt: Date.now() + 60_000,
+    });
+    const url = `https://spellbook.integration.invalid/api/wopi/files/${f.documentId}?access_token=${encodeURIComponent(token)}`;
+    await wopiLock(
+      new Request(url, {
+        method: "POST",
+        headers: { "x-wopi-override": "LOCK", "x-wopi-lock": "review-pending" },
+      }),
+      f.documentId,
+    );
+    const contentsUrl = new URL(url);
+    contentsUrl.pathname += "/contents";
+    const unchangedBytes = Buffer.from("PK-unchanged-before-ai-review");
+    const unchangedDigest = createHash("sha256")
+      .update(unchangedBytes)
+      .digest("hex");
+    await db()`
+      update spellbook_native_sessions set working_sha256=${unchangedDigest}
+      where id=${f.nativeSessionId}
+    `;
+    const unchanged = await wopiPutFile(
+      new Request(contentsUrl, {
+        method: "POST",
+        headers: { "x-wopi-lock": "review-pending" },
+        body: unchangedBytes,
+      }),
+      f.documentId,
+    );
+    expect(unchanged.unchanged).toBe(true);
+    const [beforeSave] = await db()`
+      select save_revision from spellbook_native_sessions where id=${f.nativeSessionId}
+    `;
+    expect(beforeSave.save_revision).toBe(0);
+    const put = () =>
+      wopiPutFile(
+        new Request(contentsUrl, {
+          method: "POST",
+          headers: { "x-wopi-lock": "review-pending" },
+          body: Buffer.from("PK-unreviewed-ai-save"),
+        }),
+        f.documentId,
+      );
+    const dispatchCount = workers.enqueueWorkerJob.mock.calls.length;
+    await expect(put()).rejects.toThrow("native_ai_change_review_pending");
+    expect(workers.enqueueWorkerJob.mock.calls).toHaveLength(dispatchCount);
+    const [versions] = await db()`
+      select count(*)::int as count from spellbook_versions where document_id=${f.documentId}
+    `;
+    expect(versions.count).toBe(1);
+
+    await completeNativeTurn(
+      { id: owner.jobId },
+      {
+        jobId: owner.jobId,
+        status: "succeeded",
+        result: {
+          text: "화면까지 확인해 제목을 바꿨습니다.",
+          changed: true,
+          reviewed: true,
+          executionToken: owner.executionToken,
+        },
+      },
+    );
+    await put();
+    expect(workers.enqueueWorkerJob.mock.calls.at(-1)?.[3]).toMatchObject({
+      changeOrigin: "ai",
+      changeTaskIds: [task.taskId],
+      changeBudget: { targetSlideIndexes: [0] },
+    });
+  });
+
+  it("keeps a no-op browser save on the same evidence revision", async () => {
+    const f = await fixture();
+    const unchangedBytes = Buffer.from("PK-test-pptx");
+    const digest = createHash("sha256")
+      .update(unchangedBytes)
+      .digest("hex");
+    await db().begin(async (sql) => {
+      await sql`
+        update spellbook_versions set document_sha256=${digest}
+        where id=${f.versionId}
+      `;
+      await sql`
+        update spellbook_native_sessions set working_sha256=${digest}
+        where id=${f.nativeSessionId}
+      `;
+    });
+    const launch = await createBrowserDocumentLaunch(session, f.documentId);
+    const saved = await saveBrowserDocument(
+      session,
+      f.documentId,
+      new Request(
+        `https://spellbook.integration.invalid/api/documents/${f.documentId}/browser/contents`,
+        {
+          method: "PUT",
+          headers: {
+            origin: "https://spellbook.integration.invalid",
+            "if-match": launch.revision,
+          },
+          body: unchangedBytes,
+        },
+      ),
+    );
+    expect(saved).toEqual({ revision: launch.revision, unchanged: true });
+    const [native] = await db()`
+      select save_revision,status from spellbook_native_sessions where id=${f.nativeSessionId}
+    `;
+    expect(native).toMatchObject({ save_revision: 0, status: "active" });
   });
 
   it("reconciles a browser candidate only against its exact owned revision", async () => {

@@ -477,6 +477,7 @@ export async function executeNativeTool(input: Record<string, unknown>) {
       join spellbook_native_turns t on t.id=${turnId} and t.session_id=s.id
       where s.id=${sessionId} and s.status='active' and s.expires_at > now()
         and t.status='running'
+      for update of s
       returning id
     `;
     if (!created) throw new HttpError(409, "native_session_not_active");

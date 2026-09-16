@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   humanNativeSavePolicy,
+  nativeSavePolicyFromTasks,
   reviewedAiSavePolicy,
 } from "./native-change-budget";
 
@@ -102,5 +103,81 @@ describe("native save change budgets", () => {
         },
       ]),
     ).toThrow("native_ai_change_budget_unknown_operation");
+  });
+
+  it("does not treat an unfinished AI edit as an unrestricted human save", () => {
+    const edit = {
+      id: "task-edit",
+      request: { operation: "edit", command: { op: "replace_text" } },
+      result: result([0]),
+      taskStatus: "completed",
+      turnStatus: "running",
+      changed: false,
+      reviewed: false,
+    };
+    expect(() => nativeSavePolicyFromTasks([edit])).toThrow(
+      "native_ai_change_review_pending",
+    );
+    expect(() =>
+      nativeSavePolicyFromTasks([
+        { ...edit, turnStatus: "completed", changed: true },
+      ]),
+    ).toThrow("native_ai_change_review_pending");
+    expect(() =>
+      nativeSavePolicyFromTasks([
+        { ...edit, taskStatus: "failed", turnStatus: "failed" },
+      ]),
+    ).toThrow("native_ai_change_review_pending");
+  });
+
+  it("ignores observation and dry-run tasks when deriving a reviewed AI budget", () => {
+    const policy = nativeSavePolicyFromTasks([
+      {
+        id: "task-observe",
+        request: { operation: "observe" },
+        result: result([3]),
+        taskStatus: "completed",
+        turnStatus: "completed",
+        changed: true,
+        reviewed: true,
+      },
+      {
+        id: "task-dry-run",
+        request: { operation: "edit_batch", dryRun: true },
+        result: result([2]),
+        taskStatus: "completed",
+        turnStatus: "completed",
+        changed: true,
+        reviewed: true,
+      },
+      {
+        id: "task-edit",
+        request: { operation: "edit", command: { op: "replace_text" } },
+        result: result([0]),
+        taskStatus: "completed",
+        turnStatus: "completed",
+        changed: true,
+        reviewed: true,
+      },
+    ]);
+
+    expect(policy).toMatchObject({
+      origin: "ai",
+      taskIds: ["task-edit"],
+      budget: { allowedCategories: ["slide_parts"], targetSlideIndexes: [0] },
+    });
+    expect(
+      nativeSavePolicyFromTasks([
+        {
+          id: "task-observe",
+          request: { operation: "observe" },
+          result: result([3]),
+          taskStatus: "completed",
+          turnStatus: "completed",
+          changed: false,
+          reviewed: false,
+        },
+      ]).origin,
+    ).toBe("human");
   });
 });

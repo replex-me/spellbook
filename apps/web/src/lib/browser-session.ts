@@ -206,11 +206,28 @@ export async function saveBrowserDocument(
   if (expectedRevision !== currentRevision)
     throw new HttpError(412, "browser_revision_changed");
   if (digest === current.working_sha256) {
-    await db()`
-      update spellbook_native_sessions set save_revision=save_revision+1,
-        last_seen_at=now(),updated_at=now()
-      where id=${current.id} and editor_mode='browser' and status='active'
-    `;
+    await db().begin(async (sql) => {
+      const [locked] = await sql`
+        select working_version_id,working_sha256,status,editor_mode,wopi_lock
+        from spellbook_native_sessions where id=${current.id} for update
+      `;
+      if (
+        !locked ||
+        locked.editor_mode !== "browser" ||
+        locked.status !== "active" ||
+        locked.wopi_lock
+      )
+        throw new HttpError(409, "browser_session_changed");
+      if (
+        browserRevision(locked.working_version_id, locked.working_sha256) !==
+        expectedRevision
+      )
+        throw new HttpError(412, "browser_revision_changed");
+      await sql`
+        update spellbook_native_sessions set last_seen_at=now(),updated_at=now()
+        where id=${current.id}
+      `;
+    });
     return { revision: currentRevision, unchanged: true };
   }
 

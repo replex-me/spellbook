@@ -21,6 +21,13 @@ interface CompletedNativeTask {
   result: unknown;
 }
 
+interface NativeSaveTask extends CompletedNativeTask {
+  taskStatus: string;
+  turnStatus: string;
+  changed: boolean;
+  reviewed: boolean;
+}
+
 type MutationOperation = keyof typeof capabilities.mutationModel.operations;
 type MutationFamily = keyof typeof capabilities.mutationModel.families;
 
@@ -129,24 +136,50 @@ export async function loadNativeSaveChangePolicy(
   saveRevision: number,
 ): Promise<NativeSaveChangePolicy> {
   const tasks = await sql`
-    select task.id::text,task.request,task.result
+    select task.id::text,task.request,task.result,
+      task.status as "taskStatus",turn.status as "turnStatus",
+      turn.changed,turn.reviewed
     from spellbook_native_tasks task
     join spellbook_native_turns turn on turn.id=task.turn_id
     where task.session_id=${sessionId}
       and task.save_revision_at_create=${saveRevision}
-      and task.status='completed'
-      and turn.status='completed' and turn.changed=true and turn.reviewed=true
     order by task.created_at,task.id
   `;
-  return tasks.length
-    ? reviewedAiSavePolicy(
-        tasks.map((task) => ({
-          id: String(task.id),
-          request: task.request,
-          result: task.result,
-        })),
-      )
-    : humanNativeSavePolicy();
+  return nativeSavePolicyFromTasks(
+    tasks.map((task) => ({
+      id: String(task.id),
+      request: task.request,
+      result: task.result,
+      taskStatus: String(task.taskStatus),
+      turnStatus: String(task.turnStatus),
+      changed: task.changed === true,
+      reviewed: task.reviewed === true,
+    })),
+  );
+}
+
+export function nativeSavePolicyFromTasks(
+  tasks: NativeSaveTask[],
+): NativeSaveChangePolicy {
+  const mutations = tasks.filter((task) => {
+    const request = objectValue(task.request);
+    return (
+      request.operation !== "observe" &&
+      !(request.operation === "edit_batch" && request.dryRun === true)
+    );
+  });
+  if (!mutations.length) return humanNativeSavePolicy();
+  if (
+    mutations.some(
+      (task) =>
+        task.taskStatus !== "completed" ||
+        task.turnStatus !== "completed" ||
+        !task.changed ||
+        !task.reviewed,
+    )
+  )
+    throw new Error("native_ai_change_review_pending");
+  return reviewedAiSavePolicy(mutations);
 }
 
 function addOperation(
