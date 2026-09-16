@@ -59,6 +59,13 @@ export function buildRoutes(
       ),
     ],
     [
+      "/harness/product-persistence.mjs",
+      route(
+        path.join(root, "harness/product-persistence.mjs"),
+        "text/javascript; charset=utf-8",
+      ),
+    ],
+    [
       "/harness/office-thread.js",
       route(
         path.join(root, "harness/office-thread.js"),

@@ -125,7 +125,9 @@ try {
       },
       suppressCapture: true,
     }),
-    /browser_ooxml_reconciliation_required:flip/u,
+    patchedBrowserRuntime
+      ? /browser_ooxml_reconciliation_required:flip/u
+      : /browser_native_runtime_patch_required/u,
   );
   const moved = await nativeTask(page, "move-1", {
     operation: "edit",
@@ -1585,13 +1587,17 @@ async function openProductFixture(
 
 async function waitForEvent(page, expected) {
   try {
-    await page.waitForFunction(
-      (match) =>
-        globalThis.__spellbookProductHost?.events.some((event) =>
-          Object.entries(match).every(([key, value]) => event[key] === value),
-        ),
-      expected,
-      { timeout: 30_000 },
+    await withWallClockTimeout(
+      page.waitForFunction(
+        (match) =>
+          globalThis.__spellbookProductHost?.events.some((event) =>
+            Object.entries(match).every(([key, value]) => event[key] === value),
+          ),
+        expected,
+        { timeout: 30_000 },
+      ),
+      "wait for expected browser event",
+      35_000,
     );
   } catch (error) {
     const events = await evaluateRenderer(
@@ -1679,15 +1685,22 @@ async function evaluateRenderer(
   argument,
   label = "browser renderer evaluation",
 ) {
+  return withWallClockTimeout(
+    page.evaluate(pageFunction, argument),
+    label,
+    rendererCallTimeoutMs,
+  );
+}
+
+async function withWallClockTimeout(promise, label, timeoutMs) {
   let timeout;
   try {
     return await Promise.race([
-      page.evaluate(pageFunction, argument),
+      promise,
       new Promise((_, reject) => {
         timeout = setTimeout(
-          () =>
-            reject(new Error(`${label} exceeded ${rendererCallTimeoutMs}ms`)),
-          rendererCallTimeoutMs,
+          () => reject(new Error(`${label} exceeded ${timeoutMs}ms`)),
+          timeoutMs,
         );
       }),
     ]);

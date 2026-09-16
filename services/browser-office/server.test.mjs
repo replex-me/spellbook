@@ -24,6 +24,7 @@ test("browser Office routes preserve isolation, asset identity and encodings", (
   assert.ok(routes.has("/runtime/browser-candidate.js"));
   assert.ok(routes.has("/harness/opfs-journal.mjs"));
   assert.ok(routes.has("/harness/save-transaction.mjs"));
+  assert.ok(routes.has("/harness/product-persistence.mjs"));
   assert.ok(routes.has("/harness/runtime-admission.js"));
   assert.ok(routes.has("/harness/mutation-contract.generated.js"));
   assert.ok(routes.has("/harness/operations.js"));
@@ -40,6 +41,21 @@ test("browser Office routes preserve isolation, asset identity and encodings", (
     routes.get("/runtime/zeta.js").headers["Cache-Control"],
     "public, max-age=31536000, immutable",
   );
+});
+
+test("every static harness import in the workspace entrypoint is served", () => {
+  const routes = buildRoutes();
+  const entrypoint = readFileSync(
+    new URL("./harness/app.js", import.meta.url),
+    "utf8",
+  );
+  const importedPaths = [
+    ...entrypoint.matchAll(/from\s+["'](\/harness\/[^"']+)["']/gu),
+    ...entrypoint.matchAll(/import\s+["'](\/harness\/[^"']+)["']/gu),
+  ].map((match) => match[1]);
+  assert.ok(importedPaths.length > 0);
+  for (const importedPath of importedPaths)
+    assert.ok(routes.has(importedPath), `${importedPath} has no server route`);
 });
 
 test("candidate verification routes raw artifacts and an in-memory identity", () => {
