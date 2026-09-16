@@ -1,11 +1,56 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 89db785d..453b5dc9 100644
+index 89db785d..027f1db0 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
-@@ -1675,3 +1675,71 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1601,3 +1601,2 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+     bool bOriginalMoveProtect = false;
+-    sal_Int32 nOriginalNavigationOrder = 0;
+     OUString aOriginalName;
+@@ -1613,5 +1612,2 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+     xProperties->getPropertyValue("MoveProtect") >>= bOriginalMoveProtect;
+-    xProperties->getPropertyValue("NavigationOrder") >>= nOriginalNavigationOrder;
+-    const sal_Int32 nChangedNavigationOrder
+-        = nOriginalNavigationOrder == 0 && xShapes->getCount() > 1 ? 1 : 0;
+ 
+@@ -1625,3 +1621,2 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+     xProperties->setPropertyValue("MoveProtect", uno::Any(true));
+-    xProperties->setPropertyValue("NavigationOrder", uno::Any(nChangedNavigationOrder));
+     pDrawDocument->EndUndo();
+@@ -1631,4 +1626,3 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+                                 const OUString& rDescription, bool bDecorative,
+-                                sal_Int32 nMargin, bool bShadow, bool bMoveProtect,
+-                                sal_Int32 nNavigationOrder) {
++                                sal_Int32 nMargin, bool bShadow, bool bMoveProtect) {
+         OUString aActualName;
+@@ -1640,3 +1634,2 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+         bool bActualMoveProtect = false;
+-        sal_Int32 nActualNavigationOrder = 0;
+         xProperties->getPropertyValue("Name") >>= aActualName;
+@@ -1648,3 +1641,2 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+         xProperties->getPropertyValue("MoveProtect") >>= bActualMoveProtect;
+-        xProperties->getPropertyValue("NavigationOrder") >>= nActualNavigationOrder;
+         CPPUNIT_ASSERT_EQUAL(rName, aActualName);
+@@ -1656,6 +1648,5 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+         CPPUNIT_ASSERT_EQUAL(bMoveProtect, bActualMoveProtect);
+-        CPPUNIT_ASSERT_EQUAL(nNavigationOrder, nActualNavigationOrder);
+     };
      assertProperties("Browser shape", "Browser title", "Browser description", true,
 -                     420, true, true, nChangedNavigationOrder);
-+                     420, true, true, -1);
++                     420, true, true);
+     pUndoManager->Undo();
+@@ -1663,6 +1654,6 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+                      bOriginalDecorative, nOriginalMargin, bOriginalShadow,
+-                     bOriginalMoveProtect, nOriginalNavigationOrder);
++                     bOriginalMoveProtect);
+     pUndoManager->Redo();
+     assertProperties("Browser shape", "Browser title", "Browser description", true,
+-                     420, true, true, nChangedNavigationOrder);
++                     420, true, true);
+ 
+@@ -1675,3 +1666,71 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+     assertProperties("Browser shape", "Browser title", "Browser description", true,
+-                     420, true, true, nChangedNavigationOrder);
++                     420, true, true);
 +}
 +
 +CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookPptxReadingOrderUsesShapeTreeOrder)
