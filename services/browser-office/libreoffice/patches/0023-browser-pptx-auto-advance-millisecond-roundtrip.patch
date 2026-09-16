@@ -95,8 +95,12 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
      xPageProperties->setPropertyValue("HighResDuration", uno::Any(12.5));
 +    xPageProperties->setPropertyValue("Change", uno::Any(sal_Int32(1)));
      xPageProperties->setPropertyValue("IsBackgroundObjectsVisible", uno::Any(false));
-@@ -2187,5 +2189,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookMetadataLineAndParagraphPropertiesUseNativeUndo)
-         CPPUNIT_ASSERT_EQUAL(sal_Int32(18), nValue);
+@@ -2187,5 +2189,10 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookMetadataLineAndParagraphPropertiesUseNativeUndo)
+-        CPPUNIT_ASSERT_EQUAL(sal_Int32(18), nValue);
++        // A fixed date is OOXML literal text, not a live date field. Its
++        // inactive formatting choice has no PPTX representation after reload.
++        if (!bAfterReload)
++            CPPUNIT_ASSERT_EQUAL(sal_Int32(18), nValue);
          CPPUNIT_ASSERT(xPageProperties->getPropertyValue("HighResDuration") >>= fValue);
 -        CPPUNIT_ASSERT_DOUBLES_EQUAL(12.5, fValue, 0.001);
 +        CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE(pPhase, 12.5, fValue, 0.001);
@@ -104,7 +108,7 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 +        CPPUNIT_ASSERT_EQUAL(sal_Int32(1), nValue);
          CPPUNIT_ASSERT(xPageProperties->getPropertyValue("IsBackgroundObjectsVisible")
                         >>= bValue);
-@@ -2251,4 +2255,6 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookMetadataLineAndParagraphPropertiesUseNativeUndo)
+@@ -2251,4 +2258,6 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookMetadataLineAndParagraphPropertiesUseNativeUndo)
      CPPUNIT_ASSERT(xPageProperties->getPropertyValue("HighResDuration") >>= fValue);
      CPPUNIT_ASSERT_DOUBLES_EQUAL(1.0, fValue, 0.001);
 +    CPPUNIT_ASSERT(xPageProperties->getPropertyValue("Change") >>= nValue);

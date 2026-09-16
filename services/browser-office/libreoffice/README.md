@@ -12,7 +12,7 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
-The cumulative `browser-undo-v27` source series ports generic document behavior:
+The cumulative `browser-undo-v28` source series ports generic document behavior:
 table structure, formatting and Undo; page and object identity; master-safe
 layout support; sparse-master insertion; object-creation Undo; text-layout
 invalidation; slide names and text shadows; object locks; object interactions;
@@ -41,8 +41,14 @@ The `browser-undo-v25` build failed on fixed slide-date visibility in the same
 round-trip test. Source inspection found the fixed-date placeholder import path
 does not restore page metadata. Patch `0022` restores it, matching the server
 engine's fixed-date rule. Patch `0023` preserves automatic slide timing in
-milliseconds even when no visual transition effect is selected. The
-`browser-undo-v27` source series applies cleanly but has not passed native tests.
+milliseconds even when no visual transition effect is selected.
+The `browser-undo-v27` source series compiled, then failed one native
+round-trip assertion: a fixed-date placeholder returned the default inactive
+`DateTimeFormat` after PPTX reload. OOXML stores a fixed date as literal text,
+without a live-date format field. `browser-undo-v28` keeps the edit and Undo
+assertion for that property, but treats only the fixed text and visibility as
+portable after reload. The revised source series still requires a native test
+pass; it is not promoted.
 The browser-native adapter now accepts the complete
 97-operation typed mutation contract and persists both its commands and direct
 human edits as native PPTX snapshots. The cumulative patch also preserves

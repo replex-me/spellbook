@@ -76,7 +76,11 @@ table and shape line properties consume `PolyPolygonBezierCoords`. The
 `browser-undo-v25` compiled but failed on fixed slide-date visibility during
 the same native round-trip test. The `browser-undo-v27` source series restores
 the fixed-date page metadata and ports the same millisecond timing rule as the
-server engine. It applies cleanly but has not passed native tests.
+server engine. It compiled but then failed on an invalid PPTX round-trip test
+expectation: fixed dates are literal text and do not serialize an inactive
+live-date format choice. The `browser-undo-v28` source series keeps the native
+Undo check for that choice while checking only portable fixed-date properties
+after reload. It has not passed native tests.
 The current local browser editor passed real open/edit/save/download and
 compact-screen canvas/access tests, but the older standalone conformance
 runtime aborts during its third document reopen. Neither current source
