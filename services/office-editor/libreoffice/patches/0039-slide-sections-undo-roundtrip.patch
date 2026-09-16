@@ -23,8 +23,8 @@ index d53272556..9c4dd5287 100644
 +    CPPUNIT_ASSERT(pImpressDocument);
 +    SdDrawDocument* pDoc = pImpressDocument->GetDoc();
 +    pDoc->EnableUndo(false);
-+    pDoc->DuplicatePage(0);
-+    pDoc->DuplicatePage(1);
++    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
++    dispatchCommand(mxComponent, u".uno:DuplicatePage"_ustr, {});
 +    pDoc->EnableUndo(true);
 +    CPPUNIT_ASSERT_EQUAL(sal_uInt16(3), pDoc->GetSdPageCount(PageKind::Standard));
 +
