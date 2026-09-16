@@ -127,6 +127,19 @@ test("PowerPoint 작업대와 AI 패널은 좁은 화면에서도 같은 도구 
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".native-chat")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "AI와 편집" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(page.getByTitle("PPT 편집기")).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({
+    path: path.join(screenshotDir, "design-system-workspace-mobile-canvas.png"),
+    fullPage: true,
+  });
+
+  await page.getByRole("button", { name: "AI와 편집" }).click();
   await expect(page.locator(".native-chat")).toHaveCSS("width", "390px");
   await expectNoHorizontalOverflow(page);
   await page.screenshot({
@@ -135,7 +148,7 @@ test("PowerPoint 작업대와 AI 패널은 좁은 화면에서도 같은 도구 
   });
 
   await page.getByRole("button", { name: "AI 대화 접기" }).click();
-  await expect(page.locator(".native-chat")).toBeHidden();
+  await expect(page.locator(".native-chat")).toHaveCount(0);
   await expect(page.getByTitle("PPT 편집기")).toBeVisible();
   await page.getByRole("button", { name: "AI와 편집" }).click();
   await expect(page.locator(".native-chat")).toBeVisible();
