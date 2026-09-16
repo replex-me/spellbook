@@ -58,18 +58,17 @@ These facts explain what has been built. They do not claim that the final
 runtime, full remaining feature breadth, deployment or public user workflow has
 passed.
 
-The 2026-09-16 Collabora `r17` candidate compiled but failed two of 131 native
-tests: media playback Undo did not restore a field absent from the original
-`MediaItem` update mask, and paragraph-margin Undo did not restore the observed
-UNO value. The `undo-v27` source series addresses both and adds a visible
-line-style round-trip check; its native candidate build is still running. The
-first browser native candidate failed seven of 18 focused tests. Patch 0018
-corrected a C++ test compile error in the next candidate, which then compiled
-but failed four focused tests: twip-quantized character spacing, a collision
-with a default named line resource, PPTX slide-size master-unit rounding, and
-media playback Undo not restoring an unauthored field. The cumulative
-`browser-undo-v23` source series applies cleanly and addresses those four
-failures; it has not yet passed native tests. The current local browser editor
-passed real open/edit/save/download and compact-screen canvas/access tests,
-but the older standalone conformance runtime aborts during its third document
-reopen. Neither candidate has deployment or final user-workflow proof.
+The 2026-09-16 Collabora `r19` candidate compiled and ran 131 native tests;
+one failed on fixed slide-date visibility. Source inspection identified a
+fixed-date placeholder import path that does not restore page metadata; the
+`undo-v28` source series corrects that path and applies cleanly to the pinned
+source, but has not passed native tests. The
+browser `browser-undo-v23` candidate compiled but failed two focused tests:
+character spacing differed by one 1/100 mm unit across its UNO/Undo path, and
+the test attempted to clear `LineDashName` with an invalid empty name. The
+`browser-undo-v24` source series applies cleanly with a bounded spacing
+assertion and corrected line-style test setup; it has not passed native tests.
+The current local browser editor passed real open/edit/save/download and
+compact-screen canvas/access tests, but the older standalone conformance
+runtime aborts during its third document reopen. Neither current source
+candidate has deployment or final user-workflow proof.

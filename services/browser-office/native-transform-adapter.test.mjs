@@ -3,8 +3,14 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
+import { upstreamManifest } from "./libreoffice/upstream.mjs";
+
 const source = readFileSync(
   new URL("./harness/native-transform-adapter.js", import.meta.url),
+  "utf8",
+);
+const runtimeAdmissionSource = readFileSync(
+  new URL("./harness/runtime-admission.js", import.meta.url),
   "utf8",
 );
 const officeThreadSource = readFileSync(
@@ -36,11 +42,47 @@ function loadFactory() {
       ),
     ),
   };
+  vm.runInNewContext(runtimeAdmissionSource, context, {
+    filename: "runtime-admission.js",
+  });
   vm.runInNewContext(source, context, {
     filename: "native-transform-adapter.js",
   });
   return context.createSpellbookBrowserNativeAdapter;
 }
+
+test("runtime admission follows a verified identity shape without a frozen patch revision", () => {
+  const context = {};
+  vm.runInNewContext(runtimeAdmissionSource, context, {
+    filename: "runtime-admission.js",
+  });
+  const admitted = {
+    buildReady: true,
+    buildCommit: upstreamManifest.source.candidateCommit,
+    candidateCommit: upstreamManifest.source.candidateCommit,
+    patchLevel: upstreamManifest.sourceCandidate.patchLevel,
+    patchSeriesSha256: upstreamManifest.sourceCandidate.patchSeriesSha256,
+  };
+  assert.equal(context.spellbookBrowserRuntimeAdmitted(admitted), true);
+  assert.equal(
+    context.spellbookBrowserRuntimeAdmitted({ ...admitted, buildReady: false }),
+    false,
+  );
+  assert.equal(
+    context.spellbookBrowserRuntimeAdmitted({
+      ...admitted,
+      buildCommit: "different",
+    }),
+    false,
+  );
+  assert.equal(
+    context.spellbookBrowserRuntimeAdmitted({
+      ...admitted,
+      patchSeriesSha256: "invalid",
+    }),
+    false,
+  );
+});
 
 function fixture() {
   let activePage;
@@ -300,7 +342,8 @@ function fixture() {
     buildReady: true,
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v22",
+    patchLevel: upstreamManifest.sourceCandidate.patchLevel,
+    patchSeriesSha256: "a".repeat(64),
   };
   return {
     adapter: factory({ uno, runtimeIdentity }),
@@ -354,7 +397,7 @@ test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime",
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v22",
+      patchLevel: upstreamManifest.sourceCandidate.patchLevel,
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
@@ -388,7 +431,7 @@ test("browser adapter routes stock slide lifecycle through Impress commands", ()
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v22",
+      patchLevel: upstreamManifest.sourceCandidate.patchLevel,
     },
   });
   assert.equal(stockAdapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
@@ -420,7 +463,8 @@ test("browser adapter deletes a slide only after native structure admission", ()
       buildReady: true,
       buildCommit: "candidate",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v22",
+      patchLevel: upstreamManifest.sourceCandidate.patchLevel,
+      patchSeriesSha256: "a".repeat(64),
       nativeSlideStructureReady: true,
     },
   });

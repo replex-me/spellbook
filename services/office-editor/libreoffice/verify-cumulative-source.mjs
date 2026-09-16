@@ -30,7 +30,9 @@ export function cumulativeUiTestErrors(source) {
       source,
     )
   )
-    errors.push("derived drawing pointer is compared without an SdrObject cast");
+    errors.push(
+      "derived drawing pointer is compared without an SdrObject cast",
+    );
 
   return errors;
 }

@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createBrowserRuntimeReceipt } from "./write-build-receipt.mjs";
+import { computePatchSeriesSha256, upstreamManifest } from "./upstream.mjs";
 
 test("browser runtime receipt binds every artifact to source and toolchain identity", async () => {
   const root = await mkdtemp(
@@ -30,7 +31,14 @@ test("browser runtime receipt binds every artifact to source and toolchain ident
       platform: "test-platform",
     });
     assert.equal(receipt.status, "built_unverified");
-    assert.equal(receipt.libreOffice.patchLevel, "browser-undo-v22");
+    assert.equal(
+      receipt.libreOffice.patchLevel,
+      upstreamManifest.sourceCandidate.patchLevel,
+    );
+    assert.equal(
+      receipt.libreOffice.patchSeriesSha256,
+      computePatchSeriesSha256(),
+    );
     assert.equal(receipt.spellbookSourceRevision, "a".repeat(40));
     assert.deepEqual(
       receipt.artifacts.map(({ name }) => name),

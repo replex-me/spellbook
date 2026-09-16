@@ -38,6 +38,13 @@ export function buildRoutes(
       ),
     ],
     [
+      "/harness/runtime-admission.js",
+      route(
+        path.join(root, "harness/runtime-admission.js"),
+        "text/javascript; charset=utf-8",
+      ),
+    ],
+    [
       "/harness/opfs-journal.mjs",
       route(
         path.join(root, "opfs-journal.mjs"),

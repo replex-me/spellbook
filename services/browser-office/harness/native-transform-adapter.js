@@ -71,9 +71,7 @@
     if (!uno?.Any || !uno?.type || !uno?.idl)
       throw new Error("Browser UNO bridge is unavailable.");
     const admitted =
-      runtimeIdentity?.buildReady === true &&
-      runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v22";
+      global.spellbookBrowserRuntimeAdmitted?.(runtimeIdentity) === true;
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(

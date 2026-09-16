@@ -574,9 +574,7 @@ describe.skipIf(!enabled)("durable native editor orchestration", () => {
   it("keeps a no-op browser save on the same evidence revision", async () => {
     const f = await fixture();
     const unchangedBytes = Buffer.from("PK-test-pptx");
-    const digest = createHash("sha256")
-      .update(unchangedBytes)
-      .digest("hex");
+    const digest = createHash("sha256").update(unchangedBytes).digest("hex");
     await db().begin(async (sql) => {
       await sql`
         update spellbook_versions set document_sha256=${digest}

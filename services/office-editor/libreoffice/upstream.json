@@ -9,11 +9,11 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v27",
+  "patchLevel": "undo-v28",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "11982ab93ba003f23634f92ecf2acecd0ddacb88edf357c0210e7d39342c987b",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v27-r19-candidate",
+  "patchSeriesSha256": "5ee248f1f18c176e9829a020f693024faed9769c3ce92e3c38413371191eb59e",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v28-r20-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -62,7 +62,8 @@
     "patches/0045-native-authoring-state-regressions.patch",
     "patches/0046-visible-line-style-roundtrip.patch",
     "patches/0047-native-undo-state-snapshots.patch",
-    "patches/0048-pptx-marker-geometry-regression.patch"
+    "patches/0048-pptx-marker-geometry-regression.patch",
+    "patches/0049-pptx-fixed-date-placeholder-roundtrip.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",

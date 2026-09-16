@@ -82,16 +82,15 @@ try {
     captureSlideIndexes: [],
   });
   const patchedBrowserRuntime = await evaluateRenderer(page, () => {
-    const runtime = globalThis.spellbookBrowserRuntimeCandidate;
     return (
-      runtime?.buildReady === true &&
-      runtime.buildCommit === runtime.candidateCommit &&
-      runtime.patchLevel === "browser-undo-v22"
+      globalThis.spellbookBrowserRuntimeAdmitted?.(
+        globalThis.spellbookBrowserRuntimeCandidate,
+      ) === true
     );
   });
   if (enduranceCycles > 0 && !patchedBrowserRuntime)
     throw new Error(
-      "Browser product endurance requires an admitted browser-undo-v22 candidate runtime.",
+      "Browser product endurance requires an admitted candidate runtime.",
     );
   const target = before.slides
     .flatMap((slide) => slide.elements)
@@ -685,9 +684,7 @@ async function verifyProductSlideStructure(browser, origin) {
     const nativeSlideStructureReady = await evaluateRenderer(page, () => {
       const runtime = globalThis.spellbookBrowserRuntimeCandidate;
       return (
-        runtime?.buildReady === true &&
-        runtime.buildCommit === runtime.candidateCommit &&
-        runtime.patchLevel === "browser-undo-v22" &&
+        globalThis.spellbookBrowserRuntimeAdmitted?.(runtime) === true &&
         runtime.nativeSlideStructureReady === true
       );
     });

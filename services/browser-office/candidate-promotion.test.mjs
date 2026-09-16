@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createCandidatePromotion } from "./candidate-promotion.mjs";
+import { upstreamManifest } from "./libreoffice/upstream.mjs";
 
 const operations = [
   "replace_text",
@@ -48,7 +49,7 @@ const admittedRuntime = {
   receiptSha256,
   receipt: {
     spellbookSourceRevision: "c".repeat(40),
-    libreOffice: { patchLevel: "browser-undo-v22" },
+    libreOffice: { patchLevel: upstreamManifest.sourceCandidate.patchLevel },
     toolchain: { emsdk: { version: "3.1.65" } },
     artifacts: [{ name: "soffice.wasm", sha256: "d".repeat(64) }],
   },

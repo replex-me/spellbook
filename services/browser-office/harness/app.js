@@ -4,6 +4,7 @@ import {
   openBrowserDocumentJournal,
   requestPersistentBrowserStorage,
 } from "/harness/opfs-journal.mjs";
+import "/harness/runtime-admission.js";
 
 const body = document.body;
 const canvas = document.querySelector("#qtcanvas");
@@ -125,11 +126,10 @@ function clearNativeProductHistoryAvailability() {
 }
 
 function patchedBrowserRuntimeAdmitted() {
-  const runtime = globalThis.spellbookBrowserRuntimeCandidate;
   return (
-    runtime?.buildReady === true &&
-    runtime.buildCommit === runtime.candidateCommit &&
-    runtime.patchLevel === "browser-undo-v22"
+    globalThis.spellbookBrowserRuntimeAdmitted?.(
+      globalThis.spellbookBrowserRuntimeCandidate,
+    ) === true
   );
 }
 
@@ -2277,6 +2277,7 @@ globalThis.Module = {
   uno_scripts: [
     new URL("zeta.js", runtimeBase).href,
     new URL("browser-candidate.js", runtimeBase).href,
+    new URL("/harness/runtime-admission.js", location.href).href,
     new URL("/harness/mutation-contract.generated.js", location.href).href,
     new URL("/harness/operations.js", location.href).href,
     new URL("/harness/native-transform-adapter.js", location.href).href,

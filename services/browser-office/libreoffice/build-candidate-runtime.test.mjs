@@ -39,14 +39,8 @@ test("runs the declared focused native regressions instead of the unrelated UI s
     script,
     /instdir\/share\/liblangtag\/language-subtag-registry\.xml/u,
   );
-  assert.match(
-    script,
-    /get sourceCandidate\.focusedCppunitTests/u,
-  );
-  assert.match(
-    script,
-    /CPPUNIT_TEST_NAME="\$\{BASH_REMATCH\[2\]\}"/u,
-  );
+  assert.match(script, /get sourceCandidate\.focusedCppunitTests/u);
+  assert.match(script, /CPPUNIT_TEST_NAME="\$\{BASH_REMATCH\[2\]\}"/u);
   assert.doesNotMatch(
     script,
     /done < <\(node "\$upstream_reader" get sourceCandidate\.requiredCppunitTargets\)/u,
