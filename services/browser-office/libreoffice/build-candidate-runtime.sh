@@ -133,13 +133,14 @@ if [[ ! -f "$native_marker" ]]; then
         --with-theme=colibre
     )
   fi
-  while IFS= read -r cppunit_target; do
-    if [[ ! "$cppunit_target" =~ ^[A-Za-z0-9_]+$ ]]; then
-      echo "Invalid CppUnit target: $cppunit_target" >&2
+  while IFS= read -r cppunit_test; do
+    if [[ ! "$cppunit_test" =~ ^(CppunitTest_[A-Za-z0-9_]+):(test[A-Za-z0-9_]+)$ ]]; then
+      echo "Invalid focused CppUnit test: $cppunit_test" >&2
       exit 1
     fi
-    make -C "$native_build" "$cppunit_target"
-  done < <(node "$upstream_reader" get sourceCandidate.requiredCppunitTargets)
+    make -C "$native_build" "${BASH_REMATCH[1]}" \
+      CPPUNIT_TEST_NAME="${BASH_REMATCH[2]}"
+  done < <(node "$upstream_reader" get sourceCandidate.focusedCppunitTests)
   printf 'passed\n' > "$native_marker"
 fi
 

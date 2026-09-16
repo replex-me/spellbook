@@ -97,6 +97,24 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "reading-order-native-undo",
     "semantic-asset-native-regression-tests",
   ]);
+  assert.deepEqual(manifest.sourceCandidate.requiredCppunitTargets, [
+    "CppunitTest_sd_uiimpress",
+    "CppunitTest_sd_misc_tests",
+  ]);
+  assert.equal(manifest.sourceCandidate.focusedCppunitTests.length, 17);
+  assert.equal(
+    new Set(manifest.sourceCandidate.focusedCppunitTests).size,
+    manifest.sourceCandidate.focusedCppunitTests.length,
+  );
+  for (const testSpec of manifest.sourceCandidate.focusedCppunitTests) {
+    assert.match(
+      testSpec,
+      /^CppunitTest_[A-Za-z0-9_]+:testSpellbook[A-Za-z0-9_]+$/u,
+    );
+    const [target, testName] = testSpec.split(":");
+    assert.ok(manifest.sourceCandidate.requiredCppunitTargets.includes(target));
+    assert.match(browserPatchSeries, new RegExp(`\\b${testName}\\b`, "u"));
+  }
   assert.match(manifest.toolchain.emscripten.commit, /^[0-9a-f]{40}$/u);
   assert.match(manifest.toolchain.emsdk.commit, /^[0-9a-f]{40}$/u);
   assert.equal(manifest.toolchain.emsdk.version, "3.1.65");

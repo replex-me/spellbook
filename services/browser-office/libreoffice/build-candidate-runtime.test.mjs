@@ -26,3 +26,18 @@ test("fetches only the exact shallow translations gitlink for the Korean WASM bu
     /translations_commit=.*rev-parse HEAD[\s\S]*translations_gitlink=.*rev-parse HEAD:translations[\s\S]*translations_commit.*translations_gitlink/u,
   );
 });
+
+test("runs the declared focused native regressions instead of the unrelated UI suite", () => {
+  assert.match(
+    script,
+    /get sourceCandidate\.focusedCppunitTests/u,
+  );
+  assert.match(
+    script,
+    /CPPUNIT_TEST_NAME="\$\{BASH_REMATCH\[2\]\}"/u,
+  );
+  assert.doesNotMatch(
+    script,
+    /done < <\(node "\$upstream_reader" get sourceCandidate\.requiredCppunitTargets\)/u,
+  );
+});

@@ -77,6 +77,25 @@
     "requiredCppunitTargets": [
       "CppunitTest_sd_uiimpress",
       "CppunitTest_sd_misc_tests"
+    ],
+    "focusedCppunitTests": [
+      "CppunitTest_sd_misc_tests:testSpellbookTableCellPropertyUnoUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookPptxObjectLocksRoundTrip",
+      "CppunitTest_sd_uiimpress:testSpellbookObjectInteractionUnoUndoRoundTrip",
+      "CppunitTest_sd_uiimpress:testSpellbookContentPlaceholderStaysEditable",
+      "CppunitTest_sd_uiimpress:testSpellbookPlaceholderKeepsLocalInteraction",
+      "CppunitTest_sd_uiimpress:testSpellbookPagePropertiesUseNativeUnoUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookShapePropertiesUseNativeUnoUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookUnoTextWritesUseNativeUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookShapeAppearancePropertiesUseNativeUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookTextAppearancePropertiesUseNativeUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookMetadataLineAndParagraphPropertiesUseNativeUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookDocumentDesignAndAnimationCommands",
+      "CppunitTest_sd_uiimpress:testSpellbookAssetReplacementUsesOneNativeUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookMediaReplacementUsesOneNativeUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookMediaPlaybackUsesNativeUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookSemanticDiagramUsesOneNativeUndo",
+      "CppunitTest_sd_uiimpress:testSpellbookPptxTextShadowRoundTrip"
     ]
   },
   "toolchain": {
