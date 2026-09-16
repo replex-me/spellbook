@@ -24,6 +24,13 @@ temporary_root=""
 verification_root=""
 
 cleanup() {
+  if [[ -n "${verification_source:-}" && -d "${verification_source:-}" \
+        && -n "${provided_source:-}" ]]; then
+    if git -C "$provided_source" rev-parse --git-dir >/dev/null 2>&1; then
+      git -C "$provided_source" worktree remove --force "$verification_source" \
+        >/dev/null 2>&1 || true
+    fi
+  fi
   if [[ -n "$temporary_root" && "$temporary_root" == /tmp/spellbook-collabora-patch.* ]]; then
     rm -rf -- "$temporary_root"
   fi
@@ -58,7 +65,17 @@ fi
 # and does not prove the release ordering itself.
 verification_root="$(mktemp -d /tmp/spellbook-collabora-patch-series.XXXXXX)"
 verification_source="$verification_root/source"
-git clone --quiet --shared --no-checkout "$provided_source" "$verification_source"
+git -C "$provided_source" worktree add --quiet --detach --no-checkout \
+  "$verification_source" "$source_commit"
+patched_source_paths=()
+while IFS= read -r source_path; do
+  patched_source_paths+=("engine/$source_path")
+done < <(
+  sed -n 's|^+++ b/||p' "${patch_paths[@]}" | sort --unique
+)
+git -C "$verification_source" sparse-checkout init --no-cone
+git -C "$verification_source" sparse-checkout set --no-cone -- \
+  "${patched_source_paths[@]}"
 git -C "$verification_source" checkout --quiet --detach "$source_commit"
 for patch_path in "${patch_paths[@]}"; do
   git -C "$verification_source" apply --check --whitespace=error-all \
@@ -67,6 +84,8 @@ for patch_path in "${patch_paths[@]}"; do
     --directory=engine "$patch_path"
 done
 git -C "$verification_source" diff --check
+node "$spellbook_repo_root/services/office-editor/libreoffice/verify-cumulative-source.mjs" \
+  --source "$verification_source/engine"
 expected_uno_count="$(node "$upstream_reader" get impressUiUnoCommandCount)"
 if command -v rg >/dev/null 2>&1; then
   uno_command_inventory=(

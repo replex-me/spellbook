@@ -109,7 +109,7 @@ index df15e4493..5151aaa22 100644
 +
 +    CPPUNIT_ASSERT_EQUAL(nInitialCount + 1, pPage->GetObjCount());
 +    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount() - nUndoBefore);
-+    CPPUNIT_ASSERT_EQUAL(pOriginal.get(), pPage->GetObj(nInitialCount));
++    CPPUNIT_ASSERT_EQUAL(static_cast<SdrObject*>(pOriginal.get()), pPage->GetObj(nInitialCount));
 +    CPPUNIT_ASSERT_EQUAL(u"Original asset"_ustr, pOriginal->GetName());
 +    CPPUNIT_ASSERT_EQUAL(u"Accessible asset"_ustr, pOriginal->GetTitle());
 +    CPPUNIT_ASSERT_EQUAL(Graphic(aNewBitmap).GetChecksum(),
@@ -117,14 +117,14 @@ index df15e4493..5151aaa22 100644
 +
 +    pUndoManager->Undo();
 +    CPPUNIT_ASSERT_EQUAL(nInitialCount + 2, pPage->GetObjCount());
-+    CPPUNIT_ASSERT_EQUAL(pOriginal.get(), pPage->GetObj(nInitialCount));
-+    CPPUNIT_ASSERT_EQUAL(pInserted.get(), pPage->GetObj(nInitialCount + 1));
++    CPPUNIT_ASSERT_EQUAL(static_cast<SdrObject*>(pOriginal.get()), pPage->GetObj(nInitialCount));
++    CPPUNIT_ASSERT_EQUAL(static_cast<SdrObject*>(pInserted.get()), pPage->GetObj(nInitialCount + 1));
 +    CPPUNIT_ASSERT_EQUAL(Graphic(aOldBitmap).GetChecksum(),
 +                         pOriginal->GetGraphic().GetChecksum());
 +
 +    pUndoManager->Redo();
 +    CPPUNIT_ASSERT_EQUAL(nInitialCount + 1, pPage->GetObjCount());
-+    CPPUNIT_ASSERT_EQUAL(pOriginal.get(), pPage->GetObj(nInitialCount));
++    CPPUNIT_ASSERT_EQUAL(static_cast<SdrObject*>(pOriginal.get()), pPage->GetObj(nInitialCount));
 +    CPPUNIT_ASSERT_EQUAL(Graphic(aNewBitmap).GetChecksum(),
 +                         pOriginal->GetGraphic().GetChecksum());
 +}
@@ -174,7 +174,7 @@ index df15e4493..5151aaa22 100644
 +
 +    CPPUNIT_ASSERT_EQUAL(nInitialCount + 1, pPage->GetObjCount());
 +    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount() - nUndoBefore);
-+    CPPUNIT_ASSERT_EQUAL(pOriginal.get(), pPage->GetObj(nInitialCount));
++    CPPUNIT_ASSERT_EQUAL(static_cast<SdrObject*>(pOriginal.get()), pPage->GetObj(nInitialCount));
 +    CPPUNIT_ASSERT_EQUAL(u"Original media"_ustr, pOriginal->GetName());
 +    CPPUNIT_ASSERT_EQUAL(u"Accessible media"_ustr, pOriginal->GetTitle());
 +    CPPUNIT_ASSERT_EQUAL(aOriginalRectangle, pOriginal->GetLogicRect());
@@ -187,15 +187,15 @@ index df15e4493..5151aaa22 100644
 +
 +    pUndoManager->Undo();
 +    CPPUNIT_ASSERT_EQUAL(nInitialCount + 2, pPage->GetObjCount());
-+    CPPUNIT_ASSERT_EQUAL(pOriginal.get(), pPage->GetObj(nInitialCount));
-+    CPPUNIT_ASSERT_EQUAL(pInserted.get(), pPage->GetObj(nInitialCount + 1));
++    CPPUNIT_ASSERT_EQUAL(static_cast<SdrObject*>(pOriginal.get()), pPage->GetObj(nInitialCount));
++    CPPUNIT_ASSERT_EQUAL(static_cast<SdrObject*>(pInserted.get()), pPage->GetObj(nInitialCount + 1));
 +    CPPUNIT_ASSERT_EQUAL(aOriginalRectangle, pOriginal->GetLogicRect());
 +    CPPUNIT_ASSERT_EQUAL(u"file:///old.wav"_ustr,
 +                         pOriginal->getMediaProperties().getURL());
 +
 +    pUndoManager->Redo();
 +    CPPUNIT_ASSERT_EQUAL(nInitialCount + 1, pPage->GetObjCount());
-+    CPPUNIT_ASSERT_EQUAL(pOriginal.get(), pPage->GetObj(nInitialCount));
++    CPPUNIT_ASSERT_EQUAL(static_cast<SdrObject*>(pOriginal.get()), pPage->GetObj(nInitialCount));
 +    CPPUNIT_ASSERT_EQUAL(aOriginalRectangle, pOriginal->GetLogicRect());
 +    CPPUNIT_ASSERT_EQUAL(u"file:///new.wav"_ustr,
 +                         pOriginal->getMediaProperties().getURL());

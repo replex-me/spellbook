@@ -10,10 +10,11 @@ index d53272556..9c4dd5287 100644
  #include <anminfo.hxx>
  #include <CustomAnimationEffect.hxx>
  #include <DrawDocShell.hxx>
-@@ -888,6 +889,61 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureMetadataLineAndParagr
-         ]
-     }
+@@ -975,5 +976,60 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureMetadataLineAndParagr
+     xShapeProperties.set(pObject->getUnoShape(), uno::UNO_QUERY_THROW);
+     assertChanged();
  }
+-
 +
 +CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureSectionsUndoRedoRoundtrip)
 +{
@@ -69,9 +70,8 @@ index d53272556..9c4dd5287 100644
 +    pDoc = pImpressDocument->GetDoc();
 +    assertSections();
 +}
- )json"_ustr;
-     auto* pUndoManager = pImpressDocument->GetDocShell()->GetUndoManager();
-     const size_t nUndoBefore = pUndoManager->GetUndoActionCount();
++
+ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testTypedTextMetricsRecenterLiveExportAfterUndoRedo)
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
 index 7e2c7509e..9de193a51 100644
 --- a/sd/source/ui/view/drviews2.cxx

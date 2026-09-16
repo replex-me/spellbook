@@ -2,6 +2,14 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 index 426360b2e..d53272556 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
+@@ -122,6 +122,7 @@
+ #include <vcl/bitmap.hxx>
+ #include <vcl/transfer.hxx>
+ #include <unomodel.hxx>
++#include <unokywds.hxx>
+ #include <osl/thread.hxx>
+ #include <tools/json_writer.hxx>
+ #include <slideshow.hxx>
 @@ -802,6 +802,179 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureTextPropertiesUndoRed
      CPPUNIT_ASSERT(aChanged == *pTextObject->GetOutlinerParaObject());
  }
