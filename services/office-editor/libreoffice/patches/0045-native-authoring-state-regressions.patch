@@ -1,0 +1,51 @@
+diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
+index 20fb12f0a..043652164 100644
+--- a/sd/source/ui/view/drviews2.cxx
++++ b/sd/source/ui/view/drviews2.cxx
+@@ -3016,9 +3016,9 @@ void handleSetParagraphProperties(SlideCommandContext& rCtx, const std::string&
+         if (it == aAlignmentValues.end())
+             throw lang::IllegalArgumentException(u"Paragraph alignment is invalid"_ustr,
+                                                   nullptr, 0);
+-        aValues.emplace_back(u"ParaLastLineAdjust"_ustr, cpo::uno::Any(it->second));
+         aValues.emplace_back(u"ParaAdjust"_ustr,
+                              cpo::uno::Any(style::ParagraphAdjust_BLOCK));
++        aValues.emplace_back(u"ParaLastLineAdjust"_ustr, cpo::uno::Any(it->second));
+     }
+     for (const auto& [pName, pProperty, nMinimum] : {
+              std::tuple("LeftMargin", u"ParaLeftMargin", sal_Int32(-100000)),
+diff --git a/svx/source/svdraw/svdomedia.cxx b/svx/source/svdraw/svdomedia.cxx
+index d570d5a5f..487233086 100644
+--- a/svx/source/svdraw/svdomedia.cxx
++++ b/svx/source/svdraw/svdomedia.cxx
+@@ -375,7 +375,12 @@ static OUString ret;
+ void SdrMediaObj::setMediaProperties( const ::avmedia::MediaItem& rState )
+ {
+     mediaPropertiesChanged( rState );
++    // A media window can report its transient playback defaults while the
++    // command is being sent back to it. The document's authored properties
++    // must remain the requested values, even when that player is not ready.
++    const avmedia::MediaItem aAuthoredState(getMediaProperties());
+     static_cast< sdr::contact::ViewContactOfSdrMediaObj& >( GetViewContact() ).executeMediaItem( getMediaProperties() );
++    mediaPropertiesChanged(aAuthoredState);
+ }
+
+ const ::avmedia::MediaItem& SdrMediaObj::getMediaProperties() const
+diff --git a/svx/source/svdraw/svdpage.cxx b/svx/source/svdraw/svdpage.cxx
+index 2d9e7a1d5..516709fa4 100644
+--- a/svx/source/svdraw/svdpage.cxx
++++ b/svx/source/svdraw/svdpage.cxx
+@@ -927,10 +927,10 @@ void SdrObjList::SetObjectNavigationPosition (
+         return;
+
+     mxNavigationOrder->erase(iObject);
+-    sal_uInt32 nInsertPosition (nNewPosition);
+-    // Adapt insertion position for the just erased object.
+-    if (nNewPosition >= nOldPosition)
+-        nInsertPosition -= 1;
++    // nNewPosition is the desired final index. Erasing the old entry has
++    // already shifted later entries left; subtracting once more would leave
++    // a forward move one position short (including a move from 0 to 1).
++    const sal_uInt32 nInsertPosition(nNewPosition);
+     if (nInsertPosition >= mxNavigationOrder->size())
+         mxNavigationOrder->push_back(aReference);
+     else

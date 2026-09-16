@@ -9,11 +9,11 @@
     "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v19",
+    "patchLevel": "browser-undo-v20",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "2c53415cc6b834950b332b3f224061326e180bf936ccd9914739fd55b181c398",
+    "patchSeriesSha256": "3080c9102322250b357c1ff5fe98129ba59e885f1856918150a54322a79f9267",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
@@ -27,7 +27,8 @@
       "libreoffice/patches/0010-browser-advanced-shape-connector-undo.patch",
       "libreoffice/patches/0011-browser-semantic-assets-accessibility.patch",
       "libreoffice/patches/0012-browser-headless-native-tests.patch",
-      "libreoffice/patches/0013-browser-pptx-reading-order.patch"
+      "libreoffice/patches/0013-browser-pptx-reading-order.patch",
+      "libreoffice/patches/0014-browser-pptx-accessibility-metadata.patch"
     ],
     "invariants": [
       "table-cell-native-undo",
@@ -75,6 +76,7 @@
       "media-playback-native-undo",
       "reading-order-native-undo",
       "pptx-reading-order-shape-tree-undo",
+      "pptx-shape-accessibility-metadata-roundtrip",
       "semantic-asset-native-regression-tests"
     ],
     "requiredCppunitTargets": [
