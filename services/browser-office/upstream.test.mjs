@@ -23,6 +23,13 @@ const candidateBuilder = readFileSync(
   new URL("./libreoffice/build-candidate-runtime.sh", import.meta.url),
   "utf8",
 );
+const genericPptxInvariantsPatch = readFileSync(
+  new URL(
+    "./libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
   assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v11");
@@ -146,6 +153,11 @@ test("browser Office runtime is reproducible and remains unapproved by default",
   assert.match(candidateBuilder, /native-tests\.\$expected_patch_sha/u);
   assert.match(candidateBuilder, /wasm\.\$expected_patch_sha/u);
   assert.match(candidateBuilder, /use a new build root/u);
+  assert.match(genericPptxInvariantsPatch, /CharShadowed/u);
+  assert.doesNotMatch(
+    genericPptxInvariantsPatch,
+    /WriteTextGlowEffect|rRunInput\.xShapePropSet/u,
+  );
 });
 
 test("browser LibreOffice patches name their complete source surface", () => {
