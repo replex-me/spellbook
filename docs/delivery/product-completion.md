@@ -59,21 +59,24 @@ runtime, full remaining feature breadth, deployment or public user workflow has
 passed.
 
 The 2026-09-16 Collabora `r19` candidate compiled and ran 131 native tests;
-one failed on fixed slide-date visibility. Source inspection identified a
-fixed-date placeholder import path that does not restore page metadata; the
-`undo-v28` source series corrects that path and applies cleanly to the pinned
-source, but its build is still running. Static inspection also found that the
-same test reads a PPTX-reopened line marker as `PointSequence`, while the
-native property returns `PolyPolygonBezierCoords`. The `undo-v29` series fixes
-that assertion and applies cleanly; it has not passed native tests. The
-browser `browser-undo-v23` candidate compiled but failed two focused tests:
+one failed on fixed slide-date visibility. The `undo-v28` candidate corrected
+that import path, compiled and ran the same 131 tests, then failed because a
+12.5-second slide duration returned as the 1-second default after PPTX reload.
+The exporter skipped timing-only slides and used whole-second timing where it
+did emit `advTm`. The `undo-v30` source series includes the fixed-date repair,
+the actual reopened-marker UNO type, and a shared millisecond-accurate slide
+timing import/export rule. It applies cleanly to the pinned source but has not
+passed native tests. The browser `browser-undo-v23` candidate compiled but
+failed two focused tests:
 character spacing differed by one 1/100 mm unit across its UNO/Undo path, and
 the test attempted to clear `LineDashName` with an invalid empty name. The
 `browser-undo-v24` compiled and advanced through those tests, then failed one
 marker test because its setup supplied `PointSequence` where the native marker
 table and shape line properties consume `PolyPolygonBezierCoords`. The
-`browser-undo-v25` series corrects setup and reload assertions and applies
-cleanly, but has not passed native tests.
+`browser-undo-v25` compiled but failed on fixed slide-date visibility during
+the same native round-trip test. The `browser-undo-v27` source series restores
+the fixed-date page metadata and ports the same millisecond timing rule as the
+server engine. It applies cleanly but has not passed native tests.
 The current local browser editor passed real open/edit/save/download and
 compact-screen canvas/access tests, but the older standalone conformance
 runtime aborts during its third document reopen. Neither current source

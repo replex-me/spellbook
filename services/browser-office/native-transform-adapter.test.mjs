@@ -642,6 +642,7 @@ test("browser adapter writes bounded slide metadata and paragraph formatting", (
     DateTimeText: "2026-09-16",
     DateTimeFormat: 3,
     HighResDuration: 12.5,
+    Change: 1,
     IsBackgroundObjectsVisible: false,
   });
   assert.deepEqual(runtime.secondShape.paragraphs[1].properties, {
@@ -679,6 +680,45 @@ test("browser adapter rejects unsupported PPTX last-line alignment before writin
   );
   assert.deepEqual(runtime.writes, []);
   assert.deepEqual(runtime.mutations, []);
+});
+
+test("browser adapter preserves an explicit manual slide advance choice", () => {
+  const runtime = fixture();
+  runtime.adapter.transformSlides({
+    commands: [
+      { JumpToSlide: 1 },
+      {
+        SetSlideProperties: {
+          AutoAdvance: false,
+        },
+      },
+    ],
+    ...runtime,
+  });
+  assert.deepEqual(runtime.secondPage.properties, {
+    Change: 0,
+  });
+});
+
+test("browser adapter rejects a manual slide with an unrepresentable duration", () => {
+  const runtime = fixture();
+  assert.throws(
+    () =>
+      runtime.adapter.transformSlides({
+        commands: [
+          { JumpToSlide: 1 },
+          {
+            SetSlideProperties: {
+              HighResDuration: 8.25,
+              AutoAdvance: false,
+            },
+          },
+        ],
+        ...runtime,
+      }),
+    /requires automatic advance/u,
+  );
+  assert.deepEqual(runtime.secondPage.properties, {});
 });
 
 test("browser adapter source uses the generated browser UNO enum shape", () => {

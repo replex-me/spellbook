@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.1.0",
-  "enginePatchLevel": 29,
+  "enginePatchLevel": 30,
   "executionOrder": [
     "table-structure",
     "layout-master",
@@ -168,7 +168,7 @@
       "proves": ["single_undo", "exact_undo_redo", "save_reopen"]
     },
     "metadata-line-paragraph-history": {
-      "minEnginePatch": 19,
+      "minEnginePatch": 30,
       "target": "CppunitTest_sd_uiimpress",
       "name": "testDocumentStructureMetadataLineAndParagraphUndoRedo",
       "proves": [

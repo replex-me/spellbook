@@ -915,7 +915,7 @@
         "execution": "native_transform",
         "identityEffect": "preserve",
         "availability": "runtime_validation_required",
-        "minEnginePatch": 19
+        "minEnginePatch": 30
       },
       "set_animation_timing": {
         "family": "animation",
@@ -1511,7 +1511,12 @@
           "duration": {
             "type": ["number", "null"],
             "minimum": 0,
-            "maximum": 86400
+            "maximum": 86400,
+            "description": "Auto-advance interval in seconds; setting it also enables automatic advance."
+          },
+          "autoAdvance": {
+            "type": ["boolean", "null"],
+            "description": "Whether the slide advances automatically. A false value cannot be combined with duration."
           },
           "backgroundObjectsVisible": { "type": ["boolean", "null"] }
         },
@@ -1524,6 +1529,7 @@
           "dateTimeText",
           "dateTimeFormat",
           "duration",
+          "autoAdvance",
           "backgroundObjectsVisible"
         ]
       },
@@ -2508,7 +2514,7 @@
     },
     {
       "op": "set_slide_metadata",
-      "minimumVerifiedPatch": 19,
+      "minimumVerifiedPatch": 30,
       "reason": "Slide metadata changes require the declared native snapshot and PPTX round-trip patch."
     },
     {

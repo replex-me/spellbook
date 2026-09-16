@@ -396,6 +396,7 @@
             DateTimeText: "string",
             DateTimeFormat: "long",
             HighResDuration: "double",
+            AutoAdvance: "boolean",
             IsBackgroundObjectsVisible: "boolean",
           };
           const names = assertExactKeys(
@@ -405,6 +406,13 @@
           );
           if (!names.length)
             throw new Error("Browser slide properties are empty.");
+          if (
+            Object.hasOwn(properties, "HighResDuration") &&
+            properties.AutoAdvance === false
+          )
+            throw new Error(
+              "Browser slide duration requires automatic advance.",
+            );
           const writes = names.map((name) => {
             const typeName = propertyTypes[name];
             const propertyValue = properties[name];
@@ -419,13 +427,25 @@
               throw new Error(
                 `Browser slide property ${name} has the wrong type.`,
               );
-            return propertyWrite(
-              state.currentPage,
-              name,
-              typeName,
-              propertyValue,
-            );
+            if (
+              name === "HighResDuration" &&
+              (propertyValue < 0 || propertyValue > 86400)
+            )
+              throw new Error("Browser slide duration is out of range.");
+            return name === "AutoAdvance"
+              ? propertyWrite(
+                  state.currentPage,
+                  "Change",
+                  "long",
+                  propertyValue ? 1 : 0,
+                )
+              : propertyWrite(state.currentPage, name, typeName, propertyValue);
           });
+          if (
+            Object.hasOwn(properties, "HighResDuration") &&
+            !Object.hasOwn(properties, "AutoAdvance")
+          )
+            writes.push(propertyWrite(state.currentPage, "Change", "long", 1));
           return {
             mutates: true,
             apply: () => writes.forEach((write) => write()),

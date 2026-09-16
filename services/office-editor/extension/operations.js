@@ -1814,6 +1814,7 @@ function spellbookDocumentOperation(request) {
         timing: {
           duration: safeProperty(page, "Duration"),
           highResolutionDuration: safeProperty(page, "HighResDuration"),
+          autoAdvance: safeProperty(page, "Change") === 1,
         },
         animations: animationDetails(page, shapeReferences, slideIndex),
         footer: {
@@ -2654,6 +2655,7 @@ function spellbookDocumentOperation(request) {
           dateTimeText: ["DateTimeText", "string"],
           dateTimeFormat: ["DateTimeFormat", "integer"],
           duration: ["HighResDuration", "number"],
+          autoAdvance: ["AutoAdvance", "boolean"],
           backgroundObjectsVisible: ["IsBackgroundObjectsVisible", "boolean"],
         };
         if (
@@ -2689,6 +2691,16 @@ function spellbookDocumentOperation(request) {
           slideMetadataProperties[propertyName] = value;
           slideMetadataExpected[name] = value;
         }
+        if (
+          Object.hasOwn(slideMetadataExpected, "duration") &&
+          !Object.hasOwn(slideMetadataExpected, "autoAdvance")
+        )
+          slideMetadataExpected.autoAdvance = true;
+        if (
+          Object.hasOwn(slideMetadataExpected, "duration") &&
+          slideMetadataExpected.autoAdvance === false
+        )
+          throw new Error("invalid_slide_metadata");
         if (!Object.keys(slideMetadataProperties).length)
           throw new Error("no_slide_metadata_supplied");
       }
@@ -2769,9 +2781,11 @@ function spellbookDocumentOperation(request) {
       const slideMetadataValue = (slide, name) =>
         name === "duration"
           ? slide?.timing?.highResolutionDuration
-          : name === "backgroundObjectsVisible"
-            ? slide?.backgroundObjectsVisible
-            : slide?.footer?.[name];
+          : name === "autoAdvance"
+            ? slide?.timing?.autoAdvance
+            : name === "backgroundObjectsVisible"
+              ? slide?.backgroundObjectsVisible
+              : slide?.footer?.[name];
       if (
         command.op === "set_slide_metadata" &&
         Object.entries(slideMetadataExpected).every(
@@ -8048,6 +8062,7 @@ function spellbookDocumentOperation(request) {
           dateTimeText: "DateTimeText",
           dateTimeFormat: "DateTimeFormat",
           duration: "HighResDuration",
+          autoAdvance: "AutoAdvance",
           backgroundObjectsVisible: "IsBackgroundObjectsVisible",
         };
         const properties = Object.fromEntries(
@@ -8059,14 +8074,17 @@ function spellbookDocumentOperation(request) {
           { JumpToSlide: slideIndex },
           { SetSlideProperties: properties },
         );
-        setFinalExpectedState(expectedMetadata, {
-          reference,
-          metadata: Object.fromEntries(
-            Object.entries(command.slideMetadata).filter(
-              ([, value]) => value !== null && value !== undefined,
-            ),
+        const metadata = Object.fromEntries(
+          Object.entries(command.slideMetadata).filter(
+            ([, value]) => value !== null && value !== undefined,
           ),
-        });
+        );
+        if (
+          Object.hasOwn(metadata, "duration") &&
+          !Object.hasOwn(metadata, "autoAdvance")
+        )
+          metadata.autoAdvance = true;
+        setFinalExpectedState(expectedMetadata, { reference, metadata });
       }
     }
     try {
@@ -8113,9 +8131,11 @@ function spellbookDocumentOperation(request) {
             const observed =
               name === "duration"
                 ? slide?.timing?.highResolutionDuration
-                : name === "backgroundObjectsVisible"
-                  ? slide?.backgroundObjectsVisible
-                  : slide?.footer?.[name];
+                : name === "autoAdvance"
+                  ? slide?.timing?.autoAdvance
+                  : name === "backgroundObjectsVisible"
+                    ? slide?.backgroundObjectsVisible
+                    : slide?.footer?.[name];
             return observed === value;
           });
         },

@@ -9,11 +9,11 @@
     "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v25",
+    "patchLevel": "browser-undo-v27",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "600cb7217b03f1aa836166bc2cd7bda7bd2abf43a18c9236de7d87cf51878e47",
+    "patchSeriesSha256": "edb4e8d8d431694b9b70de97d34a6031effbf660de3de53009605219373ccd3e",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
@@ -35,7 +35,9 @@
       "libreoffice/patches/0018-browser-paragraph-adjust-test-type.patch",
       "libreoffice/patches/0019-browser-native-roundtrip-state.patch",
       "libreoffice/patches/0020-browser-native-assertions-and-line-reset.patch",
-      "libreoffice/patches/0021-browser-marker-geometry-test-contract.patch"
+      "libreoffice/patches/0021-browser-marker-geometry-test-contract.patch",
+      "libreoffice/patches/0022-browser-pptx-fixed-date-placeholder-roundtrip.patch",
+      "libreoffice/patches/0023-browser-pptx-auto-advance-millisecond-roundtrip.patch"
     ],
     "invariants": [
       "table-cell-native-undo",
