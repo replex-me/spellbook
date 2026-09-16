@@ -37,3 +37,7 @@ diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 +    assertProperties("after redo", "Browser shape", "Browser title", "Browser description", true,
                       420, true, true);
  
+@@ -1683,2 +1683,2 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUndo)
+-    assertProperties("Browser shape", "Browser title", "Browser description", true,
++    assertProperties("after reload", "Browser shape", "Browser title", "Browser description", true,
+                      420, true, true);
