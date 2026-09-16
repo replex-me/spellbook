@@ -22,7 +22,7 @@ index dcde2060a..485ae7372 100644
 +    auto pDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
 +    CPPUNIT_ASSERT(pDocument);
 +    SdDrawDocument* pDrawDocument = pDocument->GetDoc();
-+    auto* pUndoManager = pDrawDocument->GetUndoManager();
++    auto* pUndoManager = pDrawDocument->GetDocSh()->GetUndoManager();
 +    uno::Reference<drawing::XDrawPagesSupplier> xPagesSupplier(mxComponent,
 +                                                               uno::UNO_QUERY_THROW);
 +    uno::Reference<drawing::XDrawPage> xPage(
@@ -50,8 +50,8 @@ index dcde2060a..485ae7372 100644
 +        uno::UNO_QUERY_THROW);
 +    const uno::Sequence<OUString> aDashNames = xDashTable->getElementNames();
 +    const uno::Sequence<OUString> aMarkerNames = xMarkerTable->getElementNames();
-+    CPPUNIT_ASSERT_MESSAGE("No line dash definitions", !aDashNames.empty());
-+    CPPUNIT_ASSERT_MESSAGE("No line marker definitions", !aMarkerNames.empty());
++    CPPUNIT_ASSERT_MESSAGE("No line dash definitions", aDashNames.getLength() > 0);
++    CPPUNIT_ASSERT_MESSAGE("No line marker definitions", aMarkerNames.getLength() > 0);
 +    const OUString aDashName = aDashNames[0];
 +    const OUString aStartName = aMarkerNames[0];
 +    const OUString aEndName = aMarkerNames[aMarkerNames.getLength() > 1 ? 1 : 0];

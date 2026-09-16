@@ -12,7 +12,7 @@ index 63df25c34c..c714e41be8 100644
 +    auto pDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
 +    CPPUNIT_ASSERT(pDocument);
 +    SdDrawDocument* pDrawDocument = pDocument->GetDoc();
-+    auto* pUndoManager = pDrawDocument->GetUndoManager();
++    auto* pUndoManager = pDrawDocument->GetDocSh()->GetUndoManager();
 +    uno::Reference<drawing::XDrawPagesSupplier> xPagesSupplier(mxComponent,
 +                                                               uno::UNO_QUERY_THROW);
 +    uno::Reference<drawing::XDrawPage> xPage(

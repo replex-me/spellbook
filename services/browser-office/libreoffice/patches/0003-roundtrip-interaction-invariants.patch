@@ -831,7 +831,7 @@ index 0a232067ccda46020fe9e1d78fac1bf4ef57ace6..14f0377da4ec0231b64217037f628222
 +    SdAnimationInfo* pInfo = SdDrawDocument::GetShapeUserData(*pObject, true);
 +    pInfo->mbDimHide = true;
 +    pInfo->mnVerb = 42;
-+    auto* pUndoManager = pDrawDocument->GetUndoManager();
++    auto* pUndoManager = pDrawDocument->GetDocSh()->GetUndoManager();
 +    pUndoManager->Clear();
 +
 +    uno::Reference<beans::XPropertySet> xProperties(xShape, uno::UNO_QUERY_THROW);

@@ -9,11 +9,11 @@
     "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v12",
+    "patchLevel": "browser-undo-v13",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "564f275523361458105b2f1c4da427112ed14751340bc6dfd32175ce81e73dbf",
+    "patchSeriesSha256": "e0b2ef632831320e47d40762ec530bbca400123f6fb7829cb74dcb798776b9c6",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",

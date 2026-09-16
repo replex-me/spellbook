@@ -73,7 +73,7 @@ shadows, locks, crop and click interactions. It preflights the complete command
 list, follows slide navigation without mutating during validation, groups the
 write into one native Undo context and rolls the context back on failure. These
 operations are advertised to the shared program only when the pinned runtime's
-build commit equals the candidate source commit, the exact `browser-undo-v12`
+build commit equals the candidate source commit, the exact `browser-undo-v13`
 patch level is present and `buildReady` has been promoted. The current stock
 binary therefore advertises none of these candidate-only operations.
 

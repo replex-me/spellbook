@@ -12,7 +12,7 @@ index 14f0377..d48f09d 100644
 +    auto pDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
 +    CPPUNIT_ASSERT(pDocument);
 +    SdDrawDocument* pDrawDocument = pDocument->GetDoc();
-+    auto* pUndoManager = pDrawDocument->GetUndoManager();
++    auto* pUndoManager = pDrawDocument->GetDocSh()->GetUndoManager();
 +    uno::Reference<drawing::XDrawPagesSupplier> xPagesSupplier(mxComponent,
 +                                                               uno::UNO_QUERY_THROW);
 +    uno::Reference<drawing::XDrawPage> xPage(
@@ -106,7 +106,7 @@ index 14f0377..d48f09d 100644
 +    xShape->setPosition(awt::Point(1000, 1000));
 +    xShape->setSize(awt::Size(5000, 3000));
 +    xShapes->add(xShape);
-+    auto* pUndoManager = pDrawDocument->GetUndoManager();
++    auto* pUndoManager = pDrawDocument->GetDocSh()->GetUndoManager();
 +    pUndoManager->Clear();
 +    uno::Reference<beans::XPropertySet> xProperties(xShape, uno::UNO_QUERY_THROW);
 +    sal_Int32 nOriginalMargin = 0;

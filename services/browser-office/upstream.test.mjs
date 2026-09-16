@@ -37,7 +37,7 @@ const browserPatchSeries = manifest.sourceCandidate.patches
   .join("\n");
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v12");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v13");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
@@ -229,5 +229,25 @@ test("browser presentation undo uses the pinned document undo ABI", () => {
   assert.match(
     genericPptxInvariantsPatch,
     /GetSdrUndoFactory\(\)\.CreateUndoNewObject/u,
+  );
+  assert.match(
+    browserPatchSeries,
+    /pDrawDocument->GetDocSh\(\)->GetUndoManager\(\)/u,
+  );
+  assert.doesNotMatch(
+    browserPatchSeries,
+    /pDrawDocument->GetUndoManager\(\)/u,
+  );
+  assert.doesNotMatch(
+    browserPatchSeries,
+    /a(?:Dash|Marker)Names\.empty\(\)/u,
+  );
+  assert.doesNotMatch(
+    browserPatchSeries,
+    /Graphic\(a(?:Old|New)Bitmap\)/u,
+  );
+  assert.match(
+    browserPatchSeries,
+    /static_cast<SdrObject\*>\(pOriginal\.get\(\)\)/u,
   );
 });
