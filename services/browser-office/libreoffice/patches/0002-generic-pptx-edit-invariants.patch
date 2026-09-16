@@ -1,5 +1,5 @@
 diff --git a/include/svx/svdotable.hxx b/include/svx/svdotable.hxx
-index 4a25ae970d7e8669a55817ee31d9177db79bafd9..7edb5c267d30a8b129ac65e158c70b1b4965e3eb 100644
+index 4a25ae970..7edb5c267 100644
 --- a/include/svx/svdotable.hxx
 +++ b/include/svx/svdotable.hxx
 @@ -258,6 +258,10 @@ public:
@@ -13,20 +13,85 @@ index 4a25ae970d7e8669a55817ee31d9177db79bafd9..7edb5c267d30a8b129ac65e158c70b1b
      virtual void onEditOutlinerStatusEvent( EditStatus* pEditStatus ) override;
  
      virtual void dumpAsXml(xmlTextWriterPtr pWriter) const override;
+diff --git a/oox/inc/drawingml/textcharacterproperties.hxx b/oox/inc/drawingml/textcharacterproperties.hxx
+index 40842585d..8a94dd4a8 100644
+--- a/oox/inc/drawingml/textcharacterproperties.hxx
++++ b/oox/inc/drawingml/textcharacterproperties.hxx
+@@ -28,10 +28,13 @@
+ #include <drawingml/fillproperties.hxx>
+ #include <drawingml/lineproperties.hxx>
+ 
++#include <memory>
++
+ namespace oox { class PropertySet; }
+ 
+ namespace oox::drawingml {
+ 
++struct EffectProperties;
+ 
+ struct TextCharacterProperties
+ {
+@@ -65,6 +68,7 @@ struct TextCharacterProperties
+     bool mbHasVisualRunProperties;
+ 
+     std::vector<css::beans::PropertyValue> maTextEffectsProperties;
++    std::shared_ptr<EffectProperties> mpEffectPropertiesPtr;
+ 
+     /** Overwrites all members that are explicitly set in rSourceProps. */
+     void                assignUsed( const TextCharacterProperties& rSourceProps );
+@@ -84,7 +88,9 @@ struct TextCharacterProperties
+                             PropertySet& rPropSet,
+                             const ::oox::core::XmlFilterBase& rFilter ) const;
+ 
+-    TextCharacterProperties() : mbHasVisualRunProperties(false) {}
++    EffectProperties& getEffectProperties() const;
++
++    TextCharacterProperties();
+ };
+ 
+ 
 diff --git a/oox/source/drawingml/textcharacterproperties.cxx b/oox/source/drawingml/textcharacterproperties.cxx
-index d123f360720804e17b220924e96743d5eda60fd0..e890e55334c5eeb2930680d26123c7a207fb699b 100644
+index d123f3607..a6555d761 100644
 --- a/oox/source/drawingml/textcharacterproperties.cxx
 +++ b/oox/source/drawingml/textcharacterproperties.cxx
-@@ -34,6 +34,8 @@
+@@ -34,6 +34,10 @@
  #include <oox/token/properties.hxx>
  #include <oox/token/tokens.hxx>
  
++#include "effectproperties.hxx"
++
 +#include <algorithm>
 +
  using ::oox::core::XmlFilterBase;
  using namespace ::com::sun::star;
  using namespace ::com::sun::star::uno;
-@@ -182,6 +184,12 @@ void TextCharacterProperties::pushToPropMap( PropertyMap& rPropMap, const XmlFil
+@@ -41,6 +45,17 @@ using namespace ::com::sun::star::beans;
+ 
+ namespace oox::drawingml {
+ 
++TextCharacterProperties::TextCharacterProperties()
++    : mbHasVisualRunProperties(false)
++    , mpEffectPropertiesPtr(std::make_shared<EffectProperties>())
++{
++}
++
++EffectProperties& TextCharacterProperties::getEffectProperties() const
++{
++    return *mpEffectPropertiesPtr;
++}
++
+ void TextCharacterProperties::assignUsed( const TextCharacterProperties& rSourceProps )
+ {
+     // overwrite all properties existing in rSourceProps
+@@ -69,6 +84,7 @@ void TextCharacterProperties::assignUsed( const TextCharacterProperties& rSource
+     assignIfUsed( moTextOutlineProperties, rSourceProps.moTextOutlineProperties);
+ 
+     maTextEffectsProperties = rSourceProps.maTextEffectsProperties;
++    mpEffectPropertiesPtr->assignUsed(*rSourceProps.mpEffectPropertiesPtr);
+     maFillProperties.assignUsed( rSourceProps.maFillProperties );
+ }
+ 
+@@ -182,6 +198,12 @@ void TextCharacterProperties::pushToPropMap( PropertyMap& rPropMap, const XmlFil
      rPropMap.setProperty( PROP_CharUnderline, GetFontUnderline( moUnderline.value_or( XML_none ) ));
      rPropMap.setProperty( PROP_CharStrikeout, GetFontStrikeout( moStrikeout.value_or( XML_noStrike ) ));
      rPropMap.setProperty( PROP_CharCaseMap, GetCaseMap( moCaseMap.value_or( XML_none ) ));
@@ -39,8 +104,30 @@ index d123f360720804e17b220924e96743d5eda60fd0..e890e55334c5eeb2930680d26123c7a2
  
      if( moBaseline.has_value() ) {
          rPropMap.setProperty( PROP_CharEscapement, sal_Int16(moBaseline.value_or( 0 ) / 1000));
+diff --git a/oox/source/drawingml/textcharacterpropertiescontext.cxx b/oox/source/drawingml/textcharacterpropertiescontext.cxx
+index fb4390e4c..d211bd67c 100644
+--- a/oox/source/drawingml/textcharacterpropertiescontext.cxx
++++ b/oox/source/drawingml/textcharacterpropertiescontext.cxx
+@@ -21,6 +21,7 @@
+ 
+ #include <oox/helper/attributelist.hxx>
+ #include <drawingml/colorchoicecontext.hxx>
++#include <drawingml/effectpropertiescontext.hxx>
+ #include <drawingml/linepropertiescontext.hxx>
+ #include <drawingml/misccontexts.hxx>
+ #include <drawingml/textcharacterproperties.hxx>
+@@ -128,7 +129,8 @@ ContextHandlerRef TextCharacterPropertiesContext::onCreateContext( sal_Int32 aEl
+         // EG_EffectProperties
+         case A_TOKEN( effectDag ):  // CT_EffectContainer 5.1.10.25
+         case A_TOKEN( effectLst ):  // CT_EffectList 5.1.10.26
+-        break;
++            return new EffectPropertiesContext(
++                *this, mrTextCharacterProperties.getEffectProperties());
+         case A_TOKEN( highlight ):  // CT_Color
+             return new ColorContext(*this, mrTextCharacterProperties.maHighlightColor);
+         case W_TOKEN( highlight ):
 diff --git a/oox/source/export/drawingml.cxx b/oox/source/export/drawingml.cxx
-index a3e5356c0523ff573451af38bfe831ffc0599f3f..5db27f8b5c84cb2df606acae1dedd0e4c82052d2 100644
+index a3e5356c0..5db27f8b5 100644
 --- a/oox/source/export/drawingml.cxx
 +++ b/oox/source/export/drawingml.cxx
 @@ -2726,6 +2726,31 @@ void DrawingML::WriteRunProperties( const Reference< XPropertySet >& rRun, bool
@@ -76,7 +163,7 @@ index a3e5356c0523ff573451af38bfe831ffc0599f3f..5db27f8b5c84cb2df606acae1dedd0e4
      // so make sure this code is only run when exporting to pptx, just in case
      if (GetDocumentType() == DOCUMENT_PPTX)
 diff --git a/sd/inc/drawdoc.hxx b/sd/inc/drawdoc.hxx
-index dd6b81647ef728d412f5e9d7649c77d4a9ccff2b..5f0d7c55cb6cecfbc8f23869ca4d506133b7013b 100644
+index dd6b81647..5f0d7c55c 100644
 --- a/sd/inc/drawdoc.hxx
 +++ b/sd/inc/drawdoc.hxx
 @@ -535,7 +535,8 @@ public:
@@ -90,7 +177,7 @@ index dd6b81647ef728d412f5e9d7649c77d4a9ccff2b..5f0d7c55cb6cecfbc8f23869ca4d5061
      /** This method acts as a simplified front end for the more complex
          <member>DuplicatePage()</member> method.
 diff --git a/sd/inc/sdpage.hxx b/sd/inc/sdpage.hxx
-index ef127ea60769c8523762f456ce37a13e984f8684..6e5eee6890ec24b3d976b70671d3e6077d1fc6e7 100644
+index ef127ea60..6e5eee689 100644
 --- a/sd/inc/sdpage.hxx
 +++ b/sd/inc/sdpage.hxx
 @@ -187,7 +187,8 @@ public:
@@ -104,7 +191,7 @@ index ef127ea60769c8523762f456ce37a13e984f8684..6e5eee6890ec24b3d976b70671d3e607
      void            CreateTitleAndLayout(bool bInit=false, bool bCreate=false);
      SdrObject*      InsertAutoLayoutShape(SdrObject* pObj, PresObjKind eObjKind, bool bVertical, const ::tools::Rectangle& rRect, bool bInit);
 diff --git a/sd/source/core/drawdoc2.cxx b/sd/source/core/drawdoc2.cxx
-index 8f7c9f3328e68709c414bfc2d5273fd8f6c50c18..a7f20cc4c4e960dd15ba089faedaf76d6c85ca6b 100644
+index 8f7c9f332..a7f20cc4c 100644
 --- a/sd/source/core/drawdoc2.cxx
 +++ b/sd/source/core/drawdoc2.cxx
 @@ -1136,7 +1136,8 @@ sal_uInt16 SdDrawDocument::CreatePage (
@@ -128,7 +215,7 @@ index 8f7c9f3328e68709c414bfc2d5273fd8f6c50c18..a7f20cc4c4e960dd15ba089faedaf76d
  
      // transition settings of current page
 diff --git a/sd/source/core/sdpage.cxx b/sd/source/core/sdpage.cxx
-index 10b4f34b761f7cd3996f38b6ea7bfc0acd68e22e..7410c81bd8e3130ead636fa90a365094f5379017 100644
+index 10b4f34b7..7410c81bd 100644
 --- a/sd/source/core/sdpage.cxx
 +++ b/sd/source/core/sdpage.cxx
 @@ -1608,7 +1608,7 @@ static void findAutoLayoutShapesImpl( SdPage& rPage, const LayoutDescriptor& rDe
@@ -158,7 +245,7 @@ index 10b4f34b761f7cd3996f38b6ea7bfc0acd68e22e..7410c81bd8e3130ead636fa90a365094
      if((meAutoLayout == AUTOLAYOUT_NONE && maPresentationShapeList.isEmpty()) || mbMaster)
      {
 diff --git a/sd/source/filter/eppt/pptx-epptooxml.cxx b/sd/source/filter/eppt/pptx-epptooxml.cxx
-index 96f135ecf5852f009bb09b0359bd8a19d5bc57e7..c49efe3954b5ed65814bec257c2023eaee2ee1b4 100644
+index 96f135ecf..c49efe395 100644
 --- a/sd/source/filter/eppt/pptx-epptooxml.cxx
 +++ b/sd/source/filter/eppt/pptx-epptooxml.cxx
 @@ -1360,7 +1360,14 @@ void PowerPointExport::ImplWriteSlide(sal_uInt32 nPageNum, sal_uInt32 nMasterNum
@@ -178,7 +265,7 @@ index 96f135ecf5852f009bb09b0359bd8a19d5bc57e7..c49efe3954b5ed65814bec257c2023ea
      // background
      if (bHasBackground)
 diff --git a/sd/source/ui/inc/unmodpg.hxx b/sd/source/ui/inc/unmodpg.hxx
-index 02920c27ab1c48f247068df05f256e9369f9bf53..8beecf217a11bcc3561556f96cd03ca226e4efd2 100644
+index 02920c27a..8beecf217 100644
 --- a/sd/source/ui/inc/unmodpg.hxx
 +++ b/sd/source/ui/inc/unmodpg.hxx
 @@ -40,6 +40,7 @@ class ModifyPageUndoAction final : public SdUndoAction
@@ -200,7 +287,7 @@ index 02920c27ab1c48f247068df05f256e9369f9bf53..8beecf217a11bcc3561556f96cd03ca2
      virtual ~ModifyPageUndoAction() override;
      virtual void Undo() override;
 diff --git a/sd/source/ui/unoidl/unopage.cxx b/sd/source/ui/unoidl/unopage.cxx
-index 1462e08e369e852010171a701910313ef06f6a56..1578ecd9735409bb8e24638f226ffc112621399c 100644
+index 1462e08e3..1578ecd97 100644
 --- a/sd/source/ui/unoidl/unopage.cxx
 +++ b/sd/source/ui/unoidl/unopage.cxx
 @@ -48,6 +48,7 @@
@@ -235,7 +322,7 @@ index 1462e08e369e852010171a701910313ef06f6a56..1578ecd9735409bb8e24638f226ffc11
  
  void SAL_CALL SdDrawPage::remove( const Reference< drawing::XShape >& xShape )
 diff --git a/sd/source/ui/view/unmodpg.cxx b/sd/source/ui/view/unmodpg.cxx
-index 4d9c52b03c5458e4893898f57b40136073747556..95608e8220062327c01dbd1b8654bc459f94be24 100644
+index 4d9c52b03..95608e822 100644
 --- a/sd/source/ui/view/unmodpg.cxx
 +++ b/sd/source/ui/view/unmodpg.cxx
 @@ -49,7 +49,8 @@ ModifyPageUndoAction::ModifyPageUndoAction(
@@ -269,7 +356,7 @@ index 4d9c52b03c5458e4893898f57b40136073747556..95608e8220062327c01dbd1b8654bc45
      if (!mpPage->IsMasterPage())
      {
 diff --git a/svx/source/inc/cell.hxx b/svx/source/inc/cell.hxx
-index b70c683ddde15dca5311685c4b25ad236fc12a2e..57901b1c4e12ce20f1b371d2d88eeef4caf4fcb1 100644
+index b70c683dd..57901b1c4 100644
 --- a/svx/source/inc/cell.hxx
 +++ b/svx/source/inc/cell.hxx
 @@ -95,7 +95,8 @@ public:
@@ -283,7 +370,7 @@ index b70c683ddde15dca5311685c4b25ad236fc12a2e..57901b1c4e12ce20f1b371d2d88eeef4
      // XInterface
      SVX_DLLPRIVATE virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& Type ) override;
 diff --git a/svx/source/svdraw/svdundo.cxx b/svx/source/svdraw/svdundo.cxx
-index 0dcfede6e0cc3dcd6a50582521b0266dd044608b..d425a53e508f0f43bcaae4a55d94b9a3bf2a3494 100644
+index 0dcfede6e..d425a53e5 100644
 --- a/svx/source/svdraw/svdundo.cxx
 +++ b/svx/source/svdraw/svdundo.cxx
 @@ -25,6 +25,7 @@
@@ -315,7 +402,7 @@ index 0dcfede6e0cc3dcd6a50582521b0266dd044608b..d425a53e508f0f43bcaae4a55d94b9a3
  
      pTarget->ActionChanged();
 diff --git a/svx/source/table/cell.cxx b/svx/source/table/cell.cxx
-index 7147bf077a74a5b1108ec9e015773bee3c2294bb..181fd25fa97ab33c8980535dc1828e398cde503c 100644
+index 7147bf077..181fd25fa 100644
 --- a/svx/source/table/cell.cxx
 +++ b/svx/source/table/cell.cxx
 @@ -498,7 +498,7 @@ void Cell::setMerged()
@@ -346,7 +433,7 @@ index 7147bf077a74a5b1108ec9e015773bee3c2294bb..181fd25fa97ab33c8980535dc1828e39
      notifyModified();
  }
 diff --git a/svx/source/table/svdotable.cxx b/svx/source/table/svdotable.cxx
-index 9398a2c9846030c6362601ed667c2b89bb762e0d..8048454c33f3cd21c02bdd45cd9715c7ddec0fbb 100644
+index 9398a2c98..8048454c3 100644
 --- a/svx/source/table/svdotable.cxx
 +++ b/svx/source/table/svdotable.cxx
 @@ -2357,6 +2357,12 @@ void SdrTableObj::RestoreGeoData(const SdrObjGeoData& rGeo)
@@ -382,7 +469,7 @@ index 9398a2c9846030c6362601ed667c2b89bb762e0d..8048454c33f3cd21c02bdd45cd9715c7
  {
      if( mpImpl.is() && mpImpl->mpLayouter )
 diff --git a/svx/source/table/tablecolumn.cxx b/svx/source/table/tablecolumn.cxx
-index efa5f41375fd0ac9c0db0a0bedc3ddb23c596b7e..2f27fb7b466df0f43794a4e0077bfb81a9f69ee4 100644
+index efa5f4137..2f27fb7b4 100644
 --- a/svx/source/table/tablecolumn.cxx
 +++ b/svx/source/table/tablecolumn.cxx
 @@ -218,6 +218,7 @@ void SAL_CALL TableColumn::setFastPropertyValue( sal_Int32 nHandle, const Any& a
@@ -394,7 +481,7 @@ index efa5f41375fd0ac9c0db0a0bedc3ddb23c596b7e..2f27fb7b466df0f43794a4e0077bfb81
  }
  
 diff --git a/svx/source/table/tablemodel.cxx b/svx/source/table/tablemodel.cxx
-index 98215397638715578475e7933099936061b0cf75..b614ec81bdd0d64ee44b18b317324c95599d8c63 100644
+index 982153976..b614ec81b 100644
 --- a/svx/source/table/tablemodel.cxx
 +++ b/svx/source/table/tablemodel.cxx
 @@ -201,71 +201,83 @@ uno::Reference<css::table::XTable> TableModel::getTable()
@@ -694,7 +781,7 @@ index 98215397638715578475e7933099936061b0cf75..b614ec81bdd0d64ee44b18b317324c95
  
  
 diff --git a/svx/source/table/tablerow.cxx b/svx/source/table/tablerow.cxx
-index 4545642e3b25341532e3f8b03f1a316980df4f9e..c6366334193fc8c7895ddeec4fd83b584de1a250 100644
+index 4545642e3..c63663341 100644
 --- a/svx/source/table/tablerow.cxx
 +++ b/svx/source/table/tablerow.cxx
 @@ -289,6 +289,7 @@ void SAL_CALL TableRow::setFastPropertyValue( sal_Int32 nHandle, const Any& aVal
@@ -706,7 +793,7 @@ index 4545642e3b25341532e3f8b03f1a316980df4f9e..c6366334193fc8c7895ddeec4fd83b58
  }
  
 diff --git a/svx/source/table/tableundo.cxx b/svx/source/table/tableundo.cxx
-index e5c3b7243d6590a5fbb1d06f232011cb1b5124c4..8e08cc1f2628548f15b21e8aae86a05295579deb 100644
+index e5c3b7243..8e08cc1f2 100644
 --- a/svx/source/table/tableundo.cxx
 +++ b/svx/source/table/tableundo.cxx
 @@ -388,6 +388,7 @@ void TableColumnUndo::setData( const Data& rData )
@@ -726,7 +813,7 @@ index e5c3b7243d6590a5fbb1d06f232011cb1b5124c4..8e08cc1f2628548f15b21e8aae86a052
  
  
 diff --git a/svx/source/unodraw/unoshtxt.cxx b/svx/source/unodraw/unoshtxt.cxx
-index d3837e187b5da6a035663a16c485508542ee05e7..64da139dbe814a023c052d1e1484816a5f27918e 100644
+index d3837e187..64da139db 100644
 --- a/svx/source/unodraw/unoshtxt.cxx
 +++ b/svx/source/unodraw/unoshtxt.cxx
 @@ -775,16 +775,32 @@ void SvxTextEditSourceImpl::UpdateData()

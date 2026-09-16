@@ -1,11 +1,11 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 2a1913f07..5cda29f26 100644
+index 2a1913f07..b67e2a936 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
 @@ -11,6 +11,8 @@
-
+ 
  #include <LibreOfficeKit/LibreOfficeKitEnums.h>
-
+ 
 +#include <algorithm>
 +
  #include <com/sun/star/beans/XPropertySet.hpp>
@@ -45,7 +45,7 @@ index 2a1913f07..5cda29f26 100644
 +    xProperties->getPropertyValue("NavigationOrder") >>= nOriginalNavigationOrder;
 +    const sal_Int32 nChangedNavigationOrder
 +        = nOriginalNavigationOrder == 0 && xShapes->getCount() > 1 ? 1 : 0;
-
+ 
      pDrawDocument->BegUndo("Browser object properties");
      xProperties->setPropertyValue("Name", uno::Any(OUString("Browser shape")));
 @@ -1613,12 +1623,14 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
@@ -55,7 +55,7 @@ index 2a1913f07..5cda29f26 100644
 +    xProperties->setPropertyValue("NavigationOrder", uno::Any(nChangedNavigationOrder));
      pDrawDocument->EndUndo();
      CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
-
+ 
      auto assertProperties = [&](const OUString& rName, const OUString& rTitle,
                                  const OUString& rDescription, bool bDecorative,
 -                                sal_Int32 nMargin, bool bShadow, bool bMoveProtect) {
@@ -98,7 +98,7 @@ index 2a1913f07..5cda29f26 100644
      assertProperties("Browser shape", "Browser title", "Browser description", true,
 -                     420, true, true);
 +                     420, true, true, nChangedNavigationOrder);
-
+ 
      saveAndReload("Impress Office Open XML");
      xPagesSupplier.set(mxComponent, uno::UNO_QUERY_THROW);
 @@ -1658,7 +1673,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
@@ -108,12 +108,12 @@ index 2a1913f07..5cda29f26 100644
 -                     420, true, true);
 +                     420, true, true, nChangedNavigationOrder);
  }
-
+ 
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookUnoTextWritesUseNativeUndo)
-@@ -2244,6 +2259,273 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookDocumentDesignAndAnimationCom
+@@ -2244,6 +2259,320 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookDocumentDesignAndAnimationCom
      assertTheme();
  }
-
+ 
 +CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookAssetReplacementUsesOneNativeUndo)
 +{
 +    createSdImpressDoc();
@@ -381,6 +381,53 @@ index 2a1913f07..5cda29f26 100644
 +    CPPUNIT_ASSERT(!hasTopLevelText(u"Added top"_ustr));
 +}
 +
++CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookPptxTextShadowRoundTrip)
++{
++    createSdImpressDoc();
++    uno::Reference<drawing::XDrawPagesSupplier> xPagesSupplier(mxComponent,
++                                                               uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XDrawPage> xPage(
++        xPagesSupplier->getDrawPages()->getByIndex(0), uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XShapes> xShapes(xPage, uno::UNO_QUERY_THROW);
++    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent,
++                                                        uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XShape> xShape(
++        xFactory->createInstance("com.sun.star.drawing.TextShape"),
++        uno::UNO_QUERY_THROW);
++    xShape->setPosition(awt::Point(1000, 1000));
++    xShape->setSize(awt::Size(10000, 3000));
++    xShapes->add(xShape);
++
++    uno::Reference<text::XText> xText(xShape, uno::UNO_QUERY_THROW);
++    xText->setString("Shadow text");
++    uno::Reference<text::XTextCursor> xCursor = xText->createTextCursor();
++    xCursor->gotoStart(false);
++    xCursor->gotoEnd(true);
++    uno::Reference<beans::XPropertySet> xCursorProperties(xCursor,
++                                                          uno::UNO_QUERY_THROW);
++    xCursorProperties->setPropertyValue("CharShadowed", uno::Any(true));
++    bool bShadowed = false;
++    CPPUNIT_ASSERT(xCursorProperties->getPropertyValue("CharShadowed") >>= bShadowed);
++    CPPUNIT_ASSERT(bShadowed);
++
++    saveAndReload("Impress Office Open XML");
++    xmlDocUniquePtr pXmlDoc = parseExport("ppt/slides/slide1.xml");
++    assertXPath(pXmlDoc, "//a:outerShdw", 1);
++
++    xPagesSupplier.set(mxComponent, uno::UNO_QUERY_THROW);
++    xPage.set(xPagesSupplier->getDrawPages()->getByIndex(0), uno::UNO_QUERY_THROW);
++    xShapes.set(xPage, uno::UNO_QUERY_THROW);
++    xShape.set(xShapes->getByIndex(xShapes->getCount() - 1), uno::UNO_QUERY_THROW);
++    xText.set(xShape, uno::UNO_QUERY_THROW);
++    xCursor = xText->createTextCursor();
++    xCursor->gotoStart(false);
++    xCursor->gotoEnd(true);
++    xCursorProperties.set(xCursor, uno::UNO_QUERY_THROW);
++    bShadowed = false;
++    CPPUNIT_ASSERT(xCursorProperties->getPropertyValue("CharShadowed") >>= bShadowed);
++    CPPUNIT_ASSERT(bShadowed);
++}
++
  // TODO - Readd when we implement style level fill color and set that for default style
  /*CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testThemeShapeInsert)
  {
@@ -390,14 +437,14 @@ index 353818bc4..28d300d43 100644
 +++ b/sd/source/ui/unoidl/unoobj.cxx
 @@ -20,7 +20,9 @@
  #include <sal/config.h>
-
+ 
  #include <memory>
 +#include <optional>
  #include <set>
 +#include <sstream>
  #include <string_view>
  #include <utility>
-
+ 
 @@ -28,6 +30,10 @@
  #include <com/sun/star/presentation/ClickAction.hpp>
  #include <com/sun/star/beans/PropertyAttribute.hpp>
@@ -815,12 +862,12 @@ index 353818bc4..28d300d43 100644
 +    pOldObject->BroadcastObjectChange();
 +}
  }
-
+ 
  #define IMPRESS_MAP_ENTRIES \
 @@ -486,6 +879,30 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
  {
      SolarMutexGuard aGuard;
-
+ 
 +    SdrObject* pSpellbookObject = mpShape->GetSdrObject();
 +    SdDrawDocument* pSpellbookDocument = mpModel ? mpModel->GetDoc() : nullptr;
 +    if (aPropertyName == u"SpellbookDiagramMutation"_ustr)
@@ -846,10 +893,10 @@ index 353818bc4..28d300d43 100644
 +    }
 +
      const SfxItemPropertyMapEntry* pEntry = mpPropSet->getPropertyMapEntry(aPropertyName);
-
+ 
      if( pEntry )
 @@ -503,7 +920,18 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
-
+ 
                      SdrObjList* pObjList = pObj->getParentSdrObjListFromSdrObject();
                      if( pObjList )
 -                        pObjList->SetObjectNavigationPosition( *pObj, (nNavOrder < 0) ? SAL_MAX_UINT32 : static_cast< sal_uInt32 >( nNavOrder ) );
@@ -867,7 +914,7 @@ index 353818bc4..28d300d43 100644
 +                    }
                      break;
                  }
-
+ 
 @@ -784,6 +1212,17 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
              u"GlowEffectColor"_ustr,
              u"GlowEffectTransparency"_ustr,
@@ -923,12 +970,12 @@ index 353818bc4..28d300d43 100644
 +                *pDocument, *pMediaObject, std::move(*oOldMedia),
 +                pMediaObject->getMediaProperties()));
      }
-
+ 
      if( mpModel )
 @@ -815,6 +1277,14 @@ css::uno::Any SAL_CALL SdXShape::getPropertyValue( const OUString& PropertyName
-
+ 
      uno::Any aRet;
-
+ 
 +    if (PropertyName == u"SpellbookDiagramState"_ustr)
 +    {
 +        const OUString aState = spellbookDiagramState(mpShape->GetSdrObject());
@@ -938,5 +985,5 @@ index 353818bc4..28d300d43 100644
 +    }
 +
      const SfxItemPropertyMapEntry* pEntry = mpPropSet->getPropertyMapEntry(PropertyName);
-
+ 
      if( pEntry && mpShape->GetSdrObject() )
