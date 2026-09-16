@@ -36,6 +36,11 @@ test("browser engine source, patches and runtime are locked in one manifest", ()
   if (upstreamManifest.sourceCandidateReady) {
     const evidence = upstreamManifest.sourceCandidateEvidence;
     assert.ok(Number.isFinite(Date.parse(evidence.completedAt)));
+    assert.match(evidence.spellbookSourceRevision, /^[0-9a-f]{40}$/u);
+    assert.equal(
+      evidence.patchSeriesSha256,
+      upstreamManifest.patchSeriesSha256,
+    );
     assert.match(evidence.engineImageDigest, /^sha256:[0-9a-f]{64}$/u);
     assert.doesNotMatch(evidence.engineImageDigest, /[/@]/u);
     assert.match(evidence.nativeEvidenceSha256, /^[0-9a-f]{64}$/u);

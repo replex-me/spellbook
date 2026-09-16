@@ -51,7 +51,10 @@ pnpm office:engine:build
 That build reapplies the hash-locked series to a clean source tree, builds the
 Online image and runs both declared C++ suites. Only after those native suites
 pass may `sourceCandidateReady` become true with the immutable build, engine,
-evidence-archive and command-surface identities recorded beside it. The thin
+evidence-archive and command-surface identities recorded beside it. The
+evidence also records the exact Spellbook source revision that launched the
+build and repeats the patch-series digest, so a later manifest edit cannot
+silently reuse evidence from different patch bytes. The thin
 runtime wrapper may then be built. It is intentionally not the patch-development loop. Browser command,
 Undo/Redo, failure rollback, save/reopen, OOXML change-budget, visual corpus and
 PowerPoint checks must all point to the same source commit, patch hash and image
