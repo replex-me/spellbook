@@ -24,11 +24,11 @@ index 4f0d15c..f0c90cb 100644
  
  using namespace ::com::sun::star;
  
-@@ -60,6 +62,40 @@ public:
+@@ -60,6 +62,43 @@ public:
          CPPUNIT_ASSERT(!getSdDocShell()->GetMedium()->GetWarningError());
      }
  
-+    void loadSdImpressDocModelOnly(const OUString& rURL)
++    void loadSdImpressDocModelOnly(const OUString& rURL, const OUString& rFilter = OUString())
 +    {
 +        if (mxComponent.is())
 +        {
@@ -42,7 +42,8 @@ index 4f0d15c..f0c90cb 100644
 +        if (rURL.isEmpty())
 +            xLoadable->initNew();
 +        else
-+            xLoadable->load({ comphelper::makePropertyValue(u"URL"_ustr, rURL) });
++            xLoadable->load({ comphelper::makePropertyValue(u"URL"_ustr, rURL),
++                              comphelper::makePropertyValue(u"FilterName"_ustr, rFilter) });
 +        mxComponent.set(xModelInstance, uno::UNO_QUERY_THROW);
 +        uno::Reference<lang::XServiceInfo> xServiceInfo(mxComponent, uno::UNO_QUERY_THROW);
 +        CPPUNIT_ASSERT(
@@ -52,14 +53,16 @@ index 4f0d15c..f0c90cb 100644
 +
 +    void createSdImpressDocModelOnly(const char* pName = nullptr)
 +    {
-+        loadSdImpressDocModelOnly(
-+            pName ? createFileURL(OUString::createFromAscii(pName)) : OUString());
++        const OUString aName = pName ? OUString::createFromAscii(pName) : OUString();
++        loadSdImpressDocModelOnly(pName ? createFileURL(aName) : OUString(),
++                                  aName.endsWith(".pptx")
++                                      ? u"Impress Office Open XML"_ustr : u"impress8"_ustr);
 +    }
 +
 +    void saveAndReloadSdImpressDocModelOnly(const OUString& rFilter)
 +    {
 +        save(rFilter);
-+        loadSdImpressDocModelOnly(maTempFile.GetURL());
++        loadSdImpressDocModelOnly(maTempFile.GetURL(), rFilter);
 +    }
 +
      void createSdDrawDoc(const char* pName = nullptr, const char* pPassword = nullptr)
