@@ -200,6 +200,21 @@ async function writeAndOpen(bytes, name = "document.pptx") {
   engineDocumentOpen = true;
   currentSlideCount = result.slideCount;
   await waitForUiPaint("document");
+  if (productMode) {
+    try {
+      // The conversation already occupies the right side. Close Impress's
+      // properties pane once per open; the native View menu still reopens it.
+      await request("set-editor-sidebar", { visible: false });
+      body.dataset.defaultSidebar = "closed";
+    } catch (error) {
+      body.dataset.defaultSidebar = "unavailable";
+      observed.events.push({
+        state: "view-warning",
+        atMs: Math.round(performance.now()),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   setState("document-ready", `${filename} · ${result.slideCount} slides`);
   for (const button of [insertSlideButton, undoButton, saveButton])
     button.disabled = false;

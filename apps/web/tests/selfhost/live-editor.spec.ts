@@ -134,6 +134,11 @@ test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
 
   const editor = page.frameLocator('iframe[title="PPT 편집기"]');
   await expect(editor.locator("body")).toBeVisible();
+  if (browserEditor)
+    await expect(editor.locator("body")).toHaveAttribute(
+      "data-default-sidebar",
+      "closed",
+    );
   await expect(editor.getByText("Explore The New")).toHaveCount(0);
   await expect(
     page.getByRole("complementary", { name: "AI 편집 대화" }),

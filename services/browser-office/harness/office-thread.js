@@ -385,6 +385,17 @@ function start() {
             slideCount: slideCount(),
           });
           break;
+        case "set-editor-sidebar":
+          if (typeof event.data.visible !== "boolean")
+            throw new Error("Editor sidebar visibility must be boolean.");
+          dispatch("Sidebar", [
+            property("Sidebar", zetajs.type.boolean, event.data.visible),
+          ]);
+          post("editor-sidebar-set", {
+            requestId,
+            visible: event.data.visible,
+          });
+          break;
         case "native":
           if (
             typeof spellbookDocumentOperation !== "function" ||
