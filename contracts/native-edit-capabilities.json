@@ -1810,12 +1810,12 @@
         "properties": {
           "leftMargin": {
             "type": ["number", "null"],
-            "minimum": -100000,
+            "minimum": 0,
             "maximum": 100000
           },
           "rightMargin": {
             "type": ["number", "null"],
-            "minimum": -100000,
+            "minimum": 0,
             "maximum": 100000
           },
           "firstLineIndent": {

@@ -13,7 +13,7 @@
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "da11367ecb4f8526ab30e528a273fd7e8097d2cd6113634380091bedae1c8925",
+    "patchSeriesSha256": "662930eb0bf83a21d6aa24e163568bca6ee0c6a6acfd7aaec0807771637529e2",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
@@ -37,7 +37,8 @@
       "libreoffice/patches/0020-browser-native-assertions-and-line-reset.patch",
       "libreoffice/patches/0021-browser-marker-geometry-test-contract.patch",
       "libreoffice/patches/0022-browser-pptx-fixed-date-placeholder-roundtrip.patch",
-      "libreoffice/patches/0023-browser-pptx-auto-advance-millisecond-roundtrip.patch"
+      "libreoffice/patches/0023-browser-pptx-auto-advance-millisecond-roundtrip.patch",
+      "libreoffice/patches/0024-browser-pptx-paragraph-margin-semantics.patch"
     ],
     "invariants": [
       "table-cell-native-undo",

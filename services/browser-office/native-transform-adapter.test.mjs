@@ -682,6 +682,36 @@ test("browser adapter rejects unsupported PPTX last-line alignment before writin
   assert.deepEqual(runtime.mutations, []);
 });
 
+test("browser adapter rejects negative paragraph margins but allows a negative first-line indent", () => {
+  for (const field of ["LeftMargin", "RightMargin"]) {
+    const runtime = fixture();
+    assert.throws(
+      () =>
+        runtime.adapter.transformSlides({
+          commands: [
+            { JumpToSlide: 1 },
+            { "SetParagraphProperties.0": { Paragraph: 1, [field]: -1 } },
+          ],
+          ...runtime,
+        }),
+      new RegExp(`Browser paragraph ${field} is invalid`, "u"),
+    );
+    assert.deepEqual(runtime.mutations, []);
+  }
+  const runtime = fixture();
+  runtime.adapter.transformSlides({
+    commands: [
+      { JumpToSlide: 1 },
+      { "SetParagraphProperties.0": { Paragraph: 1, FirstLineIndent: -200 } },
+    ],
+    ...runtime,
+  });
+  assert.equal(
+    runtime.secondShape.paragraphs[1].properties.ParaFirstLineIndent,
+    -200,
+  );
+});
+
 test("browser adapter preserves an explicit manual slide advance choice", () => {
   const runtime = fixture();
   runtime.adapter.transformSlides({

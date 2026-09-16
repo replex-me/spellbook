@@ -42,6 +42,10 @@ round-trip test. Source inspection found the fixed-date placeholder import path
 does not restore page metadata. Patch `0022` restores it, matching the server
 engine's fixed-date rule. Patch `0023` preserves automatic slide timing in
 milliseconds even when no visual transition effect is selected.
+Patch `0024` adds the missing DrawingML right-margin export and asserts the
+saved `marL`/`marR` attributes separately from UNO's post-import fields,
+which may represent list indentation in numbering rules. This source fix is
+not a compiled or runtime-verified release.
 The `browser-undo-v27` source series compiled, then failed one native
 round-trip assertion: a fixed-date placeholder returned the default inactive
 `DateTimeFormat` after PPTX reload. OOXML stores a fixed date as literal text,

@@ -12,7 +12,7 @@
   "patchLevel": "undo-v30",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "91b930c574921a4f6568dcaab5610e7af151202494125212e14a305f393be97f",
+  "patchSeriesSha256": "0ecef5b764d49a6026cd3902f1e59314a8b0e42a8c442481371aba510f57c1af",
   "engineImageTag": "26.04.4.1-spellbook-undo-v30-r21-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
@@ -65,7 +65,8 @@
     "patches/0048-pptx-marker-geometry-regression.patch",
     "patches/0049-pptx-fixed-date-placeholder-roundtrip.patch",
     "patches/0050-pptx-marker-bezier-readback.patch",
-    "patches/0051-pptx-auto-advance-millisecond-roundtrip.patch"
+    "patches/0051-pptx-auto-advance-millisecond-roundtrip.patch",
+    "patches/0052-pptx-paragraph-margin-semantics.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",

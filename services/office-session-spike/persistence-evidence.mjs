@@ -61,6 +61,31 @@ function deleteNestedProperty(value, path) {
   }
 }
 
+// A save can reorder slides or shapes without changing their authored values.
+// Property-state masks must follow a uniquely named object, not the array slot
+// it happened to occupy before the save. Unnamed objects retain positional
+// comparison; ambiguous named objects are never used to mask changed values.
+function authoredArrayEntry(value, authored, index) {
+  if (!Array.isArray(authored)) return undefined;
+  const identity =
+    typeof value?.objectName === "string" && value.objectName
+      ? ["objectName", value.objectName]
+      : typeof value?.name === "string" &&
+          value.name &&
+          typeof value?.slideIndex === "number"
+        ? ["name", value.name]
+        : null;
+  if (identity) {
+    const [key, name] = identity;
+    const matches = authored.filter((candidate) => candidate?.[key] === name);
+    if (matches.length === 1) return matches[0];
+    // A changed or duplicate name is not evidence that the indexed object is
+    // the same object. Keep every observed value in the comparison.
+    return null;
+  }
+  return authored[index];
+}
+
 /**
  * UNO exposes both authored values and values calculated from a style/theme.
  * Calculated defaults can legitimately resolve to a different raw value after
@@ -75,7 +100,10 @@ function deleteNestedProperty(value, path) {
 function withoutComputedPropertyValues(value, authoredBy = value) {
   if (Array.isArray(value)) {
     value.forEach((candidate, index) =>
-      withoutComputedPropertyValues(candidate, authoredBy?.[index]),
+      withoutComputedPropertyValues(
+        candidate,
+        authoredArrayEntry(candidate, authoredBy, index),
+      ),
     );
     return value;
   }
@@ -205,14 +233,18 @@ function withCanonicalShapeIdentity(slides) {
 
 function withoutInactiveStyleValues(slides, authoredSlides = slides) {
   for (const [slideIndex, slide] of slides.entries()) {
+    const authoredSlide = authoredArrayEntry(slide, authoredSlides, slideIndex);
     for (const [elementIndex, element] of (slide.elements ?? []).entries()) {
-      const authoredElement =
-        authoredSlides?.[slideIndex]?.elements?.[elementIndex] ?? element;
-      if (String(authoredElement.fillStyle ?? "").endsWith(".NONE")) {
+      const authoredElement = authoredArrayEntry(
+        element,
+        authoredSlide?.elements,
+        elementIndex,
+      );
+      if (String(authoredElement?.fillStyle ?? "").endsWith(".NONE")) {
         delete element.fill;
         delete element.fillOpacity;
       }
-      if (String(authoredElement.lineStyle ?? "").endsWith(".NONE")) {
+      if (String(authoredElement?.lineStyle ?? "").endsWith(".NONE")) {
         for (const field of [
           "lineColor",
           "lineWidth",
@@ -223,7 +255,7 @@ function withoutInactiveStyleValues(slides, authoredSlides = slides) {
         ])
           delete element[field];
       }
-      if (authoredElement.shadow?.enabled !== true) {
+      if (authoredElement && authoredElement.shadow?.enabled !== true) {
         if (element.shadow) element.shadow = { enabled: false };
       }
     }
@@ -294,7 +326,7 @@ export function normalizeDocumentPersistenceState(
           (state?.slides ?? []).map(
             ({ masterIndex: _masterIndex, ...slide }, index) => {
               const { masterIndex: _authoredMasterIndex, ...authoredSlide } =
-                authoredBy?.slides?.[index] ?? {};
+                authoredArrayEntry(slide, authoredBy?.slides, index) ?? {};
               const normalized = withoutObservationOnlyFields(
                 withoutComputedPropertyValues(
                   structuredClone(slide),

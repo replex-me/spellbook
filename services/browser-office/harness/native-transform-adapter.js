@@ -1140,7 +1140,12 @@
             ["BottomMargin", "ParaBottomMargin"],
           ]) {
             if (!Object.hasOwn(payload, payloadName)) continue;
-            if (!Number.isSafeInteger(payload[payloadName]))
+            const minimum = payloadName === "FirstLineIndent" ? -100000 : 0;
+            if (
+              !Number.isSafeInteger(payload[payloadName]) ||
+              payload[payloadName] < minimum ||
+              payload[payloadName] > 100000
+            )
               throw new Error(`Browser paragraph ${payloadName} is invalid.`);
             addWrite(unoName, "long", payload[payloadName]);
           }

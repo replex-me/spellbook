@@ -4,6 +4,7 @@ import {
   openBrowserDocumentJournal,
   requestPersistentBrowserStorage,
 } from "/harness/opfs-journal.mjs";
+import { persistedSectionsMatch } from "/harness/product-persistence.mjs";
 import "/harness/runtime-admission.js";
 
 const body = document.body;
@@ -633,6 +634,12 @@ function productMutationMatches(prepared, nativeValue) {
   const slides = nativeValue?.slides;
   if (!Array.isArray(slides)) return false;
   switch (command.op) {
+    case "set_sections":
+      return persistedSectionsMatch(
+        command.sections,
+        nativeValue.sections,
+        slides.length,
+      );
     case "add_slide":
     case "duplicate_slide":
       return (
@@ -995,14 +1002,24 @@ function productPackageCommand(command, expectedElement) {
 }
 
 async function commitProductPackageReload(prepared) {
-  if (!prepared.mutation.report.changedParts.length)
-    return withPackageDocumentMetadata(await observeNativeDocument());
+  if (!prepared.mutation.report.changedParts.length) {
+    const unchanged = await withPackageDocumentMetadata(
+      await observeNativeDocument(),
+    );
+    if (!productMutationMatches(prepared, unchanged))
+      throw new Error("browser_package_edit_not_persisted");
+    return unchanged;
+  }
   const afterBytes = new Uint8Array(prepared.mutation.bytes);
   const undoHistoryLength = productUndoHistory.length;
   const commandLength = commands.length;
   try {
     await writeAndOpen(afterBytes, filename);
-    const after = await observeNativeDocument();
+    const after = await withPackageDocumentMetadata(
+      await observeNativeDocument(),
+    );
+    if (!productMutationMatches(prepared, after))
+      throw new Error("browser_package_edit_not_persisted");
     const journalCommand = {
       ...prepared.command,
       persistence: "package_reload",
@@ -1035,7 +1052,7 @@ async function commitProductPackageReload(prepared) {
     await persistCheckpoint();
     observed.lastMutation = prepared.mutation.report;
     evidence.value = JSON.stringify(observed);
-    return withPackageDocumentMetadata(after);
+    return after;
   } catch (error) {
     productUndoHistory.length = undoHistoryLength;
     commands.length = commandLength;

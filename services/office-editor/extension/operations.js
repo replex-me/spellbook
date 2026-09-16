@@ -4349,12 +4349,7 @@ function spellbookDocumentOperation(request) {
         } else if (
           typeof value !== "number" ||
           !Number.isFinite(value) ||
-          value <
-            (name === "leftMargin" ||
-            name === "rightMargin" ||
-            name === "firstLineIndent"
-              ? -100000
-              : 0) ||
+          value < (name === "firstLineIndent" ? -100000 : 0) ||
           value > 100000
         )
           throw new Error("invalid_paragraph_format");

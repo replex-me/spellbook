@@ -285,6 +285,72 @@ test("document persistence excludes regenerated observation diagnostics but not 
   );
 });
 
+test("authored property masks follow uniquely named shapes after reordering", () => {
+  const authored = {
+    masters: [],
+    slides: [
+      {
+        slideIndex: 0,
+        name: "Slide A",
+        elements: [
+          {
+            elementId: "0/0",
+            objectName: "Authored shape",
+            propertyStates: { x: 0 },
+            x: 100,
+            fillStyle: "FillStyle.NONE",
+            fill: 123,
+          },
+          {
+            elementId: "0/1",
+            objectName: "Inherited shape",
+            propertyStates: { x: 1 },
+            x: 200,
+            fillStyle: "FillStyle.SOLID",
+            fill: 456,
+          },
+        ],
+      },
+    ],
+  };
+  const reordered = structuredClone(authored);
+  reordered.slides[0].elements.reverse();
+  reordered.slides[0].elements[0].elementId = "0/0";
+  reordered.slides[0].elements[0].x = 201;
+  reordered.slides[0].elements[1].elementId = "0/1";
+  const normalized = normalizeDocumentPersistenceState(reordered, {
+    authoredBy: authored,
+  });
+  const [inherited, direct] = normalized.slides[0].elements;
+  assert.equal(inherited.objectName, "Inherited shape");
+  assert.equal(inherited.x, undefined);
+  assert.equal(inherited.fill, 456);
+  assert.equal(direct.objectName, "Authored shape");
+  assert.equal(direct.x, 100);
+  assert.equal(direct.fill, undefined);
+});
+
+test("ambiguous named shapes retain observed values instead of borrowing a mask", () => {
+  const authored = {
+    masters: [],
+    slides: [
+      {
+        slideIndex: 0,
+        elements: [
+          { objectName: "Duplicate", propertyStates: { x: 1 }, x: 10 },
+          { objectName: "Duplicate", propertyStates: { x: 1 }, x: 20 },
+        ],
+      },
+    ],
+  };
+  const observed = structuredClone(authored);
+  observed.slides[0].elements[0].x = 30;
+  const normalized = normalizeDocumentPersistenceState(observed, {
+    authoredBy: authored,
+  });
+  assert.equal(normalized.slides[0].elements[0].x, 30);
+});
+
 test("document persistence compares authored properties and ignores recalculated defaults", () => {
   const state = (fill, lineColor, fillState, lineState) => ({
     masters: [],

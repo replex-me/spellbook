@@ -63,7 +63,39 @@ The current `pptx` adapter owns:
 - LibreOffice rendering and PowerPoint-oriented compatibility patches;
 - the Impress WOPI editor bridge and native editing operations.
 
-The PPTX adapter uses two independently versioned LibreOffice lineages. The document worker's headless renderer produces comparison and self-review evidence; Collabora's embedded engine powers the live browser editor. They serve one product loop but cannot share binaries or patches because their upstream releases and ABIs differ. Each lineage has a pinned manifest, an ordered patch series, native regression tests and an explicit promotion gate. See the [browser-engine maintenance contract](../../services/office-editor/libreoffice/README.md) and [renderer-engine contract](../../services/document-worker/libreoffice/README.md).
+The PPTX adapter currently has three independently pinned LibreOffice-derived
+builds: the document worker's headless renderer, Collabora Online's live editor,
+and the ZetaOffice browser-WASM candidate. They are alternative execution
+surfaces for one PPTX product, not three document formats. Their source versions
+and ABIs differ, so a format fix must carry the same behavioral regression
+across the affected builds rather than copying a binary patch blindly. See the
+[Collabora maintenance contract](../../services/office-editor/libreoffice/README.md),
+[browser-WASM contract](../../services/browser-office/libreoffice/README.md),
+and [renderer contract](../../services/document-worker/libreoffice/README.md).
+
+## Semantic save boundary
+
+An edit is not complete when an Office API reports success or when a ZIP file
+exists. Its intended effect must be checked against the persisted PPTX at the
+same document revision, while unrelated original content remains protected.
+The path is: authorized intent → edit and Undo → serialize or local package
+patch → persisted-semantic check → package-scope/preservation validation →
+rendered review → version promotion. Human and AI edits may use different
+tools, but must satisfy this same outcome contract.
+
+Today localized single edits use a minimal OOXML patch, while compound AI
+edits and direct human edits can create full native snapshots. The server checks
+package categories, target slide scope and preservation of selected unsupported
+features; these checks do not prove that every requested property survived
+serialization. The browser's package-only section edit now checks its saved
+identity and order before journaling, and the native regression tests inspect
+PPTX properties separately from LibreOffice's internal readback. This is a
+partial boundary, not a claim that all edit families have persisted-semantic
+admission. Extend the operation contract with a format-owned persisted probe
+for each editable semantic family, then require that probe for both save paths
+before treating the implementation as complete. The probe should compare
+effective user-visible semantics: for example, DrawingML paragraph margins,
+not only a UNO field that may be remapped into numbering rules on import.
 
 ## Current limitation that matters for expansion
 
