@@ -105,7 +105,7 @@ index c5dc4a1d4..df15e4493 100644
 +        CPPUNIT_ASSERT_EQUAL(u"Spellbook"_ustr, pTheme->GetName());
 +        CPPUNIT_ASSERT_EQUAL(u"Spellbook Colors"_ustr, pTheme->getColorSet()->getName());
 +        CPPUNIT_ASSERT_EQUAL(sal_Int32(3368703),
-+                             sal_Int32(pTheme->getColor(model::ThemeColorType::Accent1)));
++                             sal_Int32(pTheme->GetColor(model::ThemeColorType::Accent1)));
 +        CPPUNIT_ASSERT_EQUAL(u"Spellbook Fonts"_ustr, pTheme->getFontScheme().getName());
 +        CPPUNIT_ASSERT_EQUAL(u"Liberation Sans"_ustr,
 +                             pTheme->getFontScheme().getMajorLatin().maTypeface);
