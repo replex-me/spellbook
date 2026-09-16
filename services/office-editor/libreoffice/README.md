@@ -60,6 +60,24 @@ Undo/Redo, failure rollback, save/reopen, OOXML change-budget, visual corpus and
 PowerPoint checks must all point to the same source commit, patch hash and image
 digest before `runtimeImage` and `runtimePatchLevel` are promoted.
 
+Do not set the readiness flag by hand. After downloading the immutable build
+result and native evidence archive, extracting the latter, and resolving the
+engine image digest, admit them together:
+
+```bash
+pnpm office:engine:admit -- \
+  --native-directory /secure/path/native-cppunit-evidence \
+  --native-archive /secure/path/native-cppunit-evidence.tar.gz \
+  --build-result /secure/path/collabora-build-result \
+  --engine-image-digest sha256:<engine-digest> \
+  --spellbook-source-revision <40-character-build-commit> \
+  --output services/office-editor/libreoffice/upstream.json
+```
+
+The command rejects a failed suite, mismatched command inventory, changed patch
+series, mutable image identity or malformed source revision before writing the
+manifest atomically.
+
 The public source manifest records the engine's content digest, not the private
 registry repository that happened to build or host it. A deployment-specific
 release receipt binds that digest to its complete immutable image reference.

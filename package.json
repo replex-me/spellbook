@@ -37,6 +37,7 @@
     "connector:verify:claude": "pnpm connector:build && node scripts/verify-claude-code-connector.mjs",
     "docker:cleanup": "node scripts/cleanup-local-docker.mjs",
     "office:engine:audit": "node services/office-editor/libreoffice/audit-all.mjs",
+    "office:engine:admit": "node services/office-editor/libreoffice/admit-source-candidate.mjs",
     "office:engine:build": "bash services/office-editor/libreoffice/build-engine.sh",
     "office:engine:verify-patches": "bash services/office-editor/libreoffice/verify-patch.sh",
     "office:conformance:plan": "node scripts/native-mutation-conformance.mjs",
