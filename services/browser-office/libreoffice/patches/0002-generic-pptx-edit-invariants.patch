@@ -130,32 +130,22 @@ diff --git a/oox/source/export/drawingml.cxx b/oox/source/export/drawingml.cxx
 index a3e5356c0..5db27f8b5 100644
 --- a/oox/source/export/drawingml.cxx
 +++ b/oox/source/export/drawingml.cxx
-@@ -2726,6 +2726,31 @@ void DrawingML::WriteRunProperties( const Reference< XPropertySet >& rRun, bool
+@@ -2726,6 +2726,21 @@ void DrawingML::WriteRunProperties( const Reference< XPropertySet >& rRun, bool
          }
      }
  
 +    bool bCharShadowed = false;
 +    if (GetProperty(rXPropSet, u"CharShadowed"_ustr))
 +        mAny >>= bCharShadowed;
-+    sal_Int32 nTextGlowRadius = 0;
-+    const bool bHasTextGlow
-+        = rRunInput.xShapePropSet.is()
-+          && GetProperty(rRunInput.xShapePropSet, u"GlowTextEffectRadius"_ustr)
-+          && (mAny >>= nTextGlowRadius) && nTextGlowRadius > 0;
-+    if (GetDocumentType() != DOCUMENT_DOCX && (bCharShadowed || bHasTextGlow))
++    if (GetDocumentType() == DOCUMENT_PPTX && bCharShadowed)
 +    {
 +        mpFS->startElementNS(XML_a, XML_effectLst);
-+        if (bCharShadowed)
-+        {
-+            mpFS->startElementNS(XML_a, XML_outerShdw, XML_blurRad, "0", XML_dist, "12700",
-+                                 XML_dir, "2700000", XML_algn, "tl", XML_rotWithShape, "0");
-+            mpFS->startElementNS(XML_a, XML_srgbClr, XML_val, "000000");
-+            mpFS->singleElementNS(XML_a, XML_alpha, XML_val, "50000");
-+            mpFS->endElementNS(XML_a, XML_srgbClr);
-+            mpFS->endElementNS(XML_a, XML_outerShdw);
-+        }
-+        if (bHasTextGlow)
-+            WriteTextGlowEffect(rRunInput.xShapePropSet);
++        mpFS->startElementNS(XML_a, XML_outerShdw, XML_blurRad, "0", XML_dist, "12700",
++                             XML_dir, "2700000", XML_algn, "tl", XML_rotWithShape, "0");
++        mpFS->startElementNS(XML_a, XML_srgbClr, XML_val, "000000");
++        mpFS->singleElementNS(XML_a, XML_alpha, XML_val, "50000");
++        mpFS->endElementNS(XML_a, XML_srgbClr);
++        mpFS->endElementNS(XML_a, XML_outerShdw);
 +        mpFS->endElementNS(XML_a, XML_effectLst);
 +    }
 +
