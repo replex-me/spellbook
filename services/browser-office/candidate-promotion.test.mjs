@@ -48,7 +48,7 @@ const admittedRuntime = {
   receiptSha256,
   receipt: {
     spellbookSourceRevision: "c".repeat(40),
-    libreOffice: { patchLevel: "browser-undo-v11" },
+    libreOffice: { patchLevel: "browser-undo-v12" },
     toolchain: { emsdk: { version: "3.1.65" } },
     artifacts: [{ name: "soffice.wasm", sha256: "d".repeat(64) }],
   },

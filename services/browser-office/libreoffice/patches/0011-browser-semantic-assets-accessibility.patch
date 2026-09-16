@@ -475,8 +475,8 @@ index 353818bc4..28d300d43 100644
  #include <vcl/svapp.hxx>
  #include <tools/debug.hxx>
 @@ -183,6 +193,389 @@ void addObjectInteractionUndo(
-         *pDocument, rObject, bHadOldInfo, eOldAction, rOldBookmark,
-         eNewAction, rNewBookmark));
+         std::make_unique<ObjectInteractionUndoAction>(*pDocument, rObject, bHadOldInfo,
+             eOldAction, rOldBookmark, eNewAction, rNewBookmark), true);
  }
 +
 +class ObjectNavigationUndoAction final : public SdUndoAction
@@ -801,8 +801,8 @@ index 353818bc4..28d300d43 100644
 +    if (aCurrentSource == aSource)
 +        return;
 +    if (pDocument->IsUndoEnabled())
-+        pDocument->AddUndo(std::make_unique<EquationSourceUndoAction>(
-+            *pDocument, *pObject, aCurrentSource, aSource));
++        pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++            std::make_unique<EquationSourceUndoAction>(*pDocument, *pObject, aCurrentSource, aSource), true);
 +    xProperties->setPropertyValue(u"Formula"_ustr, uno::Any(aSource));
 +    pObject->SetChanged();
 +    pObject->BroadcastObjectChange();
@@ -831,9 +831,9 @@ index 353818bc4..28d300d43 100644
 +            throw lang::IllegalArgumentException(u"Replacement asset type changed"_ustr,
 +                                                  nullptr, 0);
 +        if (pDocument->IsUndoEnabled())
-+            pDocument->AddUndo(std::make_unique<GraphicContentUndoAction>(
-+                *pDocument, *pOldGraphic, pOldGraphic->GetGraphic(),
-+                pNewGraphic->GetGraphic()));
++            pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                std::make_unique<GraphicContentUndoAction>(*pDocument, *pOldGraphic,
++                    pOldGraphic->GetGraphic(), pNewGraphic->GetGraphic()), true);
 +        pOldGraphic->SetGraphic(pNewGraphic->GetGraphic());
 +    }
 +    else if (auto* pOldMedia = dynamic_cast<SdrMediaObj*>(pOldObject))
@@ -845,9 +845,9 @@ index 353818bc4..28d300d43 100644
 +        const avmedia::MediaItem aReplacement = mediaReplacementState(
 +            pOldMedia->getMediaProperties(), pNewMedia->getMediaProperties());
 +        if (pDocument->IsUndoEnabled())
-+            pDocument->AddUndo(std::make_unique<MediaContentUndoAction>(
-+                *pDocument, *pOldMedia, pOldMedia->getMediaProperties(),
-+                aReplacement));
++            pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                std::make_unique<MediaContentUndoAction>(*pDocument, *pOldMedia,
++                    pOldMedia->getMediaProperties(), aReplacement), true);
 +        pOldMedia->setMediaProperties(aReplacement);
 +    }
 +    else
@@ -908,8 +908,8 @@ index 353818bc4..28d300d43 100644
 +                        SdDrawDocument* pDocument = mpModel ? mpModel->GetDoc() : nullptr;
 +                        if (pDocument && pDocument->IsUndoEnabled()
 +                            && nOldPosition != nNewPosition)
-+                            pDocument->AddUndo(std::make_unique<ObjectNavigationUndoAction>(
-+                                *pDocument, *pObj, nOldPosition, nNewPosition));
++                            pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                                std::make_unique<ObjectNavigationUndoAction>(*pDocument, *pObj, nOldPosition, nNewPosition), true);
 +                        pObjList->SetObjectNavigationPosition(*pObj, nNewPosition);
 +                    }
                      break;
@@ -944,9 +944,9 @@ index 353818bc4..28d300d43 100644
 +        if (bMediaProperty && !pMediaObject)
 +            throw lang::IllegalArgumentException(u"Media playback property requires a media object"_ustr,
 +                                                  nullptr, 0);
-+        std::optional<avmedia::MediaItem> oOldMedia;
++        std::unique_ptr<avmedia::MediaItem> pOldMedia;
 +        if (pMediaObject && pDocument && pDocument->IsUndoEnabled() && bMediaProperty)
-+            oOldMedia = pMediaObject->getMediaProperties();
++            pOldMedia = std::make_unique<avmedia::MediaItem>(pMediaObject->getMediaProperties());
          if (pObject && pDocument && pDocument->IsUndoEnabled()
              && aUndoProperties.contains(aPropertyName))
          {
@@ -961,14 +961,14 @@ index 353818bc4..28d300d43 100644
 +        }
 +        catch (...)
 +        {
-+            if (oOldMedia)
-+                pMediaObject->setMediaProperties(*oOldMedia);
++            if (pOldMedia)
++                pMediaObject->setMediaProperties(*pOldMedia);
 +            throw;
 +        }
-+        if (oOldMedia)
-+            pDocument->AddUndo(std::make_unique<MediaContentUndoAction>(
-+                *pDocument, *pMediaObject, std::move(*oOldMedia),
-+                pMediaObject->getMediaProperties()));
++        if (pOldMedia)
++            pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                std::make_unique<MediaContentUndoAction>(*pDocument, *pMediaObject,
++                    *pOldMedia, pMediaObject->getMediaProperties()), true);
      }
  
      if( mpModel )

@@ -307,7 +307,7 @@ index 1462e08e3..1578ecd97 100644
 +    SdDrawDocument* pDocument = GetModel() ? GetModel()->GetDoc() : nullptr;
 +    if (!bAlreadyOnThisPage && pDocument && pDocument->IsUndoEnabled() && pInserted
 +        && pInserted->getParentSdrObjListFromSdrObject() == GetPage())
-+        pDocument->AddUndo(SdrUndoFactory::CreateUndoNewObject(*pInserted));
++        pDocument->AddUndo(pDocument->GetSdrUndoFactory().CreateUndoNewObject(*pInserted));
  }
  
  void SAL_CALL SdDrawPage::remove( const Reference< drawing::XShape >& xShape )

@@ -1089,9 +1089,9 @@ index d86ffed7c562c4fb43df005d7edb561279bf533b..1e720fbc0bf5a313a54ffc8cb200ee83
 +    if (!pDocument || !pDocument->IsUndoEnabled()
 +        || (eOldAction == eNewAction && rOldBookmark == rNewBookmark))
 +        return;
-+    pDocument->AddUndo(std::make_unique<ObjectInteractionUndoAction>(
-+        *pDocument, rObject, bHadOldInfo, eOldAction, rOldBookmark,
-+        eNewAction, rNewBookmark));
++    pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++        std::make_unique<ObjectInteractionUndoAction>(*pDocument, rObject, bHadOldInfo,
++            eOldAction, rOldBookmark, eNewAction, rNewBookmark), true);
 +}
 +}
 +

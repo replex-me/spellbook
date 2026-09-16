@@ -344,9 +344,9 @@ index 4cd1f7089..33d07d2c6 100644
 +        PageMetadataState aNewMetadata = getPageMetadata(*pUndoDocument, *GetPage());
 +        if (!(*aOldMetadata == aNewMetadata))
 +        {
-+            pUndoDocument->AddUndo(std::make_unique<PageMetadataUndoAction>(
-+                *pUndoDocument, *GetPage(), std::move(*aOldMetadata),
-+                std::move(aNewMetadata)));
++            pUndoDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                std::make_unique<PageMetadataUndoAction>(*pUndoDocument, *GetPage(),
++                    std::move(*aOldMetadata), std::move(aNewMetadata)), true);
 +        }
 +    }
 +

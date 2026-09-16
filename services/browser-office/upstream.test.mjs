@@ -30,9 +30,14 @@ const genericPptxInvariantsPatch = readFileSync(
   ),
   "utf8",
 );
+const browserPatchSeries = manifest.sourceCandidate.patches
+  .map((relativePatch) =>
+    readFileSync(new URL(relativePatch, import.meta.url), "utf8"),
+  )
+  .join("\n");
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v11");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v12");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
@@ -206,4 +211,23 @@ test("browser LibreOffice patches name their complete source surface", () => {
     "svx/source/table/tableundo.cxx",
     "svx/source/unodraw/unoshtxt.cxx",
   ]);
+});
+
+test("browser presentation undo uses the pinned document undo ABI", () => {
+  assert.match(
+    browserPatchSeries,
+    /GetDocSh\(\)->GetUndoManager\(\)->AddUndoAction/u,
+  );
+  assert.doesNotMatch(
+    browserPatchSeries,
+    /->AddUndo\(std::make_unique<(?:ObjectInteractionUndoAction|PageVisibilityUndoAction|PageNameUndoAction|PageMetadataUndoAction|PageThemeUndoAction|ObjectNavigationUndoAction|EquationSourceUndoAction|GraphicContentUndoAction|MediaContentUndoAction|sd::UndoTransition|sd::UndoAnimation)/u,
+  );
+  assert.doesNotMatch(
+    browserPatchSeries,
+    /std::optional<avmedia::MediaItem>/u,
+  );
+  assert.match(
+    genericPptxInvariantsPatch,
+    /GetSdrUndoFactory\(\)\.CreateUndoNewObject/u,
+  );
 });

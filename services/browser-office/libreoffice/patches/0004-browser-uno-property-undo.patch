@@ -331,8 +331,8 @@ index 1578ecd..4cd1f70 100644
 +            const bool bOldVisible = !GetPage()->IsExcluded();
 +            SdDrawDocument* pDocument = GetModel() ? GetModel()->GetDoc() : nullptr;
 +            if (pDocument && pDocument->IsUndoEnabled() && bOldVisible != bVisible)
-+                pDocument->AddUndo(std::make_unique<PageVisibilityUndoAction>(
-+                    *pDocument, *GetPage(), bOldVisible, bVisible));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                    std::make_unique<PageVisibilityUndoAction>(*pDocument, *GetPage(), bOldVisible, bVisible), true);
              GetPage()->SetExcluded( !bVisible );
              break;
          }
@@ -343,8 +343,8 @@ index 1578ecd..4cd1f70 100644
 +            SdDrawDocument* pDocument = GetModel() ? GetModel()->GetDoc() : nullptr;
 +            if (pDocument && pDocument->IsUndoEnabled()
 +                && GetPage()->getTransitionType() != nValue)
-+                pDocument->AddUndo(std::make_unique<sd::UndoTransition>(
-+                    pDocument, GetPage()));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                    std::make_unique<sd::UndoTransition>(pDocument, GetPage()), true);
              GetPage()->setTransitionType( nValue );
              break;
          }
@@ -355,8 +355,8 @@ index 1578ecd..4cd1f70 100644
 +            SdDrawDocument* pDocument = GetModel() ? GetModel()->GetDoc() : nullptr;
 +            if (pDocument && pDocument->IsUndoEnabled()
 +                && GetPage()->getTransitionSubtype() != nValue)
-+                pDocument->AddUndo(std::make_unique<sd::UndoTransition>(
-+                    pDocument, GetPage()));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                    std::make_unique<sd::UndoTransition>(pDocument, GetPage()), true);
              GetPage()->setTransitionSubtype( nValue );
              break;
          }
@@ -367,8 +367,8 @@ index 1578ecd..4cd1f70 100644
 +            SdDrawDocument* pDocument = GetModel() ? GetModel()->GetDoc() : nullptr;
 +            if (pDocument && pDocument->IsUndoEnabled()
 +                && GetPage()->getTransitionDirection() != bValue)
-+                pDocument->AddUndo(std::make_unique<sd::UndoTransition>(
-+                    pDocument, GetPage()));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                    std::make_unique<sd::UndoTransition>(pDocument, GetPage()), true);
              GetPage()->setTransitionDirection( bValue );
              break;
          }
@@ -379,8 +379,8 @@ index 1578ecd..4cd1f70 100644
 +            SdDrawDocument* pDocument = GetModel() ? GetModel()->GetDoc() : nullptr;
 +            if (pDocument && pDocument->IsUndoEnabled()
 +                && GetPage()->getTransitionFadeColor() != nValue)
-+                pDocument->AddUndo(std::make_unique<sd::UndoTransition>(
-+                    pDocument, GetPage()));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                    std::make_unique<sd::UndoTransition>(pDocument, GetPage()), true);
              GetPage()->setTransitionFadeColor( nValue );
              break;
          }
@@ -391,8 +391,8 @@ index 1578ecd..4cd1f70 100644
 +            SdDrawDocument* pDocument = GetModel() ? GetModel()->GetDoc() : nullptr;
 +            if (pDocument && pDocument->IsUndoEnabled()
 +                && GetPage()->getTransitionDuration() != fValue)
-+                pDocument->AddUndo(std::make_unique<sd::UndoTransition>(
-+                    pDocument, GetPage()));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                    std::make_unique<sd::UndoTransition>(pDocument, GetPage()), true);
              GetPage()->setTransitionDuration( fValue );
              break;
          }
@@ -403,8 +403,8 @@ index 1578ecd..4cd1f70 100644
 +    const OUString aOldName = GetPage()->GetRealName();
 +    SdDrawDocument* pDocument = GetModel() ? GetModel()->GetDoc() : nullptr;
 +    if (pDocument && pDocument->IsUndoEnabled() && aOldName != aName)
-+        pDocument->AddUndo(std::make_unique<PageNameUndoAction>(
-+            *pDocument, *GetPage(), aOldName, aName));
++        pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++            std::make_unique<PageNameUndoAction>(*pDocument, *GetPage(), aOldName, aName), true);
 +
      GetPage()->SetName( aName );
  

@@ -454,7 +454,7 @@ index 33d07d2c6..8323fcafd 100644
 +                nWidth >= nHeight ? Orientation::Landscape : Orientation::Portrait,
 +                pReference->GetPaperBin(), pReference->IsBackgroundFullSize());
 +            if (pUndoGroup)
-+                pDocument->AddUndo(std::move(pUndoGroup));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(std::move(pUndoGroup), true);
 +            pDocument->SetChanged();
 +            break;
 +        }
@@ -529,8 +529,8 @@ index 33d07d2c6..8323fcafd 100644
 +                aCurrentFonts.getMinorSupplementalFontList());
 +            pNewTheme->setFontScheme(aNewFonts);
 +            if (pDocument->IsUndoEnabled())
-+                pDocument->AddUndo(std::make_unique<PageThemeUndoAction>(
-+                    *pDocument, *pMaster, pOldTheme, pNewTheme));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                    std::make_unique<PageThemeUndoAction>(*pDocument, *pMaster, pOldTheme, pNewTheme), true);
 +            pMaster->getSdrPageProperties().setTheme(pNewTheme);
 +            pMaster->ActionChanged();
 +            for (sal_uInt16 nSlide = 0;
@@ -630,8 +630,8 @@ index 33d07d2c6..8323fcafd 100644
 +            }
 +
 +            if (pDocument->IsUndoEnabled())
-+                pDocument->AddUndo(
-+                    std::make_unique<sd::UndoAnimation>(pDocument, pPage));
++                pDocument->GetDocSh()->GetUndoManager()->AddUndoAction(
++                    std::make_unique<sd::UndoAnimation>(pDocument, pPage), true);
 +            {
 +                sd::MainSequenceRebuildGuard aGuard(pSequence);
 +                if (aAction == u"add")
