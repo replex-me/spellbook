@@ -86,12 +86,12 @@ try {
     return (
       runtime?.buildReady === true &&
       runtime.buildCommit === runtime.candidateCommit &&
-      runtime.patchLevel === "browser-undo-v18"
+      runtime.patchLevel === "browser-undo-v19"
     );
   });
   if (enduranceCycles > 0 && !patchedBrowserRuntime)
     throw new Error(
-      "Browser product endurance requires an admitted browser-undo-v18 candidate runtime.",
+      "Browser product endurance requires an admitted browser-undo-v19 candidate runtime.",
     );
   const target = before.slides
     .flatMap((slide) => slide.elements)
@@ -558,6 +558,9 @@ try {
   await acknowledgeProductSave(page, save.requestId, savedRevision);
 
   const slideStructure = await verifyProductSlideStructure(browser, origin);
+  const readingOrder = patchedBrowserRuntime
+    ? await verifyProductReadingOrder(browser, origin)
+    : { status: "candidate-runtime-required" };
 
   const result = {
     status: "browser-product-bridge-verified",
@@ -609,6 +612,7 @@ try {
     changedParts,
     endurance,
     slideStructure,
+    readingOrder,
     pageErrors,
     requestFailures,
   };
@@ -683,7 +687,7 @@ async function verifyProductSlideStructure(browser, origin) {
       return (
         runtime?.buildReady === true &&
         runtime.buildCommit === runtime.candidateCommit &&
-        runtime.patchLevel === "browser-undo-v18" &&
+        runtime.patchLevel === "browser-undo-v19" &&
         runtime.nativeSlideStructureReady === true
       );
     });
@@ -848,6 +852,124 @@ async function verifyProductSlideStructure(browser, origin) {
         unzipSync(source),
         unzipSync(savedBytes),
       ),
+    };
+  } finally {
+    await page.close();
+  }
+}
+
+async function verifyProductReadingOrder(browser, origin) {
+  const page = await browser.newPage({
+    viewport: { width: 1440, height: 960 },
+  });
+  const pageErrors = [];
+  const requestFailures = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("requestfailed", (request) =>
+    requestFailures.push({
+      url: request.url(),
+      error: request.failure()?.errorText ?? "unknown",
+    }),
+  );
+  try {
+    await page.goto(
+      `${origin}/workspace?hostOrigin=${encodeURIComponent(origin)}`,
+      { waitUntil: "domcontentloaded", timeout: 30_000 },
+    );
+    await connectProductHost(page, origin);
+    const fileName = `reading-order-${Date.now()}.pptx`;
+    await openProductFixture(page, fixture, "reading-order-open", fileName);
+    await waitForEvent(page, {
+      type: "open-complete",
+      requestId: "reading-order-open",
+    });
+    const before = await nativeTask(page, "reading-order-before", {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    const slide = before.slides.find(
+      (candidate) =>
+        candidate.elements.filter((element) => element.parentElementId === null)
+          .length >= 2,
+    );
+    assert.ok(slide, "The reading-order fixture needs two top-level objects.");
+    const original = slide.elements.filter(
+      (element) => element.parentElementId === null,
+    );
+    const requested = [...original].reverse();
+    const expectedStableOrder = requested.map((element) => element.stableId);
+    const permission = {
+      mode: "document",
+      elementIds: [],
+      slideIndexes: [],
+    };
+    const changed = await nativeTask(page, "reading-order-edit", {
+      operation: "edit",
+      expectedRevision: before.revision,
+      expectedSlides: JSON.stringify(before.slides),
+      command: {
+        op: "set_reading_order",
+        elementIds: requested.map((element) => element.elementId),
+      },
+      permission,
+      suppressCapture: true,
+    });
+    const topLevelStableIds = (state) =>
+      state.slides[slide.slideIndex].elements
+        .filter((element) => element.parentElementId === null)
+        .map((element) => element.stableId);
+    assert.deepEqual(topLevelStableIds(changed), expectedStableOrder);
+
+    await sendHostCommand(page, "Send_UNO_Command", { Command: ".uno:Undo" });
+    const undone = await nativeTask(page, "reading-order-undone", {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.deepEqual(
+      topLevelStableIds(undone),
+      original.map((element) => element.stableId),
+    );
+
+    await sendHostCommand(page, "Send_UNO_Command", { Command: ".uno:Redo" });
+    const redone = await nativeTask(page, "reading-order-redone", {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.deepEqual(topLevelStableIds(redone), expectedStableOrder);
+
+    const save = await requestProductSave(page);
+    const saved = await consumeSavedBytes(page, save.requestId);
+    await acknowledgeProductSave(
+      page,
+      save.requestId,
+      '"saved:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"',
+    );
+    await openProductFixture(
+      page,
+      saved.bytes,
+      "reading-order-reopen",
+      `reading-order-reopened-${Date.now()}.pptx`,
+    );
+    await waitForEvent(page, {
+      type: "open-complete",
+      requestId: "reading-order-reopen",
+    });
+    const reopened = await nativeTask(page, "reading-order-reopened", {
+      operation: "observe",
+      captureSlideIndexes: [],
+    });
+    assert.deepEqual(topLevelStableIds(reopened), expectedStableOrder);
+    assert.deepEqual(pageErrors, []);
+    assert.deepEqual(requestFailures, []);
+    return {
+      status: "browser-product-reading-order-verified",
+      slideIndex: slide.slideIndex,
+      objectCount: expectedStableOrder.length,
+      undo: true,
+      redo: true,
+      reopened: true,
+      pageErrors,
+      requestFailures,
     };
   } finally {
     await page.close();

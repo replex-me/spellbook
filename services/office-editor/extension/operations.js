@@ -1614,7 +1614,11 @@ function spellbookDocumentOperation(request) {
             fontwork: fontworkDetails(shape),
             material3d: material3dDetails(shape),
             equation: equationDetails(shape, shapeKind),
-            readingOrder: safeProperty(shape, "NavigationOrder") ?? index,
+            // PPTX does not persist LibreOffice's separate navigation-order
+            // vector. PowerPoint derives reading order from the shape-tree
+            // order, which is also the z-order. Expose that portable order so
+            // observe/edit/reopen all describe the same document state.
+            readingOrder: index,
           });
           if (children) visit(shape, elementId, elementId, stableId);
         }
@@ -3641,44 +3645,62 @@ function spellbookDocumentOperation(request) {
             permission.elementIds.includes(elementId),
           ));
       if (!allowed) throw new Error("outside_edit_permission");
-      const currentStableOrder = topLevel
-        .sort((left, right) => left.readingOrder - right.readingOrder)
-        .map((element) => element.stableId);
-      const expectedStableOrder = elementIds.map(
-        (elementId) =>
-          topLevel.find((element) => element.elementId === elementId).stableId,
+      const page = pages.getByIndex(slideIndex);
+      const requestedShapes = elementIds.map((elementId) =>
+        resolveShape(elementId),
       );
-      if (stableJson(currentStableOrder) === stableJson(expectedStableOrder))
-        return result(before, slideIndex);
+      const orderMatches = () =>
+        page.getCount() === requestedShapes.length &&
+        requestedShapes.every((shape, index) =>
+          uno.sameUnoObject(shape, page.getByIndex(index)),
+        );
+      if (orderMatches()) return result(before, slideIndex);
       if (request.dryRun) return result(before, slideIndex);
       const undo = model.getUndoManager();
       const undoCount = undo.getAllUndoActionTitles().length;
-      transformSlides([
-        { JumpToSlide: slideIndex },
-        ...elementIds.map((elementId, readingOrder) => ({
-          [`SetObjectProperties.${elementId.split("/").slice(1).join("/")}`]: {
-            NavigationOrder: readingOrder,
-          },
-        })),
-      ]);
-      const after = read();
-      const actualStableOrder = after.slides[slideIndex].elements
-        .filter((element) => element.parentElementId === null)
-        .sort((left, right) => left.readingOrder - right.readingOrder)
-        .map((element) => element.stableId);
-      const applied =
-        stableJson(actualStableOrder) === stableJson(expectedStableOrder);
-      if (
-        !applied ||
-        (!request.transactionActive &&
-          undo.getAllUndoActionTitles().length <= undoCount)
-      ) {
-        if (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
-        throw new Error(
-          !applied ? "native_command_not_applied" : "native_undo_not_recorded",
-        );
+      const ownsUndoContext = !request.transactionActive;
+      let undoContextOpen = false;
+      try {
+        if (ownsUndoContext) {
+          undo.enterUndoContext("AI set reading order");
+          undoContextOpen = true;
+        }
+        activateSlide(slideIndex);
+        // PowerPoint's portable reading order is the shape-tree order. Moving
+        // each requested object to the front in back-to-front order produces
+        // the exact requested permutation while keeping the operation inside
+        // one native Undo context.
+        for (const shape of requestedShapes) {
+          controller.select(shape);
+          dispatch(".uno:BringToFront");
+        }
+        if (undoContextOpen) {
+          undo.leaveUndoContext();
+          undoContextOpen = false;
+        }
+        const after = read();
+        const applied = orderMatches();
+        if (
+          !applied ||
+          (!request.transactionActive &&
+            undo.getAllUndoActionTitles().length - undoCount !== 1)
+        )
+          throw new Error(
+            !applied
+              ? "native_command_not_applied"
+              : "native_undo_not_recorded",
+          );
+        return result(after, slideIndex);
+      } catch (error) {
+        if (undoContextOpen) {
+          try {
+            undo.leaveUndoContext();
+          } catch (_) {}
+        }
+        if (ownsUndoContext)
+          while (undo.getAllUndoActionTitles().length > undoCount) undo.undo();
+        throw error;
       }
-      return result(after, slideIndex);
     }
 
     const multiOperation = ["align", "distribute", "group"].includes(

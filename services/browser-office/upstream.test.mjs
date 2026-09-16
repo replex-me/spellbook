@@ -37,7 +37,7 @@ const browserPatchSeries = manifest.sourceCandidate.patches
   .join("\n");
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v18");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v19");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
@@ -95,13 +95,14 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "media-content-preserves-playback-native-undo",
     "media-playback-native-undo",
     "reading-order-native-undo",
+    "pptx-reading-order-shape-tree-undo",
     "semantic-asset-native-regression-tests",
   ]);
   assert.deepEqual(manifest.sourceCandidate.requiredCppunitTargets, [
     "CppunitTest_sd_uiimpress",
     "CppunitTest_sd_misc_tests",
   ]);
-  assert.equal(manifest.sourceCandidate.focusedCppunitTests.length, 17);
+  assert.equal(manifest.sourceCandidate.focusedCppunitTests.length, 18);
   assert.equal(
     new Set(manifest.sourceCandidate.focusedCppunitTests).size,
     manifest.sourceCandidate.focusedCppunitTests.length,
@@ -241,10 +242,7 @@ test("browser presentation undo uses the pinned document undo ABI", () => {
     browserPatchSeries,
     /->AddUndo\(std::make_unique<(?:ObjectInteractionUndoAction|PageVisibilityUndoAction|PageNameUndoAction|PageMetadataUndoAction|PageThemeUndoAction|ObjectNavigationUndoAction|EquationSourceUndoAction|GraphicContentUndoAction|MediaContentUndoAction|sd::UndoTransition|sd::UndoAnimation)/u,
   );
-  assert.doesNotMatch(
-    browserPatchSeries,
-    /std::optional<avmedia::MediaItem>/u,
-  );
+  assert.doesNotMatch(browserPatchSeries, /std::optional<avmedia::MediaItem>/u);
   assert.match(
     genericPptxInvariantsPatch,
     /GetSdrUndoFactory\(\)\.CreateUndoNewObject/u,
@@ -253,18 +251,9 @@ test("browser presentation undo uses the pinned document undo ABI", () => {
     browserPatchSeries,
     /pDrawDocument->GetDocSh\(\)->GetUndoManager\(\)/u,
   );
-  assert.doesNotMatch(
-    browserPatchSeries,
-    /pDrawDocument->GetUndoManager\(\)/u,
-  );
-  assert.doesNotMatch(
-    browserPatchSeries,
-    /a(?:Dash|Marker)Names\.empty\(\)/u,
-  );
-  assert.doesNotMatch(
-    browserPatchSeries,
-    /Graphic\(a(?:Old|New)Bitmap\)/u,
-  );
+  assert.doesNotMatch(browserPatchSeries, /pDrawDocument->GetUndoManager\(\)/u);
+  assert.doesNotMatch(browserPatchSeries, /a(?:Dash|Marker)Names\.empty\(\)/u);
+  assert.doesNotMatch(browserPatchSeries, /Graphic\(a(?:Old|New)Bitmap\)/u);
   assert.match(
     browserPatchSeries,
     /static_cast<SdrObject\*>\(pOriginal\.get\(\)\)/u,

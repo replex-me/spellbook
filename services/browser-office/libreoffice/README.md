@@ -12,7 +12,7 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
-The cumulative `browser-undo-v18` source series ports generic document behavior:
+The cumulative `browser-undo-v19` source series ports generic document behavior:
 table structure, formatting and Undo; page and object identity; master-safe
 layout support; sparse-master insertion; object-creation Undo; text-layout
 invalidation; slide names and text shadows; object locks; object interactions;
@@ -31,7 +31,9 @@ series but have not run yet. The browser-native adapter now accepts the complete
 human edits as native PPTX snapshots. The cumulative patch also preserves
 object identity while replacing image or media content and adds semantic
 SmartArt and Math mutation, media playback, Fontwork, 3D material and
-reading-order history. The clean native and integrated browser runs remain the
+reading-order history. Patch `0013` verifies the PPTX/PowerPoint rule directly:
+portable reading order follows shape-tree/z-order, survives one native Undo
+boundary and persists through save/reopen. The clean native and integrated browser runs remain the
 admission evidence. `nativeSlideStructureReady` is
 independent of `buildReady`: a compiled runtime must also survive the product
 bridge's full slide lifecycle, observation, Undo/Redo, recovery and exact-save

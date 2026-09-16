@@ -1,0 +1,76 @@
+diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
+index 89db785d..453b5dc9 100644
+--- a/sd/qa/unit/uiimpress.cxx
++++ b/sd/qa/unit/uiimpress.cxx
+@@ -1675,3 +1675,70 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+     assertProperties("Browser shape", "Browser title", "Browser description", true,
+-                     420, true, true, nChangedNavigationOrder);
++                     420, true, true, -1);
++}
++
++CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookPptxReadingOrderUsesShapeTreeOrder)
++{
++    createSdImpressDoc();
++    auto pDocument = dynamic_cast<SdXImpressDocument*>(mxComponent.get());
++    CPPUNIT_ASSERT(pDocument);
++    SdDrawDocument* pDrawDocument = pDocument->GetDoc();
++    uno::Reference<drawing::XDrawPagesSupplier> xPagesSupplier(mxComponent,
++                                                               uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XDrawPage> xPage(
++        xPagesSupplier->getDrawPages()->getByIndex(0), uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XShapes> xShapes(xPage, uno::UNO_QUERY_THROW);
++    uno::Reference<lang::XMultiServiceFactory> xFactory(mxComponent,
++                                                        uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XShape> xBack(
++        xFactory->createInstance("com.sun.star.drawing.RectangleShape"),
++        uno::UNO_QUERY_THROW);
++    uno::Reference<drawing::XShape> xFront(
++        xFactory->createInstance("com.sun.star.drawing.EllipseShape"),
++        uno::UNO_QUERY_THROW);
++    xBack->setPosition(awt::Point(1000, 1000));
++    xBack->setSize(awt::Size(5000, 3000));
++    uno::Reference<container::XNamed>(xBack, uno::UNO_QUERY_THROW)
++        ->setName("Reading order back");
++    xFront->setPosition(awt::Point(2000, 2000));
++    xFront->setSize(awt::Size(5000, 3000));
++    uno::Reference<container::XNamed>(xFront, uno::UNO_QUERY_THROW)
++        ->setName("Reading order front");
++    xShapes->add(xBack);
++    xShapes->add(xFront);
++
++    auto assertOrder = [&](const OUString& rFirst, const OUString& rSecond) {
++        uno::Reference<drawing::XShape> xFirst(xShapes->getByIndex(0),
++                                               uno::UNO_QUERY_THROW);
++        uno::Reference<drawing::XShape> xSecond(xShapes->getByIndex(1),
++                                                uno::UNO_QUERY_THROW);
++        CPPUNIT_ASSERT_EQUAL(
++            rFirst,
++            uno::Reference<container::XNamed>(xFirst, uno::UNO_QUERY_THROW)->getName());
++        CPPUNIT_ASSERT_EQUAL(
++            rSecond,
++            uno::Reference<container::XNamed>(xSecond, uno::UNO_QUERY_THROW)->getName());
++    };
++    assertOrder("Reading order back", "Reading order front");
++
++    auto* pUndoManager = pDrawDocument->GetDocSh()->GetUndoManager();
++    pUndoManager->Clear();
++    uno::Reference<view::XSelectionSupplier> xController(
++        mxComponent->getCurrentController(), uno::UNO_QUERY_THROW);
++    pDrawDocument->BegUndo("Browser reading order");
++    xController->select(uno::Any(xBack));
++    dispatchCommand(mxComponent, ".uno:BringToFront", {});
++    pDrawDocument->EndUndo();
++    CPPUNIT_ASSERT_EQUAL(size_t(1), pUndoManager->GetUndoActionCount());
++    assertOrder("Reading order front", "Reading order back");
++
++    pUndoManager->Undo();
++    assertOrder("Reading order back", "Reading order front");
++    pUndoManager->Redo();
++    assertOrder("Reading order front", "Reading order back");
++
++    saveAndReload("Impress Office Open XML");
++    xPagesSupplier.set(mxComponent, uno::UNO_QUERY_THROW);
++    xPage.set(xPagesSupplier->getDrawPages()->getByIndex(0), uno::UNO_QUERY_THROW);
++    xShapes.set(xPage, uno::UNO_QUERY_THROW);
++    assertOrder("Reading order front", "Reading order back");
+ }
