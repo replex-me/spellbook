@@ -72,7 +72,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v17";
+      runtimeIdentity.patchLevel === "browser-undo-v18";
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(

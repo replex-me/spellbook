@@ -86,12 +86,12 @@ try {
     return (
       runtime?.buildReady === true &&
       runtime.buildCommit === runtime.candidateCommit &&
-      runtime.patchLevel === "browser-undo-v17"
+      runtime.patchLevel === "browser-undo-v18"
     );
   });
   if (enduranceCycles > 0 && !patchedBrowserRuntime)
     throw new Error(
-      "Browser product endurance requires an admitted browser-undo-v17 candidate runtime.",
+      "Browser product endurance requires an admitted browser-undo-v18 candidate runtime.",
     );
   const target = before.slides
     .flatMap((slide) => slide.elements)
@@ -683,7 +683,7 @@ async function verifyProductSlideStructure(browser, origin) {
       return (
         runtime?.buildReady === true &&
         runtime.buildCommit === runtime.candidateCommit &&
-        runtime.patchLevel === "browser-undo-v17" &&
+        runtime.patchLevel === "browser-undo-v18" &&
         runtime.nativeSlideStructureReady === true
       );
     });

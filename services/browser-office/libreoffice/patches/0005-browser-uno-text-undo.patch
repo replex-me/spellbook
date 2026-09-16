@@ -159,7 +159,7 @@ index 64da139..61ab37d 100644
  #include <editeng/editeng.hxx>
  
  #include <editeng/unotext.hxx>
-@@ -785,22 +787,42 @@ void SvxTextEditSourceImpl::UpdateData()
+@@ -785,22 +787,43 @@ void SvxTextEditSourceImpl::UpdateData()
                  if (!bEmptyText)
                      pUpdatedText = mpOutliner->CreateParaObject();
  
@@ -206,7 +206,8 @@ index 64da139..61ab37d 100644
                  pTextObj->NbcSetOutlinerParaObjectForText(std::move(pUpdatedText), mpText);
 +                if (bChanged)
 +                {
-+                    mpText->ReformatText();
++                    if (mpText->GetOutlinerParaObject())
++                        mpText->ReformatText();
 +                    pTextObj->GetViewContact().flushViewObjectContacts(false);
 +                    pTextObj->SetChanged();
 +                    pTextObj->BroadcastObjectChange();
