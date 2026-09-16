@@ -144,14 +144,22 @@ if [[ ! -f "$native_marker" ]]; then
     echo "The native test installation is missing the bundled liblangtag registry." >&2
     exit 1
   fi
+  failed_cppunit_tests=()
   while IFS= read -r cppunit_test; do
     if [[ ! "$cppunit_test" =~ ^(CppunitTest_[A-Za-z0-9_]+):(test[A-Za-z0-9_]+)$ ]]; then
       echo "Invalid focused CppUnit test: $cppunit_test" >&2
       exit 1
     fi
-    make -C "$native_build" "${BASH_REMATCH[1]}" \
-      CPPUNIT_TEST_NAME="${BASH_REMATCH[2]}"
+    if ! make -C "$native_build" "${BASH_REMATCH[1]}" \
+      CPPUNIT_TEST_NAME="${BASH_REMATCH[2]}"; then
+      failed_cppunit_tests+=("$cppunit_test")
+    fi
   done < <(node "$upstream_reader" get sourceCandidate.focusedCppunitTests)
+  if (( ${#failed_cppunit_tests[@]} )); then
+    printf 'Failed focused CppUnit tests (%s):\n' "${#failed_cppunit_tests[@]}" >&2
+    printf '  %s\n' "${failed_cppunit_tests[@]}" >&2
+    exit 1
+  fi
   printf 'passed\n' > "$native_marker"
 fi
 
