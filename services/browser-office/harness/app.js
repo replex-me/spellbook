@@ -1831,6 +1831,9 @@ async function handleProductHostMessage(message) {
       if (typeof message.revision !== "string" || !message.revision)
         throw new Error("Browser Office save revision is invalid.");
       const saved = hostSaveSnapshot;
+      // The server has already accepted this version. Even if local
+      // reconciliation fails, the next save must not use the previous ETag.
+      hostRevision = message.revision;
       const live = await observeNativeDocument();
       if (live.revision !== reconciledModelRevision)
         await checkpointLiveNativeState(live, "manual_after_save_request");
@@ -1839,7 +1842,6 @@ async function handleProductHostMessage(message) {
         currentBytes,
         reconciledModelRevision,
       );
-      hostRevision = message.revision;
       baseBytes = saved.bytes.slice();
       if (hasLaterChanges) {
         const laterHistory = laterHistoryFromSaveSnapshot(
