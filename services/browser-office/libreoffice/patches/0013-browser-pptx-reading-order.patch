@@ -1,5 +1,5 @@
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
-index 89db785d..027f1db0 100644
+index 89db785d..e971aec2 100644
 --- a/sd/qa/unit/uiimpress.cxx
 +++ b/sd/qa/unit/uiimpress.cxx
 @@ -1601,3 +1601,2 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
@@ -47,7 +47,23 @@ index 89db785d..027f1db0 100644
 -                     420, true, true, nChangedNavigationOrder);
 +                     420, true, true);
  
-@@ -1675,3 +1666,71 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+@@ -1672,6 +1663,86 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testSpellbookShapePropertiesUseNativeUnoUn
+     xShapes.set(xPage, uno::UNO_QUERY_THROW);
+-    xShape.set(xShapes->getByIndex(0), uno::UNO_QUERY_THROW);
++    xShape.clear();
++    for (sal_Int32 nIndex = 0; nIndex < xShapes->getCount(); ++nIndex)
++    {
++        uno::Reference<drawing::XShape> xCandidate(xShapes->getByIndex(nIndex),
++                                                   uno::UNO_QUERY_THROW);
++        uno::Reference<container::XNamed> xCandidateName(xCandidate, uno::UNO_QUERY_THROW);
++        if (xCandidateName->getName() == "Browser shape")
++        {
++            xShape = xCandidate;
++            break;
++        }
++    }
++    CPPUNIT_ASSERT(xShape.is());
+     xProperties.set(xShape, uno::UNO_QUERY_THROW);
      assertProperties("Browser shape", "Browser title", "Browser description", true,
 -                     420, true, true, nChangedNavigationOrder);
 +                     420, true, true);
