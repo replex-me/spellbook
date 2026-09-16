@@ -12,7 +12,7 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
-The cumulative `browser-undo-v14` source series ports generic document behavior:
+The cumulative `browser-undo-v15` source series ports generic document behavior:
 table structure, formatting and Undo; page and object identity; master-safe
 layout support; sparse-master insertion; object-creation Undo; text-layout
 invalidation; slide names and text shadows; object locks; object interactions;
@@ -37,6 +37,12 @@ independent of `buildReady`: a compiled runtime must also survive the product
 bridge's full slide lifecycle, observation, Undo/Redo, recovery and exact-save
 checks before it can claim safe native structure editing. Collabora transport
 handlers remain deliberately absent.
+
+The focused native regressions create and reload the presentation model through
+`XLoadable` without a desktop frame. This keeps document-model, Undo and OOXML
+checks independent of the pinned headless build's unrelated `ViewTabBar`
+lifecycle; the real canvas and controller remain covered by the subsequent
+browser product-bridge endurance run.
 
 Verify every source edit before starting the expensive build:
 
