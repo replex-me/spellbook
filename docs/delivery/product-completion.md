@@ -62,7 +62,10 @@ The 2026-09-16 Collabora `r19` candidate compiled and ran 131 native tests;
 one failed on fixed slide-date visibility. Source inspection identified a
 fixed-date placeholder import path that does not restore page metadata; the
 `undo-v28` source series corrects that path and applies cleanly to the pinned
-source, but has not passed native tests. The
+source, but its build is still running. Static inspection also found that the
+same test reads a PPTX-reopened line marker as `PointSequence`, while the
+native property returns `PolyPolygonBezierCoords`. The `undo-v29` series fixes
+that assertion and applies cleanly; it has not passed native tests. The
 browser `browser-undo-v23` candidate compiled but failed two focused tests:
 character spacing differed by one 1/100 mm unit across its UNO/Undo path, and
 the test attempted to clear `LineDashName` with an invalid empty name. The
