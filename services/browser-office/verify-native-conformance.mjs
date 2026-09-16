@@ -153,7 +153,8 @@ async function runScenario({ scenario, capabilities, candidateRuntime }) {
     args: [mutationReportPath, ...(scenario.apply.args ?? [])],
     env: {
       ...(scenario.apply.env ?? {}),
-      SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL: scenario.expectedPatchLevel,
+      SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL:
+        candidateRuntime.receipt.libreOffice.patchLevel,
       SPELLBOOK_PROBE_EXPECTED_OPERATIONS: JSON.stringify(
         scenario.allowedOperations,
       ),
@@ -181,7 +182,8 @@ async function runScenario({ scenario, capabilities, candidateRuntime }) {
     args: [mutationReportPath, ...(scenario.reopen.args ?? [])],
     env: {
       ...(scenario.reopen.env ?? {}),
-      SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL: scenario.expectedPatchLevel,
+      SPELLBOOK_PROBE_EXPECTED_PATCH_LEVEL:
+        candidateRuntime.receipt.libreOffice.patchLevel,
       ...visualEnvironment(scenarioRoot, "reopen", scenario.name),
     },
     logPath: path.join(scenarioRoot, "reopen.log"),
