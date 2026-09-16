@@ -12,8 +12,8 @@
   "patchLevel": "undo-v27",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "3366e3fdd473bf640d55d9d3b14b9c12fd0c66e19214acb13e01cc52c52cc86c",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v27-r18-candidate",
+  "patchSeriesSha256": "11982ab93ba003f23634f92ecf2acecd0ddacb88edf357c0210e7d39342c987b",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v27-r19-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -61,7 +61,8 @@
     "patches/0044-native-release-regression-fixes.patch",
     "patches/0045-native-authoring-state-regressions.patch",
     "patches/0046-visible-line-style-roundtrip.patch",
-    "patches/0047-native-undo-state-snapshots.patch"
+    "patches/0047-native-undo-state-snapshots.patch",
+    "patches/0048-pptx-marker-geometry-regression.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
