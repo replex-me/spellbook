@@ -239,13 +239,14 @@ test("only extension connection timeouts qualify for read-only session retry", (
 });
 
 test("the runner reopens the latest save after the WOPI version settles", async () => {
-  let version = 1;
-  setTimeout(() => {
-    version = 2;
-  }, 10);
+  let receiptReads = 0;
 
   const saved = await waitForSavedFile(
-    { receipt: () => ({ version }) },
+    {
+      receipt: () => ({
+        version: receiptReads++ < 2 ? 1 : 2,
+      }),
+    },
     "/tmp/conformance-session",
     { timeoutMs: 200, settleMs: 25, pollMs: 5 },
   );
