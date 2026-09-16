@@ -66,8 +66,11 @@ source, but has not passed native tests. The
 browser `browser-undo-v23` candidate compiled but failed two focused tests:
 character spacing differed by one 1/100 mm unit across its UNO/Undo path, and
 the test attempted to clear `LineDashName` with an invalid empty name. The
-`browser-undo-v24` source series applies cleanly with a bounded spacing
-assertion and corrected line-style test setup; it has not passed native tests.
+`browser-undo-v24` compiled and advanced through those tests, then failed one
+marker test because its setup supplied `PointSequence` where the native marker
+table and shape line properties consume `PolyPolygonBezierCoords`. The
+`browser-undo-v25` series corrects setup and reload assertions and applies
+cleanly, but has not passed native tests.
 The current local browser editor passed real open/edit/save/download and
 compact-screen canvas/access tests, but the older standalone conformance
 runtime aborts during its third document reopen. Neither current source
