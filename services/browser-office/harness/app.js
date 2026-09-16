@@ -5,6 +5,11 @@ import {
   requestPersistentBrowserStorage,
 } from "/harness/opfs-journal.mjs";
 import { persistedSectionsMatch } from "/harness/product-persistence.mjs";
+import {
+  acknowledgedSaveHasLaterChanges,
+  createSaveSnapshot,
+  laterHistoryFromSaveSnapshot,
+} from "/harness/save-transaction.mjs";
 import "/harness/runtime-admission.js";
 
 const body = document.body;
@@ -1416,11 +1421,39 @@ async function redoProductMutation() {
   return true;
 }
 
-async function openJournal(initialBytes, name) {
+async function openJournal(initialBytes, name, documentId = null) {
   baseBytes = initialBytes.slice();
   journal = await openBrowserDocumentJournal({
-    identity: `${name}:${await sha256(initialBytes)}`,
+    identity: documentId
+      ? `document:${documentId}`
+      : `${name}:${await sha256(initialBytes)}`,
   });
+  if (documentId && !(await journal.load())) {
+    const legacy = await openBrowserDocumentJournal({
+      identity: `${name}:${await sha256(initialBytes)}`,
+    });
+    const checkpoint = await legacy.load();
+    if (
+      checkpoint &&
+      (await sha256(checkpoint.baseBytes)) === (await sha256(initialBytes))
+    ) {
+      await journal.save({
+        fileName: checkpoint.metadata.fileName,
+        baseVersionId: checkpoint.metadata.baseVersionId,
+        baseBytes: checkpoint.baseBytes,
+        candidateBytes: checkpoint.candidateBytes,
+        commands: checkpoint.metadata.commands,
+      });
+      const migrated = await journal.load();
+      if (
+        !migrated ||
+        migrated.metadata.candidateSha256 !==
+          checkpoint.metadata.candidateSha256
+      )
+        throw new Error("Browser recovery migration could not be verified.");
+      await legacy.clear();
+    }
+  }
   return journal;
 }
 
@@ -1575,6 +1608,9 @@ async function openProductDocument(message) {
     typeof message.fileName !== "string" ||
     !message.fileName.trim() ||
     message.fileName.length > 255 ||
+    typeof message.documentId !== "string" ||
+    !message.documentId.trim() ||
+    message.documentId.length > 255 ||
     typeof message.revision !== "string" ||
     !message.revision ||
     !Number.isSafeInteger(message.maxBytes) ||
@@ -1597,7 +1633,7 @@ async function openProductDocument(message) {
   reconciledModelRevision = "";
   unreconciledModelRevision = "";
   await requestPersistentBrowserStorage();
-  await openJournal(initial, message.fileName);
+  await openJournal(initial, message.fileName, message.documentId);
   const recovered = await journal.load();
   baseBytes = initial.slice();
   let candidate = initial;
@@ -1688,12 +1724,19 @@ async function openProductDocument(message) {
 }
 
 let hostSaveRequestId = null;
+let hostSaveSnapshot = null;
 async function saveProductDocument() {
   if (hostSaveRequestId) return;
   const requestId = `browser-save-${++requestSequence}`;
   hostSaveRequestId = requestId;
   try {
     const bytes = await exportProductDocument();
+    hostSaveSnapshot = createSaveSnapshot(
+      bytes,
+      reconciledModelRevision,
+      commands.length,
+      productUndoHistory.length,
+    );
     const transferable = bytes.slice();
     postHost(
       {
@@ -1706,6 +1749,7 @@ async function saveProductDocument() {
     );
   } catch (error) {
     hostSaveRequestId = null;
+    hostSaveSnapshot = null;
     throw error;
   }
 }
@@ -1765,32 +1809,123 @@ async function handleProductHostMessage(message) {
     throw new Error("Browser Office host command is not supported.");
   }
   if (message.type === "save-result") {
-    if (!hostSaveRequestId || message.requestId !== hostSaveRequestId)
+    if (
+      !hostSaveRequestId ||
+      !hostSaveSnapshot ||
+      message.requestId !== hostSaveRequestId
+    )
       throw new Error("Browser Office save response is stale.");
-    hostSaveRequestId = null;
     if (message.ok !== true) {
+      hostSaveRequestId = null;
+      hostSaveSnapshot = null;
       reportHostModified(true);
       postHost({
         type: "save-response",
+        requestId: message.requestId,
         success: false,
         error: String(message.error ?? "browser_document_save_failed"),
       });
       return;
     }
-    if (typeof message.revision !== "string" || !message.revision)
-      throw new Error("Browser Office save revision is invalid.");
-    hostRevision = message.revision;
-    baseBytes = currentBytes.slice();
-    await request("mark-saved");
-    await journal.clear();
-    history.length = 0;
-    commands.length = 0;
-    productUndoHistory.length = 0;
-    productRedoHistory.length = 0;
-    unreconciledModelRevision = "";
-    lastReportedModified = true;
-    reportHostModified(false);
-    postHost({ type: "save-response", success: true });
+    try {
+      if (typeof message.revision !== "string" || !message.revision)
+        throw new Error("Browser Office save revision is invalid.");
+      const saved = hostSaveSnapshot;
+      const live = await observeNativeDocument();
+      if (live.revision !== reconciledModelRevision)
+        await checkpointLiveNativeState(live, "manual_after_save_request");
+      const hasLaterChanges = acknowledgedSaveHasLaterChanges(
+        saved,
+        currentBytes,
+        reconciledModelRevision,
+      );
+      hostRevision = message.revision;
+      baseBytes = saved.bytes.slice();
+      if (hasLaterChanges) {
+        const laterHistory = laterHistoryFromSaveSnapshot(
+          saved,
+          currentBytes,
+          reconciledModelRevision,
+          commands,
+          productUndoHistory,
+        );
+        if (laterHistory) {
+          commands.splice(0, commands.length, ...laterHistory.commands);
+          productUndoHistory.splice(
+            0,
+            productUndoHistory.length,
+            ...laterHistory.undoHistory,
+          );
+        } else {
+          const snapshotCommand = {
+            op: "native_snapshot",
+            persistence: "native_snapshot",
+            sourceOperations: ["edit_after_save_request"],
+            reason: "save_acknowledged_with_later_edits",
+            reconciliation: {
+              beforeRevision: saved.modelRevision,
+              afterRevision: reconciledModelRevision,
+              nativeRequest: null,
+            },
+          };
+          commands.splice(0, commands.length, snapshotCommand);
+          productUndoHistory.splice(0, productUndoHistory.length, {
+            beforeBytes: saved.bytes.slice(),
+            afterBytes: currentBytes.slice(),
+            beforeRevision: saved.modelRevision,
+            afterRevision: reconciledModelRevision,
+            beforeSlides: [],
+            nativeRequest: null,
+            command: snapshotCommand,
+            persistence: "native_snapshot",
+            nativeUndoAvailable: false,
+            nativeRedoAvailable: false,
+          });
+        }
+        productRedoHistory.length = 0;
+        await persistCheckpoint();
+      } else {
+        await request("mark-saved");
+        await journal.clear();
+        history.length = 0;
+        commands.length = 0;
+        productUndoHistory.length = 0;
+        productRedoHistory.length = 0;
+      }
+      const afterAcknowledgement = await observeNativeDocument();
+      if (afterAcknowledgement.revision !== reconciledModelRevision)
+        await checkpointLiveNativeState(
+          afterAcknowledgement,
+          "manual_after_save_acknowledgement",
+        );
+      const modified = acknowledgedSaveHasLaterChanges(
+        saved,
+        currentBytes,
+        reconciledModelRevision,
+      );
+      unreconciledModelRevision = "";
+      hostSaveRequestId = null;
+      hostSaveSnapshot = null;
+      lastReportedModified = !modified;
+      reportHostModified(modified);
+      postHost({
+        type: "save-response",
+        requestId: message.requestId,
+        success: true,
+        modified,
+      });
+    } catch (error) {
+      hostSaveRequestId = null;
+      hostSaveSnapshot = null;
+      lastReportedModified = false;
+      reportHostModified(true);
+      postHost({
+        type: "save-response",
+        requestId: message.requestId,
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     return;
   }
   if (typeof message.id === "string" && message.request) {
@@ -2222,6 +2357,7 @@ async function startBrowserProbe() {
     {
       type: "open",
       requestId: openRequestId,
+      documentId: "browser-probe",
       fileName: "browser-probe.pptx",
       revision: '"browser-probe:baseline"',
       maxBytes: 64 * 1024 * 1024,

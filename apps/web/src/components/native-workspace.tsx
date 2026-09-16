@@ -77,6 +77,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     pendingBrowserSave = useRef<{
       requestId: string;
       revision: string | null;
+      acknowledgementSent: boolean;
     } | null>(null);
   const dispatchedLocalJobs = useRef(new Set<string>());
   const assetPayloads = useRef(
@@ -410,6 +411,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           {
             type: "open",
             requestId: crypto.randomUUID(),
+            documentId: launch.documentId,
             fileName: launch.fileName,
             revision,
             maxBytes: launch.maxBytes,
@@ -453,6 +455,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
       pendingBrowserSave.current = {
         requestId: message.requestId,
         revision: null,
+        acknowledgementSent: false,
       };
       pendingSaveRevision.current = saveRevision.current + 1;
       try {
@@ -477,7 +480,6 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           return;
         browserRevision.current = revision;
         pendingRequest.revision = revision;
-        editorModified.current = false;
         setSaveState(value.unchanged ? "저장 확인 중…" : "저장 검사 중…");
       } catch (cause) {
         if (pendingBrowserSave.current?.requestId !== message.requestId) return;
@@ -568,7 +570,53 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
               return;
             }
             if (result.data?.type === "save-response") {
-              if (!result.data.success) setSaveState("저장 실패");
+              if (!result.data.success) {
+                if (
+                  pendingBrowserSave.current?.requestId ===
+                  result.data.requestId
+                ) {
+                  pendingBrowserSave.current = null;
+                  pendingSaveRevision.current = null;
+                  downloadAfterRevision.current = null;
+                  editorModified.current = true;
+                  const waiting = pendingTurn.current;
+                  pendingTurn.current = null;
+                  if (waiting) {
+                    setBusy(false);
+                    setText(waiting.draft);
+                  }
+                }
+                setSaveState("저장 실패");
+                return;
+              }
+              const saved = pendingBrowserSave.current;
+              if (!saved || saved.requestId !== result.data.requestId) return;
+              pendingBrowserSave.current = null;
+              pendingSaveRevision.current = null;
+              const modified = result.data.modified === true;
+              editorModified.current = modified;
+              setSaveState(modified ? "변경 사항 있음" : "저장됨");
+              const waiting = pendingTurn.current;
+              const downloadWaiting = downloadAfterRevision.current !== null;
+              if (modified && (waiting || downloadWaiting)) {
+                pendingSaveRevision.current = saveRevision.current + 1;
+                setSaveState("추가 변경 사항 저장 중…");
+                sendOffice("Action_Save", {
+                  Notify: true,
+                  DontSaveIfUnmodified: false,
+                });
+              } else if (!modified) {
+                if (waiting) {
+                  pendingTurn.current = null;
+                  void dispatchTurn(waiting);
+                }
+                if (downloadWaiting) {
+                  downloadAfterRevision.current = null;
+                  window.location.assign(
+                    `/api/documents/${launch.documentId}/download`,
+                  );
+                }
+              }
               return;
             }
             if (result.data?.type === "error") {
@@ -657,6 +705,8 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     openBrowserDocument,
     saveBrowserDocument,
     sendOffice,
+    dispatchTurn,
+    launch.documentId,
   ]);
   useEffect(() => {
     if (launch.editorKind !== "wopi" || !engineReady || bridgeReady) return;
@@ -703,40 +753,50 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           ) {
             const browserSave = pendingBrowserSave.current;
             if (browserSave?.revision) {
-              pendingBrowserSave.current = null;
-              editorModified.current = false;
-              port.current?.postMessage({
-                type: "save-result",
-                requestId: browserSave.requestId,
-                ok: true,
-                revision: browserSave.revision,
-              });
+              if (!browserSave.acknowledgementSent) {
+                browserSave.acknowledgementSent = true;
+                port.current?.postMessage({
+                  type: "save-result",
+                  requestId: browserSave.requestId,
+                  ok: true,
+                  revision: browserSave.revision,
+                });
+              }
+              setSaveState("저장 확인 중…");
             }
             if (browserSave && !browserSave.revision) {
               setSaveState("저장 검사 중…");
               timer = setTimeout(poll, 500);
               return;
             }
-            pendingSaveRevision.current = null;
-            setSaveState("저장됨");
-            const waiting = pendingTurn.current;
-            if (waiting) {
-              if (editorModified.current) {
-                pendingSaveRevision.current = saveRevision.current + 1;
-                setSaveState("AI 작업 전 저장 중…");
-                sendOffice("Action_Save", {
-                  Notify: true,
-                  DontSaveIfUnmodified: false,
-                });
-              } else {
-                pendingTurn.current = null;
-                void dispatchTurn(waiting);
+            if (!browserSave) {
+              pendingSaveRevision.current = null;
+              setSaveState("저장됨");
+              const waiting = pendingTurn.current;
+              if (waiting) {
+                if (editorModified.current) {
+                  pendingSaveRevision.current = saveRevision.current + 1;
+                  setSaveState("AI 작업 전 저장 중…");
+                  sendOffice("Action_Save", {
+                    Notify: true,
+                    DontSaveIfUnmodified: false,
+                  });
+                } else {
+                  pendingTurn.current = null;
+                  void dispatchTurn(waiting);
+                }
               }
             }
-          } else if (!editorModified.current) {
+          } else if (
+            pendingSaveRevision.current === null &&
+            !editorModified.current
+          ) {
             setSaveState("저장됨");
           }
           if (
+            pendingBrowserSave.current === null &&
+            pendingSaveRevision.current === null &&
+            !editorModified.current &&
             downloadAfterRevision.current !== null &&
             saveRevision.current >= downloadAfterRevision.current
           ) {

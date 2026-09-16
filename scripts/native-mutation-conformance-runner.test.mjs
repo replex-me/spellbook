@@ -11,6 +11,7 @@ import {
   localProbeBrowserOrigin,
   operationsFromReport,
   persistenceStateFromProbeOutput,
+  withNoopSaveBaseline,
   waitForSavedFile,
 } from "./native-mutation-conformance-runner.mjs";
 import { buildConformancePlan } from "./native-mutation-conformance.mjs";
@@ -224,6 +225,30 @@ test("baseline probe output keeps only comparable persistence state", () => {
   );
   assert.throws(
     () => persistenceStateFromProbeOutput("{}"),
+    /returned no slide\/master state/,
+  );
+});
+
+test("both native runners attach the observed no-op save and reject a fabricated baseline", () => {
+  const output = JSON.stringify({
+    slides: [{ slideIndex: 0 }],
+    masters: [{ masterIndex: 0 }],
+  });
+  const report = { commands: ["set_paragraph_format"] };
+  assert.deepEqual(withNoopSaveBaseline(report, output), {
+    ...report,
+    persistenceBaseline: {
+      slides: [{ slideIndex: 0 }],
+      masters: [{ masterIndex: 0 }],
+    },
+  });
+  assert.equal(Object.hasOwn(report, "persistenceBaseline"), false);
+  assert.throws(
+    () => withNoopSaveBaseline({ persistenceBaseline: {} }, output),
+    /cannot supply its own no-op baseline/,
+  );
+  assert.throws(
+    () => withNoopSaveBaseline(report, "{}"),
     /returned no slide\/master state/,
   );
 });

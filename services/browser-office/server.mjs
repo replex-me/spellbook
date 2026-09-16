@@ -52,6 +52,13 @@ export function buildRoutes(
       ),
     ],
     [
+      "/harness/save-transaction.mjs",
+      route(
+        path.join(root, "save-transaction.mjs"),
+        "text/javascript; charset=utf-8",
+      ),
+    ],
+    [
       "/harness/office-thread.js",
       route(
         path.join(root, "harness/office-thread.js"),

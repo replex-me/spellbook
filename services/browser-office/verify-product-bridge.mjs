@@ -556,6 +556,73 @@ try {
     '"saved:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"';
   await acknowledgeProductSave(page, save.requestId, savedRevision);
 
+  // A validated save may be acknowledged after the user has already edited
+  // again. The later edit must remain dirty and recover from the saved file.
+  const overlappingSave = await requestProductSave(page);
+  const overlappingPayload = await consumeSavedBytes(
+    page,
+    overlappingSave.requestId,
+  );
+  assert.equal(sha256(overlappingPayload.bytes), sha256(savedBytes));
+  const laterReplacement = `${replacement} · after save request`;
+  const laterEdit = await nativeTask(page, "edit-after-save-request", {
+    operation: "edit",
+    expectedRevision: editedForSave.revision,
+    expectedSlides: JSON.stringify(editedForSave.slides),
+    command: {
+      op: "replace_text",
+      elementId: target.elementId,
+      text: laterReplacement,
+    },
+    permission: {
+      mode: "selection",
+      elementIds: [target.elementId],
+      slideIndexes: [],
+    },
+    suppressCapture: true,
+  });
+  assert.notEqual(laterEdit.revision, editedForSave.revision);
+  const overlappingRevision =
+    '"saved:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"';
+  await acknowledgeProductSave(
+    page,
+    overlappingSave.requestId,
+    overlappingRevision,
+    { modified: true },
+  );
+  const laterUndone = await sendHostCommand(page, "Send_UNO_Command", {
+    Command: ".uno:Undo",
+  });
+  assert.equal(laterUndone.revision, editedForSave.revision);
+  const laterRedone = await sendHostCommand(page, "Send_UNO_Command", {
+    Command: ".uno:Redo",
+  });
+  assert.equal(laterRedone.revision, laterEdit.revision);
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
+  await connectProductHost(page, origin);
+  await openProductFixture(
+    page,
+    savedBytes,
+    "post-save-recovered",
+    "product-bridge.pptx",
+    overlappingRevision,
+  );
+  const postSaveOpen = await waitForEvent(page, {
+    type: "open-complete",
+    requestId: "post-save-recovered",
+  });
+  assert.equal(postSaveOpen.recovered, true);
+  const postSaveObservation = await nativeTask(page, "post-save-observed", {
+    operation: "observe",
+    captureSlideIndexes: [],
+  });
+  assert.equal(
+    postSaveObservation.slides
+      .flatMap((slide) => slide.elements)
+      .find((element) => element.elementId === target.elementId)?.text,
+    laterReplacement,
+  );
+
   const slideStructure = await verifyProductSlideStructure(browser, origin);
   const readingOrder = patchedBrowserRuntime
     ? await verifyProductReadingOrder(browser, origin)
@@ -574,6 +641,7 @@ try {
     replacement,
     undoRestoredRevision: restored.revision,
     recovered: recoveredOpen.recovered,
+    postSaveEditRecovered: postSaveOpen.recovered,
     patchedBrowserRuntime,
     candidateRuntime: candidateRuntime
       ? {
@@ -1350,14 +1418,21 @@ async function requestProductSave(page, { duplicate = false } = {}) {
   return { ...save, previousCount };
 }
 
-async function acknowledgeProductSave(page, requestId, revision) {
+async function acknowledgeProductSave(
+  page,
+  requestId,
+  revision,
+  { modified = false } = {},
+) {
   const responseCount = await hostEventCount(page, "save-response");
-  const unmodifiedCount = await evaluateRenderer(
+  const modifiedCount = await evaluateRenderer(
     page,
-    () =>
+    (expectedModified) =>
       globalThis.__spellbookProductHost.events.filter(
-        (event) => event.type === "modified" && event.modified === false,
+        (event) =>
+          event.type === "modified" && event.modified === expectedModified,
       ).length,
+    modified,
   );
   await evaluateRenderer(
     page,
@@ -1376,12 +1451,14 @@ async function acknowledgeProductSave(page, requestId, revision) {
     responseCount,
   );
   assert.equal(response.success, true);
+  assert.equal(response.modified, modified);
   await page.waitForFunction(
-    (previousCount) =>
+    ({ previousCount, expectedModified }) =>
       globalThis.__spellbookProductHost.events.filter(
-        (event) => event.type === "modified" && event.modified === false,
+        (event) =>
+          event.type === "modified" && event.modified === expectedModified,
       ).length > previousCount,
-    unmodifiedCount,
+    { previousCount: modifiedCount, expectedModified: modified },
     { timeout: 30_000 },
   );
 }
@@ -1478,25 +1555,31 @@ async function openProductFixture(
   bytes,
   requestId,
   fileName = "product-bridge.pptx",
+  revision = '"baseline:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
 ) {
   await evaluateRenderer(
     page,
-    ({ source, id, name }) => {
+    ({ source, id, name, currentRevision }) => {
       const value = Uint8Array.from(source);
       globalThis.__spellbookProductHost.port.postMessage(
         {
           type: "open",
           requestId: id,
+          documentId: `product-bridge:${name}`,
           fileName: name,
-          revision:
-            '"baseline:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+          revision: currentRevision,
           maxBytes: 64 * 1024 * 1024,
           bytes: value.buffer,
         },
         [value.buffer],
       );
     },
-    { source: Array.from(bytes), id: requestId, name: fileName },
+    {
+      source: Array.from(bytes),
+      id: requestId,
+      name: fileName,
+      currentRevision: revision,
+    },
   );
 }
 

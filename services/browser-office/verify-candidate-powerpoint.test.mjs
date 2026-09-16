@@ -61,10 +61,18 @@ test("PowerPoint admission requires the complete receipt-bound endurance report"
     changedParts: ["ppt/slides/slide1.xml"],
     replacement: "Spellbook · product bridge",
     savedSha256: "b".repeat(64),
+    postSaveEditRecovered: true,
     pageErrors: [],
     requestFailures: [],
   };
   assert.deepEqual(candidateBrowserReportErrors(report), []);
+  assert.match(
+    candidateBrowserReportErrors({
+      ...report,
+      postSaveEditRecovered: false,
+    }).join("; "),
+    /edit made during save/u,
+  );
   assert.match(
     candidateBrowserReportErrors({
       ...report,
@@ -85,6 +93,9 @@ test("PowerPoint admission also requires every typed native operation", () => {
   const scenarios = conformance.executionOrder.map((scenario) => ({
     scenario,
     status: "passed",
+    baseline: { sha256: "b".repeat(64), reopened: true },
+    candidate: { sha256: "c".repeat(64) },
+    mutationReportSha256: "d".repeat(64),
     reopenVerified: true,
     missingSelectedOperations: [],
     changeBudget: { valid: true },
@@ -99,6 +110,15 @@ test("PowerPoint admission also requires every typed native operation", () => {
     scenarios,
   };
   assert.deepEqual(candidateNativeConformanceErrors(report), []);
+  assert.match(
+    candidateNativeConformanceErrors({
+      ...report,
+      scenarios: scenarios.map(
+        ({ baseline: _baseline, ...scenario }) => scenario,
+      ),
+    }).join("; "),
+    /browser native scenario is incomplete/u,
+  );
   assert.match(
     candidateNativeConformanceErrors({
       ...report,

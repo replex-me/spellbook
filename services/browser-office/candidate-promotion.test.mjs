@@ -81,6 +81,7 @@ const browserReport = {
   changedParts: ["ppt/slides/slide1.xml"],
   replacement: "Spellbook · product bridge",
   savedSha256,
+  postSaveEditRecovered: true,
   pageErrors: [],
   requestFailures: [],
 };
@@ -94,6 +95,9 @@ const nativeConformanceReport = {
   scenarios: conformance.executionOrder.map((scenario) => ({
     scenario,
     status: "passed",
+    baseline: { sha256: "b".repeat(64), reopened: true },
+    candidate: { sha256: "c".repeat(64) },
+    mutationReportSha256: "d".repeat(64),
     reopenVerified: true,
     missingSelectedOperations: [],
     changeBudget: { valid: true },

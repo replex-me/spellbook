@@ -72,6 +72,20 @@ export function persistenceStateFromProbeOutput(output) {
   return { slides: state.slides, masters: state.masters };
 }
 
+export function withNoopSaveBaseline(mutationReport, probeOutput) {
+  if (
+    !mutationReport ||
+    typeof mutationReport !== "object" ||
+    Array.isArray(mutationReport) ||
+    Object.hasOwn(mutationReport, "persistenceBaseline")
+  )
+    throw new Error("Mutation report cannot supply its own no-op baseline.");
+  return {
+    ...mutationReport,
+    persistenceBaseline: persistenceStateFromProbeOutput(probeOutput),
+  };
+}
+
 export function engineIdentityFromProbeOutput(output) {
   const identity = stateFromProbeOutput(output).engine;
   if (!identity || typeof identity !== "object")
@@ -472,14 +486,13 @@ async function runScenario({
     expectSave: false,
     logPath: path.join(scenarioDirectory, "baseline-reopen.log"),
   });
-  const persistenceBaseline = persistenceStateFromProbeOutput(
-    baselineReopened.stdout,
-  );
   const engineIdentity = engineIdentityFromProbeOutput(baselineReopened.stdout);
   if (expectedRelease)
     assertObservedEngineIdentity(engineIdentity, expectedRelease);
-  const mutationReport = JSON.parse(await fs.readFile(reportPath, "utf8"));
-  mutationReport.persistenceBaseline = persistenceBaseline;
+  const mutationReport = withNoopSaveBaseline(
+    JSON.parse(await fs.readFile(reportPath, "utf8")),
+    baselineReopened.stdout,
+  );
   await fs.writeFile(
     reportPath,
     `${JSON.stringify(mutationReport, null, 2)}\n`,

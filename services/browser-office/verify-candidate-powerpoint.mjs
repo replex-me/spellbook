@@ -90,6 +90,10 @@ export function candidateBrowserReportErrors(report) {
     errors.push("the saved text replacement is missing from the report");
   if (!/^[0-9a-f]{64}$/u.test(report?.savedSha256 ?? ""))
     errors.push("the saved PPTX digest is missing");
+  if (report?.postSaveEditRecovered !== true)
+    errors.push(
+      "an edit made during save did not survive acknowledgement and reopen",
+    );
   if ((report?.pageErrors?.length ?? -1) !== 0)
     errors.push("the browser run emitted page errors");
   if ((report?.requestFailures?.length ?? -1) !== 0)
@@ -130,6 +134,10 @@ export function candidateNativeConformanceErrors(report) {
     for (const scenario of report.scenarios) {
       if (
         scenario?.status !== "passed" ||
+        scenario?.baseline?.reopened !== true ||
+        !/^[0-9a-f]{64}$/u.test(scenario?.baseline?.sha256 ?? "") ||
+        !/^[0-9a-f]{64}$/u.test(scenario?.candidate?.sha256 ?? "") ||
+        !/^[0-9a-f]{64}$/u.test(scenario?.mutationReportSha256 ?? "") ||
         scenario?.reopenVerified !== true ||
         scenario?.missingSelectedOperations?.length !== 0 ||
         (scenario?.changeBudget?.valid ?? scenario?.changeBudget?.Valid) !==

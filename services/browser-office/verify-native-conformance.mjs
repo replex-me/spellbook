@@ -10,6 +10,7 @@ import {
   buildChangeBudget,
   buildScenarioExecutionPlan,
   operationsFromReport,
+  withNoopSaveBaseline,
 } from "../../scripts/native-mutation-conformance-runner.mjs";
 import { admitCandidateRuntime } from "./candidate-runtime.mjs";
 import { readRepositoryIdentity } from "./repository-identity.mjs";
@@ -142,6 +143,12 @@ async function runScenario({ scenario, capabilities, candidateRuntime }) {
     script: "services/office-session-spike/probe-native-save-noop.mjs",
     logPath: path.join(scenarioRoot, "baseline.log"),
   });
+  const baselineReopened = await runBrowserProbe({
+    candidateRuntime,
+    source: baseline,
+    script: "services/office-session-spike/probe-uno-read.mjs",
+    logPath: path.join(scenarioRoot, "baseline-reopen.log"),
+  });
 
   const mutationReportPath = path.join(scenarioRoot, "mutation-report.json");
   const candidate = path.join(scenarioRoot, "candidate.pptx");
@@ -162,7 +169,14 @@ async function runScenario({ scenario, capabilities, candidateRuntime }) {
     },
     logPath: path.join(scenarioRoot, "mutation.log"),
   });
-  const mutationReport = await readJson(mutationReportPath);
+  const mutationReport = withNoopSaveBaseline(
+    await readJson(mutationReportPath),
+    baselineReopened.stdout,
+  );
+  await fs.writeFile(
+    mutationReportPath,
+    `${JSON.stringify(mutationReport, null, 2)}\n`,
+  );
   const operations = operationsFromReport(mutationReport);
   const disallowed = operations.filter(
     (operation) => !scenario.allowedOperations.includes(operation),
@@ -210,7 +224,10 @@ async function runScenario({ scenario, capabilities, candidateRuntime }) {
     status: "passed",
     durationMs: Date.now() - started,
     source: { path: scenario.source, sha256: sourceSha256 },
-    baseline: { sha256: await sha256File(baseline) },
+    baseline: {
+      sha256: await sha256File(baseline),
+      reopened: true,
+    },
     candidate: { sha256: await sha256File(candidate) },
     operations,
     selectedOperations: scenario.selectedOperations,
@@ -247,13 +264,14 @@ async function runBrowserProbe({
   const origin = `http://127.0.0.1:${address.port}`;
   const url = `${origin}/workspace?hostOrigin=${encodeURIComponent(origin)}&browserProbe=1`;
   try {
-    await runProcess(
+    const result = await runProcess(
       process.execPath,
       [path.resolve(repositoryRoot, script), url, ...args],
       logPath,
       env,
     );
     if (output) await fs.access(output);
+    return result;
   } finally {
     server.closeAllConnections();
     await new Promise((resolve, reject) =>
