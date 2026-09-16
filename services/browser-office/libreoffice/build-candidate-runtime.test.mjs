@@ -28,6 +28,17 @@ test("fetches only the exact shallow translations gitlink for the Korean WASM bu
 });
 
 test("runs the declared focused native regressions instead of the unrelated UI suite", () => {
+  const dependencyIndex = script.indexOf(
+    'make -C "$native_build" ExternalPackage_liblangtag_data',
+  );
+  const focusedTestsIndex = script.indexOf(
+    "sourceCandidate.focusedCppunitTests",
+  );
+  assert.ok(dependencyIndex >= 0 && dependencyIndex < focusedTestsIndex);
+  assert.match(
+    script,
+    /instdir\/share\/liblangtag\/language-subtag-registry\.xml/u,
+  );
   assert.match(
     script,
     /get sourceCandidate\.focusedCppunitTests/u,

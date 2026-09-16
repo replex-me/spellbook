@@ -130,8 +130,19 @@ if [[ ! -f "$native_marker" ]]; then
         --disable-skia \
         --enable-release-build \
         --with-lang="en-US" \
-        --with-theme=colibre
+      --with-theme=colibre
     )
+  fi
+  # The focused Impress tests load real ODP/PPTX documents. The native test
+  # target links bundled liblangtag but does not install its registry data on
+  # this pinned branch, so language initialization falls back to the invalid
+  # configure prefix and aborts document loading. Materialize the declared
+  # LibreOffice external package before any test starts and fail with the
+  # missing prerequisite instead of a secondary ViewTabBar teardown crash.
+  make -C "$native_build" ExternalPackage_liblangtag_data
+  if [[ ! -s "$native_build/instdir/share/liblangtag/language-subtag-registry.xml" ]]; then
+    echo "The native test installation is missing the bundled liblangtag registry." >&2
+    exit 1
   fi
   while IFS= read -r cppunit_test; do
     if [[ ! "$cppunit_test" =~ ^(CppunitTest_[A-Za-z0-9_]+):(test[A-Za-z0-9_]+)$ ]]; then
