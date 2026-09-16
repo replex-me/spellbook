@@ -12,7 +12,7 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
-The cumulative `browser-undo-v21` source series ports generic document behavior:
+The cumulative `browser-undo-v22` source series ports generic document behavior:
 table structure, formatting and Undo; page and object identity; master-safe
 layout support; sparse-master insertion; object-creation Undo; text-layout
 invalidation; slide names and text shadows; object locks; object interactions;
@@ -28,7 +28,10 @@ transition state, slide metadata, text margins, paragraph formatting, line
 dash/arrow styles, shadows and object locks. The first `browser-undo-v20`
 native candidate ran 18 focused regressions and failed seven; `0016` corrects
 the observed export, text-cache, animation, media and headless-test boundaries.
-The revised source series applies cleanly but has not passed a native build.
+Patch `0017` verifies that a named dash also changes the visible line-style
+mode and checks dash and marker geometry, not LibreOffice-only palette names,
+after PPTX save/reopen. The revised source series applies cleanly but has not
+passed a native build.
 The browser-native adapter now accepts the complete
 97-operation typed mutation contract and persists both its commands and direct
 human edits as native PPTX snapshots. The cumulative patch also preserves

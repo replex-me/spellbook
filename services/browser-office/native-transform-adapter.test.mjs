@@ -259,6 +259,12 @@ function fixture() {
     CENTER: "center",
   });
   const style = { ParagraphAdjust };
+  const LineStyle = Object.assign(function LineStyle() {}, {
+    NONE: "none",
+    SOLID: "solid",
+    DASH: "dash",
+  });
+  const drawing = { LineStyle };
   const text = {
     GraphicCrop,
     WritingMode2: { LR_TB: 0, RL_TB: 1, TB_RL: 2 },
@@ -278,12 +284,14 @@ function fixture() {
           ? "enum:FontSlant"
           : value === ParagraphAdjust
             ? "enum:ParagraphAdjust"
-            : "enum:ClickAction",
+            : value === LineStyle
+              ? "enum:LineStyle"
+              : "enum:ClickAction",
       struct: () => "struct:GraphicCrop",
     },
     idl: {
       com: {
-        sun: { star: { awt, presentation, style, text } },
+        sun: { star: { awt, drawing, presentation, style, text } },
       },
     },
   };
@@ -292,7 +300,7 @@ function fixture() {
     buildReady: true,
     buildCommit: "candidate",
     candidateCommit: "candidate",
-    patchLevel: "browser-undo-v21",
+    patchLevel: "browser-undo-v22",
   };
   return {
     adapter: factory({ uno, runtimeIdentity }),
@@ -346,7 +354,7 @@ test("browser adapter exposes only stock slide lifecycle on an unbuilt runtime",
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v21",
+      patchLevel: "browser-undo-v22",
     },
   });
   assert.deepEqual(Array.from(adapter.supportedOperations), []);
@@ -380,7 +388,7 @@ test("browser adapter routes stock slide lifecycle through Impress commands", ()
       buildReady: false,
       buildCommit: "stock",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v21",
+      patchLevel: "browser-undo-v22",
     },
   });
   assert.equal(stockAdapter.supportsTransform([{ DuplicateSlide: 0 }]), true);
@@ -412,7 +420,7 @@ test("browser adapter deletes a slide only after native structure admission", ()
       buildReady: true,
       buildCommit: "candidate",
       candidateCommit: "candidate",
-      patchLevel: "browser-undo-v21",
+      patchLevel: "browser-undo-v22",
       nativeSlideStructureReady: true,
     },
   });
@@ -488,6 +496,7 @@ test("browser adapter writes only bounded object, crop and interaction fields", 
           LineColor: 0x123456,
           LineTransparence: 43,
           LineWidth: 200,
+          LineStyle: 2,
           LineDashName: "Fine Dashed",
           LineStartName: "Arrow",
           LineEndName: "Square",
@@ -514,6 +523,7 @@ test("browser adapter writes only bounded object, crop and interaction fields", 
   assert.equal(runtime.secondShape.properties.LineColor, 0x123456);
   assert.equal(runtime.secondShape.properties.LineTransparence, 43);
   assert.equal(runtime.secondShape.properties.LineWidth, 200);
+  assert.equal(runtime.secondShape.properties.LineStyle, "dash");
   assert.equal(runtime.secondShape.properties.LineDashName, "Fine Dashed");
   assert.equal(runtime.secondShape.properties.LineStartName, "Arrow");
   assert.equal(runtime.secondShape.properties.LineEndName, "Square");

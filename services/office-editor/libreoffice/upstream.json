@@ -9,11 +9,11 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v26",
+  "patchLevel": "undo-v27",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "d245bac2b5427e2ea0d8f67e282eb1b6c04dac181d082cca354b44b4d075fb5c",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v26-r17-candidate",
+  "patchSeriesSha256": "3366e3fdd473bf640d55d9d3b14b9c12fd0c66e19214acb13e01cc52c52cc86c",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v27-r18-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -59,7 +59,9 @@
     "patches/0042-advanced-shape-text-connectors.patch",
     "patches/0043-semantic-assets-accessibility.patch",
     "patches/0044-native-release-regression-fixes.patch",
-    "patches/0045-native-authoring-state-regressions.patch"
+    "patches/0045-native-authoring-state-regressions.patch",
+    "patches/0046-visible-line-style-roundtrip.patch",
+    "patches/0047-native-undo-state-snapshots.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",

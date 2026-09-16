@@ -38,6 +38,7 @@
     LineTransparence: "short",
     RotateAngle: "long",
     LineDashName: "string",
+    LineStyle: "line-style",
     LineStartName: "string",
     LineEndName: "string",
     FillColor: "long",
@@ -72,7 +73,7 @@
     const admitted =
       runtimeIdentity?.buildReady === true &&
       runtimeIdentity.buildCommit === runtimeIdentity.candidateCommit &&
-      runtimeIdentity.patchLevel === "browser-undo-v21";
+      runtimeIdentity.patchLevel === "browser-undo-v22";
     const nativeSlideStructureReady =
       admitted && runtimeIdentity.nativeSlideStructureReady === true;
     const supportedOperations = Object.freeze(
@@ -1244,6 +1245,10 @@
                 (!Number.isSafeInteger(propertyValue) ||
                   propertyValue < 0 ||
                   propertyValue > 4)) ||
+              (typeName === "line-style" &&
+                (!Number.isSafeInteger(propertyValue) ||
+                  propertyValue < 0 ||
+                  propertyValue > 2)) ||
               (typeName === "media-zoom" &&
                 (!Number.isSafeInteger(propertyValue) ||
                   propertyValue < 0 ||
@@ -1266,6 +1271,19 @@
                       css.drawing.FillStyle.GRADIENT,
                       css.drawing.FillStyle.HATCH,
                       css.drawing.FillStyle.BITMAP,
+                    ][propertyValue],
+                  ),
+                );
+            if (typeName === "line-style")
+              return () =>
+                shape.setPropertyValue(
+                  name,
+                  new uno.Any(
+                    uno.type.enum(css.drawing.LineStyle),
+                    [
+                      css.drawing.LineStyle.NONE,
+                      css.drawing.LineStyle.SOLID,
+                      css.drawing.LineStyle.DASH,
                     ][propertyValue],
                   ),
                 );

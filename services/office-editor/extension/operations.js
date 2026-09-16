@@ -4299,7 +4299,7 @@ function spellbookDocumentOperation(request) {
     }
 
     if (command.op === "set_paragraph_format") {
-      if (!runtimeSupports(command.op) && !hasEnginePatch(19))
+      if (!runtimeSupports(command.op) && !hasEnginePatch(27))
         throw new Error("native_engine_paragraph_format_patch_required");
       const format = command.paragraphFormat;
       const allowedFields = {
@@ -4415,7 +4415,7 @@ function spellbookDocumentOperation(request) {
     }
 
     if (command.op === "set_paragraph_list") {
-      if (!runtimeSupports(command.op) && !hasEnginePatch(23))
+      if (!runtimeSupports(command.op) && !hasEnginePatch(27))
         throw new Error("native_engine_paragraph_list_patch_required");
       const list = command.paragraphList;
       if (
@@ -5285,6 +5285,12 @@ function spellbookDocumentOperation(request) {
             throw new Error("line_style_name_not_in_document_catalog");
           properties[propertyByField[name]] = value;
         }
+        if (lineStyle.dashName) properties.LineStyle = 2;
+        else if (
+          lineStyle.dashName === "" &&
+          ["DASH", "2"].includes(enumToken(element.lineStyle))
+        )
+          properties.LineStyle = 1;
       } else if (command.op === "set_media_playback") {
         const playback = command.mediaPlayback;
         const zoomValues = {
@@ -5462,6 +5468,12 @@ function spellbookDocumentOperation(request) {
           return (
             { NONE: 0, SOLID: 1, GRADIENT: 2, HATCH: 3, BITMAP: 4 }[
               enumToken(target.fillStyle)
+            ] === value
+          );
+        if (name === "LineStyle")
+          return (
+            { NONE: 0, SOLID: 1, DASH: 2, 0: 0, 1: 1, 2: 2 }[
+              enumToken(target.lineStyle)
             ] === value
           );
         const path = expected[name];

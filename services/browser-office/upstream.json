@@ -9,11 +9,11 @@
     "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v21",
+    "patchLevel": "browser-undo-v22",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "7546065cb3b936e4b06aea077d022cbf193c13769d9af87c2e436eddeac892cd",
+    "patchSeriesSha256": "b863cde8405dd26a57b37bd5fc5fe97642010ac523110c1e5390072924d421b2",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
@@ -30,7 +30,8 @@
       "libreoffice/patches/0013-browser-pptx-reading-order.patch",
       "libreoffice/patches/0014-browser-pptx-accessibility-metadata.patch",
       "libreoffice/patches/0015-browser-undo-test-phases.patch",
-      "libreoffice/patches/0016-browser-native-roundtrip-regressions.patch"
+      "libreoffice/patches/0016-browser-native-roundtrip-regressions.patch",
+      "libreoffice/patches/0017-visible-line-style-roundtrip.patch"
     ],
     "invariants": [
       "table-cell-native-undo",
@@ -64,6 +65,7 @@
       "text-appearance-property-native-undo",
       "slide-metadata-property-native-undo",
       "line-style-property-native-undo",
+      "visible-line-style-pptx-roundtrip",
       "paragraph-format-property-native-undo",
       "document-slide-size-native-undo",
       "master-theme-native-undo",

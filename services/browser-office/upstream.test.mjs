@@ -37,7 +37,7 @@ const browserPatchSeries = manifest.sourceCandidate.patches
   .join("\n");
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v21");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v22");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
@@ -82,6 +82,7 @@ test("browser Office runtime is reproducible and remains unapproved by default",
     "text-appearance-property-native-undo",
     "slide-metadata-property-native-undo",
     "line-style-property-native-undo",
+    "visible-line-style-pptx-roundtrip",
     "paragraph-format-property-native-undo",
     "document-slide-size-native-undo",
     "master-theme-native-undo",

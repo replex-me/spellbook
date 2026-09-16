@@ -57,3 +57,13 @@ regression tests to the same immutable server and browser source candidates.
 These facts explain what has been built. They do not claim that the final
 runtime, full remaining feature breadth, deployment or public user workflow has
 passed.
+
+The 2026-09-16 Collabora `r17` candidate compiled but failed two of 131 native
+tests: media playback Undo did not restore a field absent from the original
+`MediaItem` update mask, and paragraph-margin Undo did not restore the observed
+UNO value. The `undo-v27` source series addresses both and adds a visible
+line-style round-trip check; it has passed source application and local contract
+tests, not native runtime tests. The first browser native candidate failed seven
+of 18 focused tests. The `browser-undo-v22` source series addresses those
+failures and checks line-style geometry after PPTX reopen, but it too remains
+unbuilt and unapproved. Neither candidate has deployment or user-workflow proof.

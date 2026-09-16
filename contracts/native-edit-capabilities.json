@@ -803,7 +803,7 @@
         "execution": "native_transform",
         "identityEffect": "preserve",
         "availability": "runtime_validation_required",
-        "minEnginePatch": 19
+        "minEnginePatch": 27
       },
       "set_printable": {
         "family": "object_style",
@@ -995,7 +995,7 @@
         "execution": "platform_asset",
         "identityEffect": "preserve",
         "availability": "runtime_validation_required",
-        "minEnginePatch": 24
+        "minEnginePatch": 27
       },
       "set_media_playback": {
         "family": "media_playback",
@@ -1003,7 +1003,7 @@
         "execution": "native_transform",
         "identityEffect": "preserve",
         "availability": "runtime_validation_required",
-        "minEnginePatch": 24
+        "minEnginePatch": 27
       },
       "set_smartart_node": {
         "family": "diagram_model",
@@ -1067,7 +1067,7 @@
         "execution": "native_transform",
         "identityEffect": "preserve",
         "availability": "runtime_validation_required",
-        "minEnginePatch": 19
+        "minEnginePatch": 27
       },
       "set_paragraph_list": {
         "family": "object_text",
@@ -1075,7 +1075,7 @@
         "execution": "native_transform",
         "identityEffect": "preserve",
         "availability": "runtime_validation_required",
-        "minEnginePatch": 23
+        "minEnginePatch": 27
       },
       "add_comment": {
         "family": "comments",
@@ -2513,13 +2513,13 @@
     },
     {
       "op": "set_line_style",
-      "minimumVerifiedPatch": 19,
-      "reason": "Line preset and marker changes require the declared native attribute Undo patch."
+      "minimumVerifiedPatch": 27,
+      "reason": "Visible dash mode, line preset and marker changes require the declared native attribute Undo and PPTX round-trip patch."
     },
     {
       "op": "set_paragraph_format",
-      "minimumVerifiedPatch": 19,
-      "reason": "Paragraph geometry and direction changes require the declared native text Undo patch."
+      "minimumVerifiedPatch": 27,
+      "reason": "Paragraph geometry and direction changes require explicit native UNO value restoration on Undo and Redo."
     },
     {
       "op": "set_sections",
@@ -2563,8 +2563,8 @@
     },
     {
       "op": "set_paragraph_list",
-      "minimumVerifiedPatch": 23,
-      "reason": "List structure changes require native numbering-rule snapshots and PPTX round-trip support."
+      "minimumVerifiedPatch": 27,
+      "reason": "List structure changes require native numbering-rule snapshots, paragraph-property Undo and PPTX round-trip support."
     },
     {
       "op": "replace_image",
@@ -2573,13 +2573,13 @@
     },
     {
       "op": "replace_media",
-      "minimumVerifiedPatch": 24,
-      "reason": "Media replacement requires a trusted host asset transfer and one native replacement Undo action."
+      "minimumVerifiedPatch": 27,
+      "reason": "Media replacement requires trusted host transfer and complete authored-state restoration, including values absent from the original update mask."
     },
     {
       "op": "set_media_playback",
-      "minimumVerifiedPatch": 24,
-      "reason": "Media playback properties require native property snapshots and PPTX round-trip support."
+      "minimumVerifiedPatch": 27,
+      "reason": "Media playback properties require complete authored-state restoration on Undo and Redo, even when the original MediaItem mask omitted them."
     },
     {
       "op": "set_smartart_node",
