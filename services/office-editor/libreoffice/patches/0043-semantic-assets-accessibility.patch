@@ -1,3 +1,16 @@
+diff --git a/include/svx/svdomedia.hxx b/include/svx/svdomedia.hxx
+index 4827c02ea..6c8adf579 100644
+--- a/include/svx/svdomedia.hxx
++++ b/include/svx/svdomedia.hxx
+@@ -69,7 +69,7 @@ public:
+         /// Returns the URL to the temporary extracted media file.
+         const OUString&      getTempURL() const;
+ 
+-        SAL_DLLPRIVATE void                        setMediaProperties( const ::avmedia::MediaItem& rState );
++        void                        setMediaProperties( const ::avmedia::MediaItem& rState );
+         const ::avmedia::MediaItem& getMediaProperties() const;
+ 
+         css::uno::Reference< css::graphic::XGraphic > const &
 diff --git a/sd/qa/unit/uiimpress.cxx b/sd/qa/unit/uiimpress.cxx
 index df15e4493..5151aaa22 100644
 --- a/sd/qa/unit/uiimpress.cxx
@@ -10,7 +23,7 @@ index df15e4493..5151aaa22 100644
 +#include <svx/svdomedia.hxx>
 +#include <svx/diagram/DiagramHelper_svx.hxx>
  #include <xmloff/autolayout.hxx>
-
+ 
  using namespace ::com::sun::star;
 @@ -581,8 +584,11 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
      xProperties->getPropertyValue(u"MoveProtect"_ustr) >>= bOldMoveProtect;
@@ -19,7 +32,7 @@ index df15e4493..5151aaa22 100644
 +    const sal_uInt32 nOldNavigationPosition = pObject->GetNavigationPosition();
 +    const sal_uInt32 nNewNavigationPosition
 +        = nOldNavigationPosition == 0 && pPage->GetObjCount() > 1 ? 1 : 0;
-
+ 
 -    static constexpr OUString aJson = uR"json(
 +    const OUString aJson = uR"json(
  {
@@ -41,7 +54,7 @@ index df15e4493..5151aaa22 100644
      CPPUNIT_ASSERT(bShadow);
      CPPUNIT_ASSERT(bMoveProtect);
 +    CPPUNIT_ASSERT_EQUAL(nNewNavigationPosition, pObject->GetNavigationPosition());
-
+ 
      pImpressDocument->GetDocShell()->GetUndoManager()->Undo();
      xProperties->getPropertyValue(u"TextLeftDistance"_ustr) >>= nLeft;
 @@ -624,6 +633,7 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
@@ -49,7 +62,7 @@ index df15e4493..5151aaa22 100644
      CPPUNIT_ASSERT_EQUAL(bOldShadow, bShadow);
      CPPUNIT_ASSERT_EQUAL(bOldMoveProtect, bMoveProtect);
 +    CPPUNIT_ASSERT_EQUAL(nOldNavigationPosition, pObject->GetNavigationPosition());
-
+ 
      pImpressDocument->GetDocShell()->GetUndoManager()->Redo();
      xProperties->getPropertyValue(u"TextLeftDistance"_ustr) >>= nLeft;
 @@ -634,6 +644,348 @@ CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectPropertiesUndoR
@@ -399,20 +412,20 @@ index df15e4493..5151aaa22 100644
 +    pUndoManager->Redo();
 +    CPPUNIT_ASSERT(containsText(collectTexts(), u"Twelve updated"_ustr));
  }
-
+ 
  CPPUNIT_TEST_FIXTURE(SdUiImpressTest, testDocumentStructureObjectInteractionUndoRedo)
 diff --git a/sd/source/ui/unoidl/unoobj.cxx b/sd/source/ui/unoidl/unoobj.cxx
 index 04f37834c..1f7ed998d 100644
 --- a/sd/source/ui/unoidl/unoobj.cxx
 +++ b/sd/source/ui/unoidl/unoobj.cxx
 @@ -21,6 +21,7 @@
-
+ 
  #include <memory>
  #include <set>
 +#include <sstream>
  #include <string_view>
  #include <utility>
-
+ 
 @@ -28,6 +29,7 @@
  #include <com/sun/star/presentation/ClickAction.hpp>
  #include <com/sun/star/beans/PropertyAttribute.hpp>
@@ -432,7 +445,7 @@ index 04f37834c..1f7ed998d 100644
 @@ -677,12 +680,55 @@ void SAL_CALL SdXShape::setPropertyValue( const OUString& aPropertyName, const c
          mpModel->SetModified();
  }
-
+ 
 +namespace
 +{
 +OUString spellbookDiagramState(SdrObject* pObject)
@@ -471,9 +484,9 @@ index 04f37834c..1f7ed998d 100644
  cpo::uno::Any SAL_CALL SdXShape::getPropertyValue( const OUString& PropertyName )
  {
      SolarMutexGuard aGuard;
-
+ 
      cpo::uno::Any aRet;
-
+ 
 +    if (PropertyName == u"SpellbookDiagramState"_ustr)
 +    {
 +        const OUString aState = spellbookDiagramState(mpShape->GetSdrObject());
@@ -483,10 +496,10 @@ index 04f37834c..1f7ed998d 100644
 +    }
 +
      const SfxItemPropertyMapEntry* pEntry = mpPropSet->getPropertyMapEntry(PropertyName);
-
+ 
      if( pEntry && mpShape->GetSdrObject() )
 diff --git a/sd/source/ui/view/drviews2.cxx b/sd/source/ui/view/drviews2.cxx
-index de1b17bf0..9ef83d469 100644
+index 2b617e993..44bb04723 100644
 --- a/sd/source/ui/view/drviews2.cxx
 +++ b/sd/source/ui/view/drviews2.cxx
 @@ -52,6 +52,7 @@
@@ -523,7 +536,7 @@ index de1b17bf0..9ef83d469 100644
 @@ -1118,6 +1124,143 @@ private:
      OUString maNewBookmark;
  };
-
+ 
 +class SetEquationSourceUndoAction final : public SdUndoAction
 +{
 +public:
@@ -685,12 +698,12 @@ index de1b17bf0..9ef83d469 100644
 +        u"D3DDoubleSided"_ustr,
 +        u"NavigationOrder"_ustr,
      };
-
+ 
      std::vector<std::pair<OUString, cpo::uno::Any>> aValues;
 @@ -2053,6 +2212,19 @@ void handleSetObjectProperties(SlideCommandContext& rCtx, const std::string& rKe
      if (aValues.empty())
          throw lang::IllegalArgumentException(u"No object properties supplied"_ustr, nullptr, 0);
-
+ 
 +    SdrMediaObj* pMediaObject = dynamic_cast<SdrMediaObj*>(pObject);
 +    const bool bChangesMedia = std::any_of(
 +        aValues.begin(), aValues.end(), [](const auto& rEntry) {
@@ -1038,7 +1051,7 @@ index de1b17bf0..9ef83d469 100644
 +    pOldObject->BroadcastObjectChange();
      rCtx.touch(pPage);
  }
-
+ 
 @@ -3516,6 +4009,9 @@ constexpr SlideCommand aSlideCommands[] = {
      { "SetSections", false, false, &handleSetSections },
      { "SetNotes", false, false, &handleSetNotes },
