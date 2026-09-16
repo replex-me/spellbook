@@ -62,13 +62,14 @@ The 2026-09-16 Collabora `r17` candidate compiled but failed two of 131 native
 tests: media playback Undo did not restore a field absent from the original
 `MediaItem` update mask, and paragraph-margin Undo did not restore the observed
 UNO value. The `undo-v27` source series addresses both and adds a visible
-line-style round-trip check; it has passed source application and local contract
-tests, not native runtime tests. The first browser native candidate failed seven
-of 18 focused tests. The next `browser-undo-v22` build stopped at a C++ test
-compile error: its paragraph-alignment assertion mixed the strongly typed
-`ParagraphAdjust` enum with UNO's `sal_Int16` value. Patch 0018 makes the
-conversion explicit, and the complete 18-patch source series applies cleanly;
-the corrected browser runtime has not yet compiled or passed native tests. The
-current local browser editor passed one real open/edit/save/download smoke
-test, but the older standalone conformance runtime aborts during its third
-document reopen. Neither candidate has deployment or final user-workflow proof.
+line-style round-trip check; its native candidate build is still running. The
+first browser native candidate failed seven of 18 focused tests. Patch 0018
+corrected a C++ test compile error in the next candidate, which then compiled
+but failed four focused tests: twip-quantized character spacing, a collision
+with a default named line resource, PPTX slide-size master-unit rounding, and
+media playback Undo not restoring an unauthored field. The cumulative
+`browser-undo-v23` source series applies cleanly and addresses those four
+failures; it has not yet passed native tests. The current local browser editor
+passed real open/edit/save/download and compact-screen canvas/access tests,
+but the older standalone conformance runtime aborts during its third document
+reopen. Neither candidate has deployment or final user-workflow proof.
