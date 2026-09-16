@@ -53,6 +53,19 @@ const admittedRuntime = {
     artifacts: [{ name: "soffice.wasm", sha256: "d".repeat(64) }],
   },
 };
+const runtimeBuildInputEquivalence = {
+  buildSourceRevision: "c".repeat(40),
+  integrationSourceRevision: "e".repeat(40),
+  inputs: [
+    {
+      path: "services/browser-office/libreoffice",
+      buildObject: "1".repeat(40),
+      integrationObject: "1".repeat(40),
+      exact: true,
+    },
+  ],
+  exact: true,
+};
 const browserReport = {
   status: "browser-product-bridge-verified",
   patchedBrowserRuntime: true,
@@ -101,6 +114,7 @@ test("promotion receipt binds runtime, browser endurance and PowerPoint", () => 
   const promotion = createCandidatePromotion({
     admittedRuntime,
     integrationSource: browserReport.integrationSource,
+    runtimeBuildInputEquivalence,
     browserReport,
     browserReportSha256: "e".repeat(64),
     nativeConformanceReport,
@@ -111,6 +125,7 @@ test("promotion receipt binds runtime, browser endurance and PowerPoint", () => 
   });
   assert.equal(promotion.status, "verified_not_published");
   assert.equal(promotion.runtime.receiptSha256, receiptSha256);
+  assert.equal(promotion.runtime.buildInputEquivalence.exact, true);
   assert.equal(promotion.spellbookSourceRevision, "e".repeat(40));
   assert.equal(promotion.runtime.buildSourceRevision, "c".repeat(40));
   assert.equal(promotion.evidence.enduranceCycles, 100);
@@ -119,6 +134,7 @@ test("promotion receipt binds runtime, browser endurance and PowerPoint", () => 
       createCandidatePromotion({
         admittedRuntime,
         integrationSource: browserReport.integrationSource,
+        runtimeBuildInputEquivalence,
         browserReport,
         browserReportSha256: "e".repeat(64),
         nativeConformanceReport,
@@ -127,6 +143,24 @@ test("promotion receipt binds runtime, browser endurance and PowerPoint", () => 
         powerpointReportSha256: "f".repeat(64),
       }),
     /browser-saved PPTX/u,
+  );
+  assert.throws(
+    () =>
+      createCandidatePromotion({
+        admittedRuntime,
+        integrationSource: browserReport.integrationSource,
+        runtimeBuildInputEquivalence: {
+          ...runtimeBuildInputEquivalence,
+          exact: false,
+        },
+        browserReport,
+        browserReportSha256: "e".repeat(64),
+        nativeConformanceReport,
+        nativeConformanceReportSha256: "1".repeat(64),
+        powerpointReport,
+        powerpointReportSha256: "f".repeat(64),
+      }),
+    /build inputs differ/u,
   );
   assert.deepEqual(
     promotion.evidence.verifiedNativeOperations,

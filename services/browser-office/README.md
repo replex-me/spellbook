@@ -128,6 +128,14 @@ PowerPoint reopen/export. It verifies slide counts and pixel-identical identity,
 move, delete-round-trip, and Undo mappings across the generated files. Run it
 only on a macOS host with PowerPoint and no unrelated presentation open.
 
+Candidate promotion may run from a later integration commit than the expensive
+WASM build when intervening commits affect only another engine or product
+layer. That exception is evidence-bound rather than assumed: promotion compares
+the immutable Git tree for `services/browser-office/libreoffice` at the build
+and integration revisions and fails if any runtime build input differs. The
+promotion receipt records both revisions, both tree objects and the exact
+equivalence result.
+
 Upstream references:
 
 - <https://github.com/allotropia/zetajs>

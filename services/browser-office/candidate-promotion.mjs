@@ -4,7 +4,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { admitCandidateRuntime } from "./candidate-runtime.mjs";
-import { readRepositoryIdentity } from "./repository-identity.mjs";
+import {
+  browserRuntimeBuildInputPaths,
+  readRepositoryIdentity,
+  readRepositoryPathEquivalence,
+} from "./repository-identity.mjs";
 import {
   candidateBrowserReportErrors,
   candidateNativeConformanceErrors,
@@ -13,6 +17,7 @@ import {
 export function createCandidatePromotion({
   admittedRuntime,
   integrationSource,
+  runtimeBuildInputEquivalence,
   browserReport,
   browserReportSha256,
   nativeConformanceReport,
@@ -31,6 +36,28 @@ export function createCandidatePromotion({
     integrationSource.revision !== browserReport.integrationSource?.revision
   )
     errors.push("promotion is not running from the verified clean source");
+  if (
+    runtimeBuildInputEquivalence?.buildSourceRevision !==
+      admittedRuntime.receipt.spellbookSourceRevision ||
+    runtimeBuildInputEquivalence?.integrationSourceRevision !==
+      integrationSource?.revision ||
+    runtimeBuildInputEquivalence?.exact !== true ||
+    !Array.isArray(runtimeBuildInputEquivalence?.inputs) ||
+    runtimeBuildInputEquivalence.inputs.length !==
+      browserRuntimeBuildInputPaths.length ||
+    !browserRuntimeBuildInputPaths.every((requiredPath) =>
+      runtimeBuildInputEquivalence.inputs.some(
+        (input) =>
+          input?.path === requiredPath &&
+          input.exact === true &&
+          /^[0-9a-f]{40,64}$/u.test(input.buildObject ?? "") &&
+          input.buildObject === input.integrationObject,
+      ),
+    )
+  )
+    errors.push(
+      "browser runtime build inputs differ from the verified integration source",
+    );
   if (
     admittedRuntime.receiptSha256 !==
     browserReport.candidateRuntime?.receiptSha256
@@ -85,6 +112,7 @@ export function createCandidatePromotion({
     runtime: {
       receiptSha256: admittedRuntime.receiptSha256,
       buildSourceRevision: admittedRuntime.receipt.spellbookSourceRevision,
+      buildInputEquivalence: runtimeBuildInputEquivalence,
       libreOffice: admittedRuntime.receipt.libreOffice,
       toolchain: admittedRuntime.receipt.toolchain,
       artifacts: admittedRuntime.receipt.artifacts,
@@ -124,6 +152,12 @@ async function main() {
   );
   const output = path.resolve(requiredFlagValue("--output", process.argv));
   const admittedRuntime = await admitCandidateRuntime({ runtimeDirectory });
+  const integrationSource = readRepositoryIdentity(repositoryRoot);
+  const runtimeBuildInputEquivalence = readRepositoryPathEquivalence(
+    repositoryRoot,
+    admittedRuntime.receipt.spellbookSourceRevision,
+    integrationSource.revision,
+  );
   const [browserBytes, nativeConformanceBytes, powerpointBytes] =
     await Promise.all([
       fs.readFile(browserReportPath),
@@ -132,7 +166,8 @@ async function main() {
     ]);
   const promotion = createCandidatePromotion({
     admittedRuntime,
-    integrationSource: readRepositoryIdentity(repositoryRoot),
+    integrationSource,
+    runtimeBuildInputEquivalence,
     browserReport: JSON.parse(browserBytes.toString("utf8")),
     browserReportSha256: sha256(browserBytes),
     nativeConformanceReport: JSON.parse(
