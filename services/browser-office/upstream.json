@@ -9,11 +9,11 @@
     "candidateCommit": "dced3bc711d18407a2cc2400eb46e8261b663d95"
   },
   "sourceCandidate": {
-    "patchLevel": "browser-undo-v20",
+    "patchLevel": "browser-undo-v21",
     "patchSeriesReady": true,
     "buildReady": false,
     "nativeSlideStructureReady": false,
-    "patchSeriesSha256": "72ff51d525379cef961677f41af833c4e9d6bf590643a4162c4a632943bbbdb1",
+    "patchSeriesSha256": "7546065cb3b936e4b06aea077d022cbf193c13769d9af87c2e436eddeac892cd",
     "patches": [
       "libreoffice/patches/0001-core-undo-identity.patch",
       "libreoffice/patches/0002-generic-pptx-edit-invariants.patch",
@@ -29,7 +29,8 @@
       "libreoffice/patches/0012-browser-headless-native-tests.patch",
       "libreoffice/patches/0013-browser-pptx-reading-order.patch",
       "libreoffice/patches/0014-browser-pptx-accessibility-metadata.patch",
-      "libreoffice/patches/0015-browser-undo-test-phases.patch"
+      "libreoffice/patches/0015-browser-undo-test-phases.patch",
+      "libreoffice/patches/0016-browser-native-roundtrip-regressions.patch"
     ],
     "invariants": [
       "table-cell-native-undo",

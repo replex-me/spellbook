@@ -12,7 +12,7 @@ been built or promoted; `buildReady` remains false until the complete command,
 Undo, save/reopen, visual and PowerPoint evidence is attached to one immutable
 browser build.
 
-The cumulative `browser-undo-v20` source series ports generic document behavior:
+The cumulative `browser-undo-v21` source series ports generic document behavior:
 table structure, formatting and Undo; page and object identity; master-safe
 layout support; sparse-master insertion; object-creation Undo; text-layout
 invalidation; slide names and text shadows; object locks; object interactions;
@@ -25,15 +25,20 @@ paragraph alignment likewise share one bounded text-property transaction
 instead of mixing property writes with UI dispatch commands. The page/object
 tests cover one-step Undo/Redo and PPTX save/reopen for slide names, visibility,
 transition state, slide metadata, text margins, paragraph formatting, line
-dash/arrow names, shadows and object locks. Browser-source CppUnit regressions are part of the
-series but have not run yet. The browser-native adapter now accepts the complete
+dash/arrow styles, shadows and object locks. The first `browser-undo-v20`
+native candidate ran 18 focused regressions and failed seven; `0016` corrects
+the observed export, text-cache, animation, media and headless-test boundaries.
+The revised source series applies cleanly but has not passed a native build.
+The browser-native adapter now accepts the complete
 97-operation typed mutation contract and persists both its commands and direct
 human edits as native PPTX snapshots. The cumulative patch also preserves
 object identity while replacing image or media content and adds semantic
 SmartArt and Math mutation, media playback, Fontwork, 3D material and
 reading-order history. Patch `0013` verifies the PPTX/PowerPoint rule directly:
 portable reading order follows shape-tree/z-order, survives one native Undo
-boundary and persists through save/reopen. The clean native and integrated browser runs remain the
+boundary and persists through save/reopen. Patch `0016` also makes live shape
+effects authoritative over imported effect metadata and exports effects for
+the basic shape families, not only custom/text shapes. The clean native and integrated browser runs remain the
 admission evidence. `nativeSlideStructureReady` is
 independent of `buildReady`: a compiled runtime must also survive the product
 bridge's full slide lifecycle, observation, Undo/Redo, recovery and exact-save

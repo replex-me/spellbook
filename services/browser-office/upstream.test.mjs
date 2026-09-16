@@ -37,7 +37,7 @@ const browserPatchSeries = manifest.sourceCandidate.patches
   .join("\n");
 
 test("browser Office runtime is reproducible and remains unapproved by default", () => {
-  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v20");
+  assert.equal(valueAtPath("sourceCandidate.patchLevel"), "browser-undo-v21");
   assert.throws(() => valueAtPath("sourceCandidate.unknown"), /Unknown/u);
   assert.equal(manifest.status, "viability_probe_only");
   assert.match(manifest.source.buildCommit, /^[0-9a-f]{40}$/u);
@@ -195,6 +195,7 @@ test("browser LibreOffice patches name their complete source surface", () => {
     "docmodel/source/theme/Theme.cxx",
     "include/oox/drawingml/shape.hxx",
     "include/oox/export/shapes.hxx",
+    "include/svx/sdr/contact/viewcontactofsdrmediaobj.hxx",
     "include/svx/svdotable.hxx",
     "oox/inc/drawingml/textcharacterproperties.hxx",
     "oox/source/drawingml/connectorshapecontext.cxx",
@@ -222,6 +223,8 @@ test("browser LibreOffice patches name their complete source surface", () => {
     "sd/source/ui/view/drviews7.cxx",
     "sd/source/ui/view/unmodpg.cxx",
     "svx/source/inc/cell.hxx",
+    "svx/source/sdr/contact/viewcontactofsdrmediaobj.cxx",
+    "svx/source/sdr/contact/viewobjectcontactofsdrmediaobj.cxx",
     "svx/source/svdraw/svdmodel.cxx",
     "svx/source/svdraw/svdundo.cxx",
     "svx/source/table/cell.cxx",
