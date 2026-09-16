@@ -78,10 +78,12 @@ and [renderer contract](../../services/document-worker/libreoffice/README.md).
 An edit is not complete when an Office API reports success or when a ZIP file
 exists. Its intended effect must be checked against the persisted PPTX at the
 same document revision, while unrelated original content remains protected.
-The path is: authorized intent → edit and Undo → serialize or local package
-patch → persisted-semantic check → package-scope/preservation validation →
-rendered review → version promotion. Human and AI edits may use different
-tools, but must satisfy this same outcome contract.
+For AI, the target is the authorized command plus its live post-edit readback;
+for direct human editing, it is the observed live document state immediately
+before save. The path is: target state → edit and Undo → serialize or local
+package patch → persisted-semantic check → package-scope/preservation
+validation → rendered review → version promotion. Human and AI edits may use
+different tools, but must satisfy this same outcome contract.
 
 Today localized single edits use a minimal OOXML patch, while compound AI
 edits and direct human edits can create full native snapshots. The server checks
