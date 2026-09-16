@@ -9,11 +9,11 @@
   },
   "runtimeImage": "collabora/code@sha256:379b8f1fc955dd6d01ba24adf61d1b177048ddaae179ae8c1e6a6342daccb282",
   "runtimePatchLevel": "stock",
-  "patchLevel": "undo-v24",
+  "patchLevel": "undo-v25",
   "sourcePatchSeriesReady": true,
   "sourceCandidateReady": false,
-  "patchSeriesSha256": "5444956f7a79f856d0dfb116767146fdfa2add48a36796f9b98c9ebdbf765505",
-  "engineImageTag": "26.04.4.1-spellbook-undo-v24-r14-candidate",
+  "patchSeriesSha256": "dc076eedba94014d5acc77383b24da08bfae6844a86c2783c5ed2e680bbc3dac",
+  "engineImageTag": "26.04.4.1-spellbook-undo-v25-r15-candidate",
   "impressUiUnoCommandCount": 725,
   "impressUiUnoCommandsSha256": "ddfe8aeb5f798b6656b22276d219311bd30e9ce5c26cdf8ffe3d321f2c2f3fbb",
   "patches": [
@@ -57,7 +57,8 @@
     "patches/0040-animation-lifecycle-undo-roundtrip.patch",
     "patches/0041-document-design-theme-size.patch",
     "patches/0042-advanced-shape-text-connectors.patch",
-    "patches/0043-semantic-assets-accessibility.patch"
+    "patches/0043-semantic-assets-accessibility.patch",
+    "patches/0044-native-release-regression-fixes.patch"
   ],
   "requiredCppunitTargets": [
     "CppunitTest_sd_uiimpress",
