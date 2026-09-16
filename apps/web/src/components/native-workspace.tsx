@@ -91,6 +91,15 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
     [sessionObserved, setSessionObserved] = useState(false);
   const [panel, setPanel] = useState(true),
     [text, setText] = useState("");
+  useEffect(() => {
+    const narrowScreen = window.matchMedia("(max-width: 760px)");
+    const keepCanvasVisible = () => {
+      if (narrowScreen.matches) setPanel(false);
+    };
+    keepCanvasVisible();
+    narrowScreen.addEventListener("change", keepCanvasVisible);
+    return () => narrowScreen.removeEventListener("change", keepCanvasVisible);
+  }, []);
   const [messages, setMessages] = useState<Message[]>([]),
     [busy, setBusy] = useState(false);
   const [error, setError] = useState(""),
@@ -1010,6 +1019,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
           </div>
           <button
             className="ds-button is-secondary is-compact native-download"
+            aria-label="PPTX 다운로드"
             disabled={!engineReady || saveState.endsWith("중…")}
             onClick={() => {
               const downloadUrl = `/api/documents/${launch.documentId}/download`;
@@ -1028,7 +1038,7 @@ export function NativeWorkspace({ launch }: { launch: NativeLaunch }) {
             }}
           >
             <SpellbookIcon name="download" size={16} />
-            PPTX 다운로드
+            <span className="native-download-label">PPTX 다운로드</span>
           </button>
           <button
             className={`ds-button is-compact native-ai-toggle ${panel ? "active" : ""}`}

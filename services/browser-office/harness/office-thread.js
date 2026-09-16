@@ -396,6 +396,21 @@ function start() {
             visible: event.data.visible,
           });
           break;
+        case "set-editor-slide-pane":
+          if (typeof event.data.visible !== "boolean")
+            throw new Error("Editor slide pane visibility must be boolean.");
+          dispatch("LeftPaneImpress", [
+            property(
+              "LeftPaneImpress",
+              zetajs.type.boolean,
+              event.data.visible,
+            ),
+          ]);
+          post("editor-slide-pane-set", {
+            requestId,
+            visible: event.data.visible,
+          });
+          break;
         case "native":
           if (
             typeof spellbookDocumentOperation !== "function" ||

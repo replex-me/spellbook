@@ -16,6 +16,7 @@ const saveButton = document.querySelector("#save");
 const productMode = location.pathname === "/workspace";
 const query = new URLSearchParams(location.search);
 const browserProbeMode = productMode && query.get("browserProbe") === "1";
+const compactEditor = window.matchMedia("(max-width: 760px)");
 const productBridgeSessionId = productMode ? crypto.randomUUID() : "";
 const expectedHostOrigin = productMode ? query.get("hostOrigin") : null;
 const networkFetch = globalThis.fetch.bind(globalThis);
@@ -166,6 +167,24 @@ function request(command, details = {}) {
   });
 }
 
+async function syncSlidePane() {
+  const visible = !compactEditor.matches;
+  await request("set-editor-slide-pane", { visible });
+  body.dataset.defaultSlidePane = visible ? "open" : "closed";
+}
+
+compactEditor.addEventListener("change", () => {
+  if (!productMode || !engineDocumentOpen) return;
+  void syncSlidePane().catch((error) => {
+    body.dataset.defaultSlidePane = "unavailable";
+    observed.events.push({
+      state: "view-warning",
+      atMs: Math.round(performance.now()),
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+});
+
 function settle(message) {
   if (!message.requestId) return;
   const waiter = pending.get(message.requestId);
@@ -208,6 +227,16 @@ async function writeAndOpen(bytes, name = "document.pptx") {
       body.dataset.defaultSidebar = "closed";
     } catch (error) {
       body.dataset.defaultSidebar = "unavailable";
+      observed.events.push({
+        state: "view-warning",
+        atMs: Math.round(performance.now()),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    try {
+      await syncSlidePane();
+    } catch (error) {
+      body.dataset.defaultSlidePane = "unavailable";
       observed.events.push({
         state: "view-warning",
         atMs: Math.round(performance.now()),

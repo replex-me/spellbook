@@ -200,6 +200,48 @@ test("a PPTX reaches the live canvas, edits, saves and downloads", async ({
   });
 });
 
+test("a narrow screen starts on the canvas and retains AI and download access", async ({
+  page,
+}) => {
+  test.skip(!documentId, "SPELLBOOK_SELFHOST_DOCUMENT_ID is required");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/documents/${documentId}`);
+  await expect(page.getByTitle("PPT 편집기")).toBeVisible();
+  await expect(page.locator(".native-loading")).toHaveCount(0, {
+    timeout: 60_000,
+  });
+  await expect(
+    page.frameLocator('iframe[title="PPT 편집기"]').locator("body"),
+  ).toHaveAttribute("data-state", "document-ready");
+  await expect(
+    page.frameLocator('iframe[title="PPT 편집기"]').locator("body"),
+  ).toHaveAttribute("data-default-slide-pane", "closed");
+  await expect(
+    page.getByRole("complementary", { name: "AI 편집 대화" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "PPTX 다운로드" }),
+  ).toBeVisible();
+  await fs.mkdir(evidenceDir, { recursive: true });
+  await page.screenshot({ path: path.join(evidenceDir, "mobile-editor.png") });
+  await page.getByRole("button", { name: "AI와 편집" }).click();
+  await expect(
+    page.getByRole("complementary", { name: "AI 편집 대화" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "AI 대화 접기" }).click();
+  await expect(
+    page.getByRole("complementary", { name: "AI 편집 대화" }),
+  ).toHaveCount(0);
+  await page.setViewportSize({ width: 1200, height: 844 });
+  await expect(
+    page.frameLocator('iframe[title="PPT 편집기"]').locator("body"),
+  ).toHaveAttribute("data-default-slide-pane", "open");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    page.frameLocator('iframe[title="PPT 편집기"]').locator("body"),
+  ).toHaveAttribute("data-default-slide-pane", "closed");
+});
+
 async function editThroughBrowserBridge(page: Page, replacement: string) {
   const before = await browserBridgeRequest(page, "observe", {
     operation: "observe",

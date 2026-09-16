@@ -837,7 +837,10 @@
   .native-download {
     width: 34px;
     padding-inline: 0;
-    font-size: 0;
+  }
+
+  .native-download-label {
+    display: none;
   }
 }
 
@@ -876,10 +879,6 @@
 }
 
 @media (max-width: 480px) {
-  .native-download {
-    display: none;
-  }
-
   .native-file > strong {
     max-width: 120px;
   }
